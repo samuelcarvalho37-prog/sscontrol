@@ -1,0 +1,2142 @@
+/*
+ * Assimilação visual Gestor → Operador.
+ * Todo o escopo fica isolado em .app-shell--manager para preservar o Command Workspace.
+ */
+
+.manager-app-stage {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  overflow: hidden;
+  background: #dfe7f1;
+}
+
+.app-shell--manager {
+  position: relative;
+  width: min(100%, 1120px);
+  height: min(940px, calc(100dvh - 44px));
+  min-height: 720px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(23, 34, 52, 0.12);
+  border-radius: 32px;
+  background: var(--background);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.app-shell--manager,
+.app-shell--manager * {
+  min-width: 0;
+}
+
+.app-shell--manager .topbar {
+  position: relative;
+  top: auto;
+  z-index: 50;
+  min-height: 76px;
+  padding: 14px clamp(16px, 3vw, 28px);
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: none;
+}
+
+.app-shell--manager .topbar__identity--manager {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-shell--manager .topbar__identity--manager::before {
+  content: "FC";
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 14px;
+  color: #fff;
+  background: #172234;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+}
+
+.app-shell--manager .topbar__identity--manager strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1.02rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--manager .topbar__identity--manager span {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell--manager .topbar__actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.app-shell--manager .connection-chip {
+  min-height: 34px;
+  padding: 0 11px;
+  gap: 7px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--green-soft);
+  font-size: 0.7rem;
+}
+
+.app-shell--manager .user-badge {
+  margin: 0;
+}
+
+.app-shell--manager .user-badge strong {
+  max-width: 152px;
+  font-size: 0.75rem;
+}
+
+.app-shell--manager .user-badge span {
+  font-size: 0.62rem;
+}
+
+.app-shell--manager .manager-notification-trigger,
+.app-shell--manager .logout-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .manager-notification-trigger {
+  width: 38px;
+  color: #5c6b7f;
+}
+
+.app-shell--manager .logout-button {
+  padding: 0 12px;
+  color: #526174;
+  background: #eef2f7;
+  font-size: 0.74rem;
+}
+
+.app-shell--manager > .app-content {
+  min-height: 0;
+  max-width: 100%;
+  padding: clamp(14px, 2vw, 22px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+
+.app-shell--manager > .app-content::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .content {
+  width: min(100%, 1000px);
+  max-width: 100%;
+  margin: 0 auto;
+  gap: 14px;
+}
+
+.app-shell--manager > .app-navigation {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  z-index: 60;
+  width: min(620px, calc(100% - 32px));
+  min-height: 74px;
+  margin: 0 auto 10px;
+  padding: 9px 12px calc(var(--safe-bottom) + 3px);
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 24px rgba(27, 47, 79, 0.08);
+  backdrop-filter: none;
+}
+
+.app-shell--manager .app-navigation__item {
+  min-height: 52px;
+  padding: 6px 3px;
+  gap: 4px;
+  border-radius: 14px;
+  color: #6e7c8e;
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .app-navigation__item.is-active {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .app-navigation__icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.app-shell--manager .app-navigation__badge {
+  top: -7px;
+  right: -12px;
+}
+
+/* Primitivos visuais compartilhados com o Operador. */
+
+.app-shell--manager .eyebrow {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell--manager .page-heading,
+.app-shell--manager .manager-workspace-heading,
+.app-shell--manager .manager-stage-toolbar,
+.app-shell--manager .manager-qr-heading {
+  gap: 12px;
+}
+
+.app-shell--manager .page-heading h1,
+.app-shell--manager .manager-workspace-heading h1,
+.app-shell--manager .manager-qr-heading h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.55rem, 4vw, 2rem);
+  line-height: 1.08;
+}
+
+.app-shell--manager .page-heading p,
+.app-shell--manager .manager-workspace-heading p,
+.app-shell--manager .manager-stage-toolbar p,
+.app-shell--manager .manager-qr-heading p {
+  max-width: 620px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.app-shell--manager .primary-button,
+.app-shell--manager .approve-button,
+.app-shell--manager .manager-qr-dialog footer button,
+.app-shell--manager .manager-qr-result-footer button {
+  min-height: 44px;
+  padding: 0 15px;
+  border-radius: 14px;
+  color: #fff;
+  background: var(--blue);
+  box-shadow: none;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .primary-button:hover:not(:disabled),
+.app-shell--manager .approve-button:hover:not(:disabled),
+.app-shell--manager .manager-qr-dialog footer button:hover:not(:disabled) {
+  background: #1e56d3;
+}
+
+.app-shell--manager .secondary-button,
+.app-shell--manager .reject-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: #334155;
+  background: #eef2f7;
+  box-shadow: none;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.app-shell--manager input,
+.app-shell--manager select,
+.app-shell--manager textarea {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.app-shell--manager input:focus,
+.app-shell--manager select:focus,
+.app-shell--manager textarea:focus {
+  border-color: #8daef5;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.app-shell--manager .dashboard-notice,
+.app-shell--manager .dashboard-error,
+.app-shell--manager .feedback {
+  padding: 11px 13px;
+  border-radius: 15px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.app-shell--manager .panel-state {
+  padding: 24px 16px;
+  border: 1px dashed #cbd6e3;
+  border-radius: 18px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* Fila de validação. */
+
+.app-shell--manager .manager-decision-workspace {
+  gap: 13px;
+}
+
+.app-shell--manager .manager-workspace-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-shell--manager .manager-workspace-heading__status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-workspace-heading__status > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  height: auto;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #566579;
+  background: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.app-shell--manager .manager-workspace-heading__status > button strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.app-shell--manager .manager-workspace-heading__status > button.is-active {
+  border-color: #9db9f7;
+  color: #174fc0;
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-workspace-heading__status > button.is-critical {
+  border-color: #f0c4c8;
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.app-shell--manager .manager-simple-search {
+  width: min(100%, 520px);
+  margin-left: auto;
+}
+
+.app-shell--manager .manager-decision-heading__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell--manager .manager-decision-heading__controls .manager-simple-search {
+  width: min(430px, 42vw);
+  margin-left: 0;
+}
+
+.app-shell--manager .manager-decision-search {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-decision-search > label {
+  min-height: 40px;
+  padding: 0 11px;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .manager-decision-search > label svg {
+  width: 16px;
+  height: 16px;
+  color: #74859a;
+}
+
+.app-shell--manager .manager-decision-search input {
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.76rem;
+}
+
+.app-shell--manager .manager-decision-search > button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: #536174;
+  background: #eef2f7;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-decision-search > button.is-active {
+  border-color: #9db9f7;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-filter-popover {
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 80;
+  width: min(320px, calc(100vw - 40px));
+  padding: 12px;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.app-shell--manager .manager-filter-popover label {
+  gap: 5px;
+}
+
+.app-shell--manager .manager-filter-popover label > span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-filter-popover select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 0.75rem;
+}
+
+.app-shell--manager .manager-filter-popover > button {
+  min-height: 38px;
+  border-radius: 12px;
+  color: #526174;
+  background: #eef2f7;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-simple-decision-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.55fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.app-shell--manager .manager-simple-decision-stage.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell--manager .manager-now-card,
+.app-shell--manager .manager-later-queue {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(28, 45, 72, 0.05);
+}
+
+.app-shell--manager .manager-now-card {
+  min-height: 0;
+  padding: clamp(15px, 2.3vw, 22px);
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.app-shell--manager .manager-now-card > header {
+  align-items: center;
+}
+
+.app-shell--manager .manager-now-card > header > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-now-label,
+.app-shell--manager .manager-now-card > header b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-now-label {
+  color: #174fc0;
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-now-card > header small {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.app-shell--manager .manager-now-card > header b {
+  color: var(--orange);
+  background: var(--orange-soft);
+}
+
+.app-shell--manager .manager-now-card > header b.is-overdue {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.app-shell--manager .manager-now-card h2 {
+  max-width: 760px;
+  font-size: clamp(1.18rem, 2.8vw, 1.65rem);
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.app-shell--manager .manager-now-context {
+  color: var(--blue-dark);
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-now-description {
+  max-width: 720px;
+  color: #4e5d70;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.app-shell--manager .manager-now-card > section {
+  margin-top: 4px;
+  padding: 12px;
+  gap: 11px;
+  border: 1px solid #c9d9fa;
+  border-radius: 17px;
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-now-card > section > span {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--blue);
+}
+
+.app-shell--manager .manager-now-card > section small {
+  color: #56709d;
+  font-size: 0.59rem;
+}
+
+.app-shell--manager .manager-now-card > section strong {
+  color: #174fc0;
+  font-size: 0.86rem;
+}
+
+.app-shell--manager .manager-now-card > section p {
+  margin-top: 3px;
+  color: #607087;
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .manager-now-card > footer {
+  margin-top: auto;
+  padding-top: 8px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+}
+
+.app-shell--manager .manager-now-card > footer > span {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.app-shell--manager .manager-now-card > footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-later-queue {
+  overflow: hidden;
+}
+
+.app-shell--manager .manager-later-queue > header {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--manager .manager-later-queue > header small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.app-shell--manager .manager-later-queue > header strong {
+  font-size: 0.83rem;
+}
+
+.app-shell--manager .manager-later-queue > header > span {
+  min-width: 25px;
+  height: 25px;
+  border-radius: 999px;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+  font-size: 0.65rem;
+}
+
+.app-shell--manager .manager-later-queue > div {
+  max-height: 330px;
+  padding: 7px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.app-shell--manager .manager-later-queue > div::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .manager-later-queue button {
+  min-height: 70px;
+  padding: 10px 8px;
+  gap: 8px;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.app-shell--manager .manager-later-queue button:hover {
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-later-queue button small {
+  font-size: 0.58rem;
+}
+
+.app-shell--manager .manager-later-queue button strong {
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.app-shell--manager .manager-later-queue button p {
+  font-size: 0.64rem;
+}
+
+/* Acompanhamento, indicadores e ativos. */
+
+.app-shell--manager .manager-analytics-workspace {
+  gap: 12px;
+  overflow-x: hidden;
+}
+
+.app-shell--manager .manager-analytics-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 7px;
+  width: min(100%, 430px);
+}
+
+.app-shell--manager .manager-analytics-filters > select {
+  min-height: 40px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  font-size: 0.73rem;
+  font-weight: 800;
+}
+
+.app-shell--manager .manager-analytics-tabs {
+  min-height: 0;
+  padding: 5px;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #edf2f8;
+  display: flex;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.app-shell--manager .manager-analytics-tabs button {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 11px;
+  border-radius: 12px;
+  color: #647387;
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.app-shell--manager .manager-analytics-tabs button.is-active {
+  color: var(--blue);
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(27, 47, 79, 0.08);
+}
+
+.app-shell--manager .manager-analytics-tabs button span {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.59rem;
+}
+
+.app-shell--manager .manager-analytics-stage {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.app-shell--manager .manager-analytics-indicators,
+.app-shell--manager .manager-monitoring-view,
+.app-shell--manager .manager-completed-view,
+.app-shell--manager .manager-library-view {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-shell--manager .manager-analytics-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.app-shell--manager .manager-analytics-kpis > article,
+.app-shell--manager .manager-monitoring-overview > button,
+.app-shell--manager .manager-ranking-panel,
+.app-shell--manager .manager-monitoring-attention,
+.app-shell--manager .manager-monitoring-board,
+.app-shell--manager .manager-completed-list > article {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .manager-analytics-kpis > article {
+  min-height: 112px;
+  padding: 13px 12px;
+}
+
+.app-shell--manager .manager-analytics-kpis article > header span,
+.app-shell--manager .manager-analytics-kpis article > small {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 850;
+}
+
+.app-shell--manager .manager-analytics-kpis article > strong {
+  margin-top: 8px;
+  font-size: clamp(1.08rem, 2.5vw, 1.45rem);
+}
+
+.app-shell--manager .manager-analytics-kpis article > footer {
+  margin-top: auto;
+  font-size: 0.58rem;
+}
+
+.app-shell--manager .manager-ranking-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-shell--manager .manager-ranking-panel {
+  padding: 14px;
+}
+
+.app-shell--manager .manager-ranking-panel > header h3 {
+  font-size: 0.95rem;
+}
+
+.app-shell--manager .manager-ranking-panel > header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .manager-ranking-list {
+  margin-top: 10px;
+  gap: 7px;
+}
+
+/* Desktop: usa toda a área disponível, sem simular uma moldura de tablet. */
+@media (min-width: 901px) {
+  .manager-app-stage {
+    display: block;
+    padding: 0;
+    overflow: hidden;
+    background: var(--background);
+  }
+
+  .app-shell--manager {
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .app-shell--manager > .app-content {
+    padding: 14px clamp(16px, 1.8vw, 28px);
+  }
+
+  .app-shell--manager .content,
+  .app-shell--manager .manager-analytics-workspace {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    margin-inline: 0;
+  }
+
+  .app-shell--manager .manager-analytics-workspace {
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .app-shell--manager .manager-analytics-stage {
+    max-height: calc(100dvh - 278px);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app-shell--manager .manager-analytics-tabs {
+    flex-wrap: nowrap;
+  }
+
+  .app-shell--manager .manager-analytics-tabs button {
+    flex-basis: 0;
+  }
+}
+
+@media (min-width: 1180px) {
+  .app-shell--manager .manager-analytics-kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-analytics-kpis > article {
+    min-height: 104px;
+    padding: 11px;
+  }
+}
+
+.app-shell--manager .manager-ranking-list > button,
+.app-shell--manager .manager-ranking-list > article {
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-stage-toolbar {
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.app-shell--manager .manager-stage-toolbar h2 {
+  font-size: 1.05rem;
+}
+
+.app-shell--manager .manager-field-filters {
+  grid-template-columns:
+    minmax(140px, 0.9fr)
+    minmax(150px, 1fr)
+    minmax(120px, 0.75fr)
+    minmax(170px, 1.2fr);
+  gap: 7px;
+  margin: 0 0 9px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-field-filters > label {
+  gap: 4px;
+}
+
+.app-shell--manager .manager-field-filters > label > span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-field-filters select,
+.app-shell--manager .manager-field-filters__search > div {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .manager-field-filters__search input {
+  height: 36px;
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .manager-monitoring-overview {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-shell--manager .manager-monitoring-overview > button {
+  min-height: 72px;
+  padding: 10px;
+}
+
+.app-shell--manager .manager-monitoring-overview > button.is-active {
+  border-color: #9db9f7;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-monitoring-overview svg {
+  width: 26px;
+  height: 26px;
+}
+
+.app-shell--manager .manager-monitoring-overview strong {
+  font-size: 1rem;
+}
+
+.app-shell--manager .manager-monitoring-overview span {
+  font-size: 0.63rem;
+}
+
+.app-shell--manager .manager-monitoring-dashboard {
+  grid-template-columns: minmax(220px, 0.62fr) minmax(0, 1.38fr);
+  gap: 10px;
+}
+
+.app-shell--manager .manager-monitoring-attention,
+.app-shell--manager .manager-monitoring-board {
+  overflow: hidden;
+}
+
+.app-shell--manager .manager-monitoring-attention > header,
+.app-shell--manager .manager-monitoring-board > header {
+  padding: 12px 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--manager .manager-monitoring-attention > header h3,
+.app-shell--manager .manager-monitoring-board > header h3 {
+  font-size: 0.87rem;
+}
+
+.app-shell--manager .manager-monitoring-attention > div,
+.app-shell--manager .manager-monitoring-list {
+  padding: 8px;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-monitoring-attention article,
+.app-shell--manager .manager-monitoring-list > article,
+.app-shell--manager .manager-monitoring-stop-card {
+  min-height: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-monitoring-attention article {
+  border-color: #efc1c5;
+  background: #fff6f6;
+}
+
+.app-shell--manager .manager-monitoring-list article strong,
+.app-shell--manager .manager-monitoring-attention article strong {
+  font-size: 0.76rem;
+}
+
+.app-shell--manager .manager-monitoring-list article p,
+.app-shell--manager .manager-monitoring-attention article p {
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.app-shell--manager .manager-monitoring-state {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.59rem;
+}
+
+.app-shell--manager .manager-completed-list {
+  gap: 8px;
+}
+
+.app-shell--manager .manager-completed-list > article {
+  padding: 12px;
+}
+
+/* Biblioteca de ativos e ficha técnica. */
+
+.app-shell--manager .manager-library-layout {
+  grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1.62fr);
+  gap: 10px;
+}
+
+.app-shell--manager .manager-library-layout--filter-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell--manager .manager-library-layout--filter-only .manager-library-detail {
+  width: 100%;
+}
+
+.app-shell--manager .manager-library-list,
+.app-shell--manager .manager-library-detail {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .manager-library-list {
+  max-height: 560px;
+  padding: 7px;
+  gap: 6px;
+  scrollbar-width: none;
+}
+
+.app-shell--manager .manager-library-list::-webkit-scrollbar,
+.app-shell--manager .manager-library-detail::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .manager-library-list > button {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 52px;
+  padding: 7px 8px;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.app-shell--manager .manager-library-list > button:hover {
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-library-list > button.is-selected {
+  border-color: #9db9f7;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-library-list > button > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-shell--manager .manager-library-list strong {
+  font-size: 0.7rem;
+}
+
+.app-shell--manager .manager-library-list small,
+.app-shell--manager .manager-library-list p,
+.app-shell--manager .manager-library-list b {
+  font-size: 0.56rem;
+}
+
+.app-shell--manager .manager-library-detail {
+  max-height: none;
+  padding: 14px;
+  overflow-x: hidden;
+}
+
+.app-shell--manager .manager-library-detail > header {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--manager .manager-library-detail > header > span {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-library-detail > header h2 {
+  font-size: clamp(1rem, 2.4vw, 1.28rem);
+  line-height: 1.18;
+}
+
+.app-shell--manager .manager-library-detail > header p,
+.app-shell--manager .manager-library-detail > header small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.app-shell--manager .manager-library-detail > header > b {
+  min-height: 25px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+}
+
+.app-shell--manager .manager-asset-vitals-label {
+  margin-top: 11px;
+  color: var(--muted);
+  font-size: 0.59rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-asset-vitals {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.app-shell--manager .manager-asset-vitals > div,
+.app-shell--manager .manager-asset-state-card > dl > div,
+.app-shell--manager .manager-component-detail dl > div {
+  padding: 9px;
+  border: 1px solid #edf1f6;
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-asset-vitals dt,
+.app-shell--manager .manager-asset-state-card dt,
+.app-shell--manager .manager-component-detail dt {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-asset-vitals dd,
+.app-shell--manager .manager-asset-state-card dd,
+.app-shell--manager .manager-component-detail dd {
+  margin-top: 4px;
+  font-size: 0.72rem;
+}
+
+.app-shell--manager .manager-asset-tabs {
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 15px;
+  background: #edf2f8;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-shell--manager .manager-asset-tabs button {
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 11px;
+  color: #647387;
+  background: transparent;
+  font-size: 0.61rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-asset-tabs button.is-active {
+  color: var(--blue);
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(27, 47, 79, 0.08);
+}
+
+.app-shell--manager .manager-asset-status-view,
+.app-shell--manager .manager-asset-parameter-view,
+.app-shell--manager .manager-asset-component-view,
+.app-shell--manager .manager-asset-history-view {
+  margin-top: 10px;
+  gap: 9px;
+}
+
+.app-shell--manager .manager-asset-state-card,
+.app-shell--manager .manager-asset-live-list,
+.app-shell--manager .manager-component-detail,
+.app-shell--manager .manager-parameter-cards > article,
+.app-shell--manager .manager-parameter-rules,
+.app-shell--manager .manager-parameter-history {
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-asset-state-card,
+.app-shell--manager .manager-component-detail {
+  padding: 12px;
+}
+
+.app-shell--manager .manager-asset-state-card > header h3,
+.app-shell--manager .manager-component-detail h3 {
+  font-size: 0.9rem;
+}
+
+.app-shell--manager .manager-asset-live-list article,
+.app-shell--manager .manager-asset-open-occurrences > button {
+  min-height: 56px;
+  padding: 9px 10px;
+  border-radius: 14px;
+}
+
+.app-shell--manager .manager-asset-live-list article strong,
+.app-shell--manager .manager-asset-open-occurrences strong {
+  font-size: 0.7rem;
+}
+
+.app-shell--manager .manager-asset-live-list article small,
+.app-shell--manager .manager-asset-open-occurrences small {
+  font-size: 0.58rem;
+}
+
+.app-shell--manager .manager-parameter-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-shell--manager .manager-parameter-cards > article {
+  padding: 11px;
+}
+
+.app-shell--manager .manager-parameter-cards strong {
+  font-size: 0.78rem;
+}
+
+.app-shell--manager .manager-parameter-rules,
+.app-shell--manager .manager-parameter-history {
+  padding: 11px;
+}
+
+.app-shell--manager .manager-asset-component-view {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell--manager .manager-asset-component-view > button,
+.app-shell--manager .manager-asset-history-view > article {
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-asset-combobox__control {
+  min-height: 40px;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-asset-combobox__control input,
+.app-shell--manager .manager-asset-combobox__control button {
+  height: 38px;
+}
+
+.app-shell--manager .manager-asset-combobox__menu {
+  padding: 7px;
+  gap: 4px;
+  border-radius: 17px;
+  box-shadow: var(--shadow);
+  scrollbar-width: none;
+}
+
+.app-shell--manager .manager-asset-combobox__menu::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .manager-asset-combobox__menu > button {
+  min-height: 48px;
+  border-radius: 13px;
+}
+
+/* Leitura QR com o mesmo ritmo do Operador. */
+
+.app-shell--manager .manager-qr-scanner {
+  display: grid;
+  gap: 12px;
+}
+
+.app-shell--manager .manager-qr-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-shell--manager .manager-qr-search label {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-qr-search input {
+  min-height: 40px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 0.76rem;
+}
+
+.app-shell--manager .manager-qr-search button,
+.app-shell--manager .manager-qr-new-scan {
+  min-height: 42px;
+  padding: 0 13px;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-qr-camera,
+.app-shell--manager .manager-qr-result {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(28, 45, 72, 0.05);
+}
+
+.app-shell--manager .manager-qr-camera {
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.app-shell--manager .manager-qr-camera--idle {
+  color: var(--blue);
+  background: linear-gradient(180deg, #f7faff, #eef4ff);
+}
+
+.app-shell--manager .manager-qr-result {
+  padding: 14px;
+}
+
+.app-shell--manager .manager-qr-asset-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--manager .manager-qr-asset-header h2 {
+  font-size: clamp(1rem, 2.5vw, 1.3rem);
+}
+
+.app-shell--manager .manager-qr-facts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.app-shell--manager .manager-qr-facts > div {
+  padding: 9px;
+  border: 1px solid #edf1f6;
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+.app-shell--manager .manager-qr-tabs {
+  min-height: 44px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 15px;
+  background: #edf2f8;
+}
+
+.app-shell--manager .manager-qr-tabs button {
+  min-height: 36px;
+  border-radius: 11px;
+  color: #647387;
+  background: transparent;
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+.app-shell--manager .manager-qr-tabs button.is-active {
+  color: var(--blue);
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(27, 47, 79, 0.08);
+}
+
+.app-shell--manager .manager-qr-attention,
+.app-shell--manager .manager-qr-action,
+.app-shell--manager .manager-qr-parameter-list > article,
+.app-shell--manager .manager-qr-history article {
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-qr-attention.is-critical {
+  border-color: #efb1b1;
+  background: linear-gradient(180deg, #fff4f4, #fff);
+}
+
+.app-shell--manager .manager-qr-action,
+.app-shell--manager .manager-qr-parameter-list > article,
+.app-shell--manager .manager-qr-history article {
+  padding: 11px;
+}
+
+.app-shell--manager .manager-qr-parameter-list,
+.app-shell--manager .manager-qr-history > div {
+  gap: 8px;
+}
+
+.app-shell--manager .manager-qr-parameter-list article header strong,
+.app-shell--manager .manager-qr-history article strong {
+  font-size: 0.78rem;
+}
+
+.app-shell--manager .manager-qr-result-footer {
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+/* Conta, central operacional e diálogos. */
+
+.app-shell--manager .more-layout {
+  gap: 10px;
+}
+
+.app-shell--manager .session-panel,
+.app-shell--manager .connection-panel {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .manager-notification-overlay {
+  background: rgba(23, 34, 52, 0.52);
+  backdrop-filter: blur(3px);
+}
+
+.app-shell--manager .manager-notification-center {
+  width: min(100%, 760px);
+  max-width: calc(100vw - 28px);
+  height: min(820px, calc(100dvh - 28px));
+  max-height: calc(100dvh - 28px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--background);
+  box-shadow: 0 28px 78px rgba(15, 23, 42, 0.3);
+}
+
+.app-shell--manager .manager-notification-header {
+  min-height: 74px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.app-shell--manager .manager-notification-header h2 {
+  font-size: 1.15rem;
+}
+
+.app-shell--manager .manager-notification-header p {
+  margin-top: 3px;
+  font-size: 0.68rem;
+}
+
+.app-shell--manager .manager-notification-summary {
+  padding: 10px 12px 5px;
+  gap: 7px;
+  background: transparent;
+}
+
+.app-shell--manager .manager-notification-summary > button {
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-notification-summary > button.is-active {
+  border-color: #9db9f7;
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
+.app-shell--manager .manager-notification-tools {
+  padding: 6px 12px 10px;
+  gap: 7px;
+}
+
+.app-shell--manager .manager-notification-tools > label,
+.app-shell--manager .manager-notification-tools select {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-notification-scope {
+  padding: 4px;
+  gap: 4px;
+  border-radius: 14px;
+  background: #edf2f8;
+}
+
+.app-shell--manager .manager-notification-scope button {
+  min-height: 32px;
+  border-radius: 10px;
+  font-size: 0.66rem;
+}
+
+.app-shell--manager .manager-notification-scope button.is-active {
+  color: var(--blue);
+  background: #fff;
+}
+
+.app-shell--manager .manager-notification-scroll {
+  padding: 0 12px 12px;
+  scrollbar-width: none;
+}
+
+.app-shell--manager .manager-notification-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .manager-notification-group {
+  gap: 7px;
+}
+
+.app-shell--manager .manager-notification-group button {
+  min-height: 82px;
+  padding: 11px;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: #fff;
+}
+
+.app-shell--manager .manager-notification-group button.is-unread {
+  border-color: #9db9f7;
+  background: #f5f8ff;
+}
+
+.app-shell--manager .manager-notification-group button.is-critical {
+  border-color: #efb1b1;
+  background: #fff6f6;
+}
+
+.app-shell--manager .manager-notification-card__content strong {
+  font-size: 0.78rem;
+}
+
+.app-shell--manager .manager-notification-card__content p {
+  font-size: 0.67rem;
+  line-height: 1.4;
+}
+
+.app-shell--manager .manager-notification-footer {
+  min-height: 58px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.app-shell--manager .review-overlay,
+.app-shell--manager .manager-qr-dialog-backdrop {
+  padding: 14px;
+  background: rgba(23, 34, 52, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.app-shell--manager .review-dialog,
+.app-shell--manager .manager-qr-dialog {
+  width: min(100%, 760px);
+  max-width: 100%;
+  max-height: calc(100dvh - 28px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 28px 78px rgba(15, 23, 42, 0.3);
+}
+
+.app-shell--manager .review-header,
+.app-shell--manager .review-dialog__header,
+.app-shell--manager .manager-qr-dialog > header {
+  min-height: 72px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-shell--manager .review-header h2,
+.app-shell--manager .review-dialog__header h2,
+.app-shell--manager .manager-qr-dialog > header h2 {
+  font-size: clamp(1.08rem, 3vw, 1.35rem);
+  line-height: 1.18;
+}
+
+.app-shell--manager .review-close,
+.app-shell--manager .review-dialog__header > button,
+.app-shell--manager .manager-qr-dialog > header > button {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: #5f6f83;
+  background: #eef2f7;
+}
+
+.app-shell--manager .review-body,
+.app-shell--manager .manager-analysis-body,
+.app-shell--manager .manager-qr-dialog > div {
+  padding: 13px 16px;
+  scrollbar-width: none;
+}
+
+.app-shell--manager .review-body::-webkit-scrollbar,
+.app-shell--manager .manager-analysis-body::-webkit-scrollbar,
+.app-shell--manager .manager-qr-dialog > div::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell--manager .review-section,
+.app-shell--manager .manager-analysis-section,
+.app-shell--manager .review-checklist-item,
+.app-shell--manager .review-facts > div,
+.app-shell--manager .review-summary-grid > div,
+.app-shell--manager .audit-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.app-shell--manager .review-footer,
+.app-shell--manager .review-dialog__footer,
+.app-shell--manager .manager-qr-dialog > footer {
+  min-height: 66px;
+  padding: 10px 16px;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+/* Tablet. */
+
+@media (max-width: 900px) {
+  .manager-app-stage {
+    padding: 12px;
+  }
+
+  .app-shell--manager {
+    width: 100%;
+    height: calc(100dvh - 24px);
+    min-height: 0;
+    border-radius: 26px;
+  }
+
+  .app-shell--manager .manager-simple-decision-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: start;
+  }
+
+  .app-shell--manager .manager-decision-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .app-shell--manager .manager-decision-heading__controls {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+  }
+
+  .app-shell--manager
+    .manager-decision-heading__controls
+    .manager-simple-search,
+  .app-shell--manager
+    .manager-decision-heading__controls
+    .manager-decision-search {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .app-shell--manager .manager-later-queue > div {
+    max-height: 230px;
+  }
+
+  .app-shell--manager .manager-analytics-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-field-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-monitoring-dashboard,
+  .app-shell--manager .manager-library-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .manager-library-list {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(156px, 205px);
+    max-height: none;
+    padding: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+  }
+
+  .app-shell--manager .manager-library-list > button {
+    width: 100%;
+    scroll-snap-align: start;
+  }
+
+  .app-shell--manager .manager-asset-component-view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Mobile, com a mesma estrutura de aplicativo do Operador. */
+
+@media (max-width: 699px) {
+  .manager-app-stage {
+    display: block;
+    padding: 0;
+    overflow: hidden;
+    background: var(--background);
+  }
+
+  .app-shell--manager {
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .app-shell--manager .topbar {
+    min-height: 62px;
+    padding: 9px 10px;
+    gap: 8px;
+  }
+
+  .app-shell--manager .topbar__identity--manager::before {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    border-radius: 11px;
+    font-size: 0.59rem;
+  }
+
+  .app-shell--manager .topbar__identity--manager strong {
+    font-size: 0.78rem;
+  }
+
+  .app-shell--manager .topbar__identity--manager span {
+    max-width: 155px;
+    font-size: 0.55rem;
+  }
+
+  .app-shell--manager .connection-chip {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.58rem;
+  }
+
+  .app-shell--manager .connection-chip i {
+    width: 6px;
+    height: 6px;
+  }
+
+  .app-shell--manager .user-badge {
+    display: none;
+  }
+
+  .app-shell--manager .manager-notification-trigger,
+  .app-shell--manager .logout-button {
+    min-height: 34px;
+    border-radius: 11px;
+  }
+
+  .app-shell--manager .manager-notification-trigger {
+    width: 34px;
+  }
+
+  .app-shell--manager .logout-button {
+    padding: 0 9px;
+    font-size: 0.61rem;
+  }
+
+  .app-shell--manager > .app-content {
+    padding: 11px 10px;
+  }
+
+  .app-shell--manager .content {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .app-shell--manager > .app-navigation {
+    width: 100%;
+    min-height: 68px;
+    margin: 0;
+    padding: 7px 8px calc(var(--safe-bottom) + 1px);
+    gap: 4px;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .app-shell--manager .app-navigation__item {
+    min-height: 48px;
+    padding: 4px 2px;
+    gap: 3px;
+    border-radius: 13px;
+    font-size: 0.59rem;
+  }
+
+  .app-shell--manager .app-navigation__icon svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .app-shell--manager .manager-workspace-heading,
+  .app-shell--manager .manager-qr-heading {
+    align-items: flex-start;
+  }
+
+  .app-shell--manager .manager-workspace-heading h1,
+  .app-shell--manager .manager-qr-heading h1 {
+    font-size: 1.3rem;
+  }
+
+  .app-shell--manager .manager-workspace-heading__status {
+    gap: 5px;
+  }
+
+  .app-shell--manager .manager-decision-heading__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager
+    .manager-decision-heading__controls
+    .manager-workspace-heading__status {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .app-shell--manager .manager-workspace-heading__status > button {
+    min-height: 31px;
+    padding: 0 8px;
+    font-size: 0.58rem;
+  }
+
+  .app-shell--manager .manager-simple-search {
+    width: 100%;
+  }
+
+  .app-shell--manager .manager-decision-search > label,
+  .app-shell--manager .manager-decision-search > button {
+    min-height: 38px;
+  }
+
+  .app-shell--manager .manager-now-card {
+    padding: 13px;
+    gap: 8px;
+    border-radius: 20px;
+  }
+
+  .app-shell--manager .manager-now-card h2 {
+    font-size: 1.08rem;
+  }
+
+  .app-shell--manager .manager-now-description {
+    font-size: 0.71rem;
+  }
+
+  .app-shell--manager .manager-now-card > section {
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .app-shell--manager .manager-now-card > section > span {
+    width: 34px;
+    height: 34px;
+  }
+
+  .app-shell--manager .manager-now-card > footer {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .app-shell--manager .manager-now-card > footer > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .app-shell--manager .manager-now-card > footer .primary-button:only-child {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell--manager .manager-analytics-filters {
+    grid-template-columns: minmax(0, 1fr) 88px;
+    width: 100%;
+  }
+
+  .app-shell--manager .manager-analytics-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 4px;
+  }
+
+  .app-shell--manager .manager-analytics-tabs button {
+    width: 100%;
+    min-height: 34px;
+    padding: 0 6px;
+    font-size: 0.62rem;
+  }
+
+  .app-shell--manager .manager-analytics-kpis,
+  .app-shell--manager .manager-ranking-grid,
+  .app-shell--manager .manager-monitoring-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .manager-analytics-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .app-shell--manager .manager-analytics-kpis > article {
+    min-height: 100px;
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .app-shell--manager .manager-field-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 7px;
+  }
+
+  .app-shell--manager .manager-monitoring-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-monitoring-overview > button {
+    min-height: 64px;
+  }
+
+  .app-shell--manager .manager-library-list {
+    grid-auto-columns: minmax(142px, 62vw);
+    border-radius: 16px;
+  }
+
+  .app-shell--manager .manager-library-detail {
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .app-shell--manager .manager-library-detail > header {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .app-shell--manager .manager-library-detail > header > span {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .app-shell--manager .manager-library-detail > header > b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .app-shell--manager .manager-asset-vitals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-asset-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-parameter-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .manager-qr-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .manager-qr-search button {
+    width: 100%;
+  }
+
+  .app-shell--manager .manager-qr-camera {
+    min-height: 230px;
+  }
+
+  .app-shell--manager .manager-qr-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-notification-center,
+  .app-shell--manager .review-dialog,
+  .app-shell--manager .manager-qr-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .app-shell--manager .manager-notification-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .app-shell--manager .manager-notification-summary > button {
+    min-height: 52px;
+    padding: 6px;
+  }
+
+  .app-shell--manager .manager-notification-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .review-overlay,
+  .app-shell--manager .manager-qr-dialog-backdrop {
+    padding: 0;
+  }
+
+  .app-shell--manager .review-summary-grid,
+  .app-shell--manager .review-facts,
+  .app-shell--manager .audit-grid,
+  .app-shell--manager .manager-analysis-fields,
+  .app-shell--manager .manager-qr-request-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .review-footer,
+  .app-shell--manager .review-dialog__footer,
+  .app-shell--manager .manager-qr-dialog > footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell--manager .topbar__identity--manager span {
+    max-width: 118px;
+  }
+
+  .app-shell--manager .connection-chip {
+    width: 28px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .app-shell--manager .connection-chip i {
+    width: 8px;
+    height: 8px;
+  }
+
+  .app-shell--manager .manager-workspace-heading {
+    display: grid;
+  }
+
+  .app-shell--manager .manager-workspace-heading__status {
+    justify-content: flex-start;
+  }
+
+  .app-shell--manager
+    .manager-decision-heading
+    .manager-workspace-heading__status
+    > button {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .app-shell--manager .manager-field-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--manager .manager-analytics-kpis > article {
+    min-height: 92px;
+  }
+
+  .app-shell--manager .manager-notification-card__action small {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell--manager *,
+  .app-shell--manager *::before,
+  .app-shell--manager *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

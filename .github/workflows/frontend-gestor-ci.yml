@@ -1,0 +1,36 @@
+name: Frontend Gestor CI
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "frontend-gestor/**"
+      - "backend/apps-script/**"
+      - "tools/test-gestor-frontend-contract.mjs"
+      - ".github/workflows/frontend-gestor-ci.yml"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "frontend-gestor/**"
+      - "backend/apps-script/**"
+      - "tools/test-gestor-frontend-contract.mjs"
+      - ".github/workflows/frontend-gestor-ci.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-gestor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-gestor/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node ../tools/test-gestor-frontend-contract.mjs
+      - run: node ../tools/test-admin-identity-contract.mjs

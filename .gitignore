@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.vite/
+coverage/
+backend/node-api/var/
+.env
+.env.*
+!.env.example
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.tsbuildinfo
+.clasp.json
+
+# Mockups HTML são a fonte versionável; pacotes ZIP permanecem locais.
+mockups/*.zip
+
+# FAB Control local deployment metadata
+**/.clasp*.json
+**/.clasprc.json
+release/fab-control.environment.local.json
+.homologation-runtime/

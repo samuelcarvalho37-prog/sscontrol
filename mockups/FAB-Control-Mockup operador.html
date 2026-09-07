@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f7fb">
+<title>FAB Control — Mockup 17 Definitivo</title>
+<style>
+:root{
+  --bg:#f4f7fb;
+  --surface:#ffffff;
+  --surface-2:#f8fafc;
+  --text:#172234;
+  --muted:#6d7b8d;
+  --line:#dbe3ec;
+  --blue:#2563eb;
+  --blue-soft:#eaf1ff;
+  --red:#c93636;
+  --red-soft:#fff0f0;
+  --orange:#a96514;
+  --orange-soft:#fff6e8;
+  --green:#177148;
+  --green-soft:#eaf8f0;
+  --shadow:0 14px 36px rgba(27,47,79,.10);
+  --radius:22px;
+  --safe-bottom:max(10px,env(safe-area-inset-bottom));
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#dfe7f1;color:var(--text)}
+body{-webkit-text-size-adjust:100%}
+button,input{font:inherit}
+button{border:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.2);outline-offset:2px}
+.stage{min-height:100dvh;display:grid;place-items:center;padding:22px}
+.device{width:min(100%,430px);height:min(920px,calc(100dvh - 44px));min-height:760px;background:var(--bg);border:9px solid #111827;border-radius:34px;overflow:hidden;box-shadow:0 30px 80px rgba(15,23,42,.28);position:relative}
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.header{background:var(--surface);border-bottom:1px solid var(--line);padding:14px 16px 13px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.identity strong{font-size:1.08rem;display:block}.identity span{font-size:.8rem;color:var(--muted);display:block;margin-top:3px}
+.status-row{display:flex;align-items:center;gap:8px}.online{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:var(--green-soft);color:var(--green);font-size:.72rem;font-weight:900}.online:before{content:"";width:7px;height:7px;border-radius:50%;background:#20a667}
+.icon-btn{width:42px;height:42px;border-radius:14px;background:var(--surface-2);color:#42516a;display:grid;place-items:center;position:relative;border:1px solid var(--line)}.icon-btn svg{width:20px;height:20px}.bubble{position:absolute;right:-4px;top:-5px;min-width:20px;height:20px;border-radius:999px;padding:0 5px;background:var(--red);color:#fff;font-size:.68rem;font-weight:900;display:grid;place-items:center;border:2px solid #fff}
+.main{min-height:0;overflow:auto;padding:14px 14px 18px;scrollbar-width:none}.main::-webkit-scrollbar{display:none}.screen{display:grid;gap:12px}
+h1,h2,h3,p{margin:0}h1{font-size:1.55rem;line-height:1.08}h2{font-size:1.1rem;line-height:1.2}h3{font-size:.98rem;line-height:1.25}.small{font-size:.8rem;color:var(--muted);line-height:1.35}.eyebrow{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:900}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:0 8px 22px rgba(28,45,72,.05)}
+.section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end}.section-head .small{margin-top:4px}.section-count{padding:7px 10px;border-radius:999px;background:#edf2f8;color:#4e5d70;font-size:.72rem;font-weight:900;white-space:nowrap}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.summary button{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:11px 8px;text-align:left}.summary strong{display:block;font-size:1rem}.summary span{display:block;font-size:.7rem;color:var(--muted);margin-top:3px;font-weight:800;line-height:1.15}.summary button.active{border-color:#98b7f3;background:var(--blue-soft);color:#174fc0}
+.queue-list{display:grid;gap:10px}.job{width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:14px;display:grid;gap:11px;box-shadow:0 8px 22px rgba(28,45,72,.05)}.job.critical{border-color:#efb7b7;background:linear-gradient(180deg,#fff,#fff8f8)}.job.programmed{border-color:#d7e2ef}.job-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.job strong{display:block;font-size:1rem;line-height:1.2}.job .asset{font-size:.78rem;color:var(--muted);margin-top:4px}.job-desc{font-size:.82rem;color:#4e5d70;line-height:1.35}.tags{display:flex;gap:7px;flex-wrap:wrap}.tag{display:inline-flex;align-items:center;padding:6px 9px;border-radius:999px;font-size:.68rem;font-weight:900}.tag.red{background:var(--red-soft);color:var(--red)}.tag.orange{background:var(--orange-soft);color:var(--orange)}.tag.blue{background:var(--blue-soft);color:#174fc0}.tag.green{background:var(--green-soft);color:var(--green)}.tag.gray{background:#edf2f7;color:#506074}
+.job-footer{display:flex;justify-content:space-between;gap:12px;align-items:center}.crew{font-size:.74rem;color:var(--muted);line-height:1.25}.job-action{font-size:.78rem;font-weight:900;color:var(--blue)}
+.countdown{padding:10px 12px;border-radius:16px;background:#f7f9fc;border:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}.countdown span{font-size:.74rem;color:var(--muted);font-weight:800}.countdown strong{font-size:.95rem;letter-spacing:.02em}
+.qr-card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:13px;display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:center}.qr-icon{width:54px;height:54px;border-radius:17px;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center}.qr-icon svg{width:28px;height:28px}.qr-card strong{display:block;font-size:.92rem}.qr-card span{display:block;margin-top:3px;font-size:.76rem;color:var(--muted);line-height:1.25}.mini-btn{min-height:42px;padding:0 12px;border-radius:13px;background:var(--blue);color:#fff;font-size:.76rem;font-weight:900}
+.bottom-nav{background:rgba(255,255,255,.98);border-top:1px solid var(--line);padding:9px 12px calc(var(--safe-bottom) + 3px);display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.nav-btn{background:none;color:#6e7c8e;padding:6px 3px;border-radius:14px;display:grid;justify-items:center;gap:4px}.nav-btn svg{width:20px;height:20px}.nav-btn span{font-size:.68rem;font-weight:900}.nav-btn.active{color:var(--blue);background:var(--blue-soft)}
+.detail-hero{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:15px;display:grid;gap:12px}.backline{display:flex;justify-content:space-between;gap:10px;align-items:center}.back-btn{width:42px;height:42px;border-radius:14px;background:#eef2f7;color:#40516a;display:grid;place-items:center}.back-btn svg{width:20px;height:20px}.detail-title{font-size:1.3rem;font-weight:950;line-height:1.15}.detail-sub{font-size:.84rem;color:var(--muted);line-height:1.35;margin-top:4px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.info{padding:11px;border-radius:17px;background:#f8fafc;border:1px solid var(--line)}.info span{display:block;font-size:.69rem;color:var(--muted);font-weight:800}.info strong{display:block;margin-top:4px;font-size:.86rem;line-height:1.25}.wide{grid-column:1/-1}
+.block{display:grid;gap:7px}.block p{font-size:.84rem;color:#49586d;line-height:1.42}.block ul{margin:0;padding-left:18px;color:#49586d;font-size:.82rem;line-height:1.45}
+.primary{min-height:58px;border-radius:18px;background:var(--blue);color:#fff;font-weight:950;box-shadow:0 10px 22px rgba(37,99,235,.2)}.primary:disabled{background:#cbd5e1;color:#6b7280;box-shadow:none;cursor:not-allowed}.secondary{min-height:52px;border-radius:17px;background:#eef2f7;border:1px solid var(--line);color:#334155;font-weight:900}.action-row{display:grid;grid-template-columns:1fr 1.2fr;gap:10px}
+.exec-screen{min-height:calc(100dvh - 168px);grid-template-rows:auto auto minmax(0,1fr) auto;align-content:stretch;padding-bottom:0}.exec-actions{position:sticky;bottom:-18px;z-index:12;margin:0 -14px -18px;padding:10px 14px calc(10px + var(--safe-bottom));background:linear-gradient(180deg,rgba(244,247,251,0),var(--bg) 18%,var(--bg));border-top:1px solid rgba(219,227,236,.85);grid-template-columns:96px minmax(0,1fr);align-items:center}.exec-actions .primary,.exec-actions .secondary{min-height:46px;border-radius:14px;font-size:.82rem;padding:0 12px;box-shadow:none}.exec-actions .primary{justify-self:stretch}.exec-actions .secondary{justify-self:stretch}
+.turn-brief{background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #d8e3f2;border-radius:24px;padding:15px;display:grid;gap:12px}.turn-brief-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.turn-brief strong{font-size:1.12rem}.turn-brief .next{padding:10px 12px;border-radius:16px;background:var(--blue-soft);color:#174fc0;font-size:.78rem;font-weight:900;line-height:1.25}.operational-note{padding:11px 12px;border-radius:16px;background:#fff8eb;border:1px solid #f1d6a9;color:#875411;font-size:.79rem;font-weight:850;line-height:1.35}.delay-alert{padding:12px 13px;border-radius:17px;background:var(--orange-soft);border:1px solid #efcf9d;color:#875411;display:flex;gap:10px;align-items:flex-start;font-size:.82rem;font-weight:850;line-height:1.35}.delay-alert strong{display:block;color:#71430a}.delay-alert span{display:block;margin-top:3px;font-weight:750}
+.measurement-list{display:grid;gap:10px}.measurement-card{padding:13px;border-radius:19px;background:#fff;border:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}.measurement-card strong{display:block;font-size:.92rem}.measurement-card span{display:block;margin-top:4px;font-size:.75rem;color:var(--muted);line-height:1.3}.measure-now{min-height:42px;padding:0 12px;border-radius:13px;background:var(--blue-soft);color:#174fc0;font-size:.75rem;font-weight:950}.measure-modal{text-align:left}.measure-modal .measure{margin-top:14px}.measure-status{margin-top:12px;padding:11px;border-radius:15px;font-size:.8rem;font-weight:850;line-height:1.35}.measure-status.ok{background:var(--green-soft);color:var(--green);border:1px solid #bfe0cd}.measure-status.bad{background:var(--red-soft);color:var(--red);border:1px solid #efb9b9}
+.exec-head{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:14px;display:grid;gap:12px}.exec-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.timer{min-width:108px;text-align:right}.timer span{display:block;font-size:.68rem;color:var(--muted);font-weight:900}.timer strong{display:block;margin-top:4px;font-size:1.35rem;letter-spacing:.03em}.progress{height:12px;border-radius:999px;background:#e6ebf2;overflow:hidden}.progress b{display:block;height:100%;background:var(--blue)}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:15px;display:grid;gap:14px}.step-kicker{font-size:.72rem;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;font-weight:900}.step h2{font-size:1.28rem}.step p{font-size:.86rem;color:var(--muted);line-height:1.42}.options{display:grid;gap:8px}.option{min-height:52px;border-radius:15px;border:2px solid var(--line);background:#fff;color:var(--text);text-align:left;padding:10px 13px;font-weight:900}.option.selected{border-color:var(--blue);background:var(--blue-soft);color:#174fc0}.measure{display:grid;grid-template-columns:1fr 90px;gap:10px}.measure input{min-width:0;min-height:82px;border-radius:19px;border:2px solid var(--line);padding:10px 14px;font-size:1.8rem;font-weight:950}.unit{border-radius:19px;border:1px solid var(--line);background:#f8fafc;display:grid;place-items:center;font-weight:950}.range{padding:10px 12px;border-radius:15px;background:#f8fafc;border:1px solid var(--line);font-size:.78rem;color:var(--muted);display:flex;justify-content:space-between;gap:10px}.photo{min-height:138px;border-radius:20px;border:2px dashed #a9b9cc;background:#f8fbff;color:var(--blue);display:grid;place-items:center;text-align:center;padding:18px}.photo svg{width:38px;height:38px}.photo strong{display:block;margin-top:8px}.photo small{display:block;margin-top:4px;color:var(--muted)}
+.occurrence-card{background:linear-gradient(180deg,#fff,#f9fbff);border:1px solid #d7e2ef;border-radius:22px;padding:14px;display:grid;gap:10px}.occurrence-card .occurrence-actions{display:grid;grid-template-columns:1fr;gap:8px}.occurrence-btn{min-height:48px;border-radius:15px;background:#172234;color:#fff;font-weight:950;font-size:.84rem}.occurrence-list{display:grid;gap:8px}.occurrence-item{padding:11px 12px;border-radius:16px;background:#f8fafc;border:1px solid var(--line)}.occurrence-item strong{display:block;font-size:.86rem}.occurrence-item span{display:block;margin-top:4px;font-size:.74rem;color:var(--muted);line-height:1.35}.form-grid{display:grid;gap:11px;margin-top:14px;text-align:left}.field{display:grid;gap:6px}.field label{font-size:.74rem;color:#526176;font-weight:900}.field select,.field textarea,.field input{width:100%;border:1.5px solid var(--line);border-radius:14px;background:#fff;color:var(--text);padding:11px 12px;font:inherit}.field textarea{min-height:92px;resize:vertical}.form-note{padding:10px 11px;border-radius:14px;background:var(--blue-soft);color:#174fc0;font-size:.76rem;font-weight:800;line-height:1.35}.modal-actions{display:grid;grid-template-columns:96px 1fr;gap:9px;margin-top:13px}.modal-actions .primary,.modal-actions .secondary{min-height:46px;border-radius:14px;font-size:.82rem;box-shadow:none}.alert{padding:12px;border-radius:16px;background:var(--red-soft);border:1px solid #efb9b9;color:var(--red);font-size:.82rem;font-weight:850;line-height:1.35}.hidden{display:none!important}
+.sync-overlay,.modal{position:absolute;inset:0;z-index:60;display:none;background:rgba(15,23,42,.5);padding:18px;place-items:center}.sync-overlay.show,.modal.show{display:grid}.center{width:100%;background:#fff;border-radius:26px;padding:24px 18px;text-align:center;box-shadow:var(--shadow)}.spinner{width:62px;height:62px;border-radius:50%;border:5px solid #dbe3ee;border-top-color:var(--blue);animation:spin .8s linear infinite;margin:0 auto 15px}@keyframes spin{to{transform:rotate(360deg)}}.check{width:72px;height:72px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;margin:0 auto 15px}.check svg{width:34px;height:34px}.center p{margin-top:8px;font-size:.84rem;color:var(--muted);line-height:1.4}.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px;text-align:left}.result{padding:11px;border-radius:16px;background:#f8fafc;border:1px solid var(--line)}.result span{display:block;font-size:.7rem;color:var(--muted)}.result strong{display:block;margin-top:4px;font-size:.9rem}
+.scanbox{width:190px;height:190px;border-radius:28px;background:#0f213d;display:grid;place-items:center;margin:0 auto 14px;position:relative;overflow:hidden}.scanbox:after{content:"";position:absolute;left:12%;right:12%;height:4px;background:#5ce6a8;box-shadow:0 0 18px #5ce6a8;animation:scan 1.1s ease-in-out infinite alternate}@keyframes scan{from{transform:translateY(-66px)}to{transform:translateY(66px)}}.scanframe{width:68%;aspect-ratio:1;border:4px solid #fff;border-radius:23px}
+.history-list{display:grid;gap:9px}.history-item{padding:12px;border-radius:17px;background:#fff;border:1px solid var(--line)}.history-item strong{font-size:.9rem}.history-item span{display:block;margin-top:4px;font-size:.76rem;color:var(--muted);line-height:1.35}
+.toast{position:absolute;z-index:80;left:16px;right:16px;bottom:92px;padding:13px 15px;border-radius:15px;background:#172234;color:#fff;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;font-size:.84rem}.toast.show{opacity:1;transform:translateY(0)}
+@media(max-width:900px){.stage{padding:0;display:block}.device{width:100%;height:100dvh;min-height:0;border:0;border-radius:0;box-shadow:none}}
+@media(max-width:365px){.summary,.info-grid,.result-grid,.measure{grid-template-columns:1fr}.action-row:not(.exec-actions),.modal-actions{grid-template-columns:1fr}.qr-card{grid-template-columns:48px 1fr}.qr-card .mini-btn{grid-column:1/-1}.wide{grid-column:auto}}
+
+/* Mockup 17 Definitivo */
+.notification-pop{position:absolute;z-index:90;left:12px;right:12px;top:78px;display:none;transform:translateY(-12px);opacity:0;transition:.22s ease}
+.notification-pop.show{display:block;transform:translateY(0);opacity:1}
+.notification-pop button{width:100%;text-align:left;padding:13px 14px;border-radius:18px;background:#fff;border:1px solid #aac4f5;box-shadow:0 18px 44px rgba(18,44,87,.22);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.notification-pop .np-kicker{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#1755c8;font-weight:950}
+.notification-pop strong{display:block;margin-top:3px;font-size:.9rem;line-height:1.25}.notification-pop span{display:block;margin-top:3px;font-size:.74rem;color:var(--muted)}
+.notification-pop b{color:var(--blue);font-size:.76rem;white-space:nowrap}
+.live-banner{width:100%;text-align:left;border-radius:20px;padding:13px 14px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;box-shadow:0 10px 26px rgba(28,45,72,.08)}
+.live-banner.emergency{background:linear-gradient(180deg,#fff4f4,#fff);border:1px solid #efb1b1}.live-banner.scheduled{background:linear-gradient(180deg,#edf4ff,#fff);border:1px solid #b8cdf7}
+.live-banner .live-kicker{font-size:.68rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase}.live-banner.emergency .live-kicker{color:var(--red)}.live-banner.scheduled .live-kicker{color:#1755c8}
+.live-banner strong{display:block;font-size:.96rem;line-height:1.2;margin-top:3px}.live-banner span{display:block;font-size:.74rem;color:var(--muted);line-height:1.3;margin-top:4px}.live-banner b{font-size:.76rem;color:var(--blue);white-space:nowrap}
+.queue-intro{display:grid;gap:8px}.queue-intro h1{font-size:1.45rem}.queue-intro p{max-width:360px}
+.emergency-list{display:grid;gap:8px}.emergency-row{background:#fff;border:1px solid #edb6b6;border-left:5px solid var(--red);border-radius:17px;padding:11px 12px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;text-align:left}
+.emergency-row .emergency-title{font-size:.92rem;font-weight:950;line-height:1.2}.emergency-row .emergency-meta{font-size:.72rem;color:var(--muted);margin-top:4px;line-height:1.3}.emergency-row .emergency-cta{padding:8px 10px;border-radius:12px;background:var(--red);color:#fff;font-size:.72rem;font-weight:950;white-space:nowrap}
+.compact-section{display:grid;gap:8px}.compact-section .section-head{align-items:center}
+.analysis-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;display:grid;gap:10px}.analysis-card h3{font-size:1rem}.analysis-card p{font-size:.83rem;color:#4b596c;line-height:1.45}
+.analysis-list{margin:0;padding-left:18px;color:#4b596c;font-size:.82rem;line-height:1.5}
+.info-tags{display:flex;flex-wrap:wrap;gap:7px}.info-tags .tag{font-size:.67rem}
+.info-note{padding:9px 10px;border-radius:14px;background:#f6f8fb;border:1px solid var(--line);font-size:.73rem;color:var(--muted);line-height:1.35}
+.detail-sticky{position:sticky;bottom:-18px;z-index:12;margin:0 -14px -18px;padding:10px 14px calc(10px + var(--safe-bottom));background:linear-gradient(180deg,rgba(244,247,251,0),var(--bg) 22%,var(--bg));border-top:1px solid rgba(219,227,236,.8)}
+.action-available{background:linear-gradient(180deg,#fff5f5,#fff);border:1px solid #efb3b3;border-radius:20px;padding:13px;display:grid;gap:9px}.action-available .row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}.action-available strong{font-size:.95rem;line-height:1.2}.action-available p{font-size:.77rem;color:var(--muted);line-height:1.35}.action-available button{min-height:42px;padding:0 12px;border-radius:13px;background:var(--red);color:#fff;font-size:.75rem;font-weight:950;white-space:nowrap}
+.asset-summary{display:grid;gap:10px}.asset-summary .detail-title{font-size:1.25rem}
+.catalog-note{padding:10px 11px;border-radius:15px;background:var(--blue-soft);border:1px solid #ccdaf7;color:#24549f;font-size:.76rem;font-weight:800;line-height:1.35}
+.timeline{display:grid;gap:8px}.timeline-item{background:#fff;border:1px solid var(--line);border-radius:17px;padding:11px 12px;display:grid;gap:5px}.timeline-item .timeline-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.timeline-item strong{font-size:.87rem;line-height:1.25}.timeline-item span{font-size:.73rem;color:var(--muted);line-height:1.35}.timeline-item .status-pill{padding:5px 8px;border-radius:999px;background:#edf2f7;color:#526176;font-size:.64rem;font-weight:900;white-space:nowrap}.timeline-item .status-pill.warn{background:var(--orange-soft);color:var(--orange)}.timeline-item .status-pill.ok{background:var(--green-soft);color:var(--green)}
+.request-card{background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #d4e0f0;border-radius:20px;padding:14px;display:grid;gap:9px}.request-card button{min-height:46px;border-radius:14px;background:#172234;color:#fff;font-weight:950;font-size:.82rem}.request-card p{font-size:.78rem;color:var(--muted);line-height:1.4}
+.release-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:var(--blue-soft);color:#1755c8;font-size:.68rem;font-weight:900}
+.header .icon-btn{display:none}
+@media(max-width:900px){.notification-pop{top:74px}}
+
+
+/* Mockup 17 definitivo — navegação, análise técnica e leitura */
+.machine-state{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-radius:20px;background:#fff;border:1px solid var(--line)}
+.machine-state.stopped{background:linear-gradient(180deg,#fff2f2,#fff);border-color:#efb2b2}
+.machine-state .state-copy strong{display:block;font-size:.96rem}.machine-state .state-copy span{display:block;margin-top:4px;font-size:.75rem;color:var(--muted);line-height:1.3}
+.machine-state .state-pill{padding:8px 10px;border-radius:999px;background:var(--green-soft);color:var(--green);font-size:.7rem;font-weight:950;white-space:nowrap}
+.machine-state.stopped .state-pill{background:var(--red);color:#fff}
+.stop-clock{padding:15px;border-radius:22px;background:#172234;color:#fff;display:grid;gap:10px}
+.stop-clock .stop-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.stop-clock .eyebrow{color:#b8c7dd}.stop-clock strong{display:block;font-size:1rem}.stop-clock .clock{font-size:2rem;font-weight:950;letter-spacing:.04em}
+.stop-clock p{font-size:.78rem;color:#c5d0df;line-height:1.4}
+.stop-clock button{min-height:46px;border-radius:14px;background:#fff;color:#172234;font-weight:950}
+.qr-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.qr-actions button{min-height:50px;border-radius:15px;font-weight:950;font-size:.82rem}
+.qr-actions .occ{background:#eef2f7;color:#334155;border:1px solid var(--line)}
+.qr-actions .stop{background:var(--red);color:#fff}
+.qr-actions .stop.resume{background:var(--green);color:#fff}
+.technical-report{display:grid;gap:10px}
+.report-summary{background:linear-gradient(180deg,#fff,#f7faff);border:1px solid #cfdced;border-radius:22px;padding:15px;display:grid;gap:12px}
+.report-row{display:grid;grid-template-columns:42px 1fr;gap:11px;align-items:flex-start}
+.report-index{width:42px;height:42px;border-radius:14px;background:var(--blue-soft);color:#174fc0;display:grid;place-items:center;font-weight:950}
+.report-row strong{display:block;font-size:.9rem}.report-row p{margin-top:4px;font-size:.8rem;color:#4b596c;line-height:1.4}
+.risk-grid{display:grid;gap:9px}
+.risk-card{padding:12px;border-radius:17px;background:#fff8eb;border:1px solid #efd29f}
+.risk-card strong{display:block;color:#7b4b0b;font-size:.84rem}.risk-card span{display:block;margin-top:4px;color:#795a2d;font-size:.76rem;line-height:1.35}
+.nr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.nr-card{padding:10px 8px;border-radius:15px;background:#f8fafc;border:1px solid var(--line);text-align:center}
+.nr-card strong{display:block;font-size:.78rem}.nr-card span{display:block;margin-top:3px;font-size:.65rem;color:var(--muted)}
+.prep-strip{padding:12px 13px;border-radius:17px;background:var(--blue-soft);border:1px solid #cbd9f5;color:#174caa;font-size:.8rem;font-weight:850;line-height:1.4}
+.accept-row{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:16px;background:#fff;border:1px solid var(--line)}
+.accept-row input{width:20px;height:20px;margin-top:1px}.accept-row label{font-size:.78rem;color:#46556a;line-height:1.35;font-weight:800}
+.exec-actions{bottom:0!important;margin:0 -14px -18px!important;padding-bottom:calc(10px + var(--safe-bottom))!important;background:var(--bg)!important}
+@media(max-width:365px){.qr-actions,.nr-grid{grid-template-columns:1fr}}
+
+
+/* Mockup 17 Definitivo — workflow técnico e validação real de leitura */
+.workflow-card{background:linear-gradient(180deg,#fff,#f7faff);border:1px solid #cfdced;border-radius:24px;padding:15px;display:grid;gap:14px}
+.workflow-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.workflow-head .small{max-width:270px}
+.workflow-track{display:grid;gap:0;position:relative}
+.workflow-step{display:grid;grid-template-columns:46px 1fr;gap:12px;position:relative;padding-bottom:16px}
+.workflow-step:last-child{padding-bottom:0}
+.workflow-step:not(:last-child):before{content:"";position:absolute;left:22px;top:42px;bottom:0;width:2px;background:linear-gradient(180deg,#8eb1f3,#dbe5f4)}
+.workflow-marker{width:46px;height:46px;border-radius:16px;background:var(--blue-soft);color:#174fc0;display:grid;place-items:center;font-weight:950;border:1px solid #c9d9f6;box-shadow:0 7px 18px rgba(37,99,235,.1);z-index:1}
+.workflow-content{padding:2px 0 0}
+.workflow-content strong{display:block;font-size:.92rem;line-height:1.25}
+.workflow-content p{margin-top:5px;font-size:.79rem;color:#4d5b6d;line-height:1.42}
+.workflow-content .step-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.workflow-content .step-meta span{padding:5px 8px;border-radius:999px;background:#f1f5f9;color:#526176;font-size:.66rem;font-weight:900}
+.read-gate{display:grid;gap:10px}
+.read-progress{background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px 13px;display:grid;gap:8px}
+.read-progress-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.read-progress-top strong{font-size:.84rem}
+.read-progress-top span{font-size:.7rem;color:var(--muted);font-weight:900}
+.read-bar{height:9px;border-radius:999px;background:#e7edf5;overflow:hidden}
+.read-bar b{display:block;height:100%;background:linear-gradient(90deg,#2563eb,#5b8def);transition:width .25s ease}
+.read-gate.locked .accept-row{opacity:.55}
+.read-gate.locked .accept-row input{pointer-events:none}
+.read-lock-note{padding:10px 11px;border-radius:15px;background:#fff8eb;border:1px solid #efd29f;color:#7b4b0b;font-size:.75rem;font-weight:850;line-height:1.35}
+.read-lock-note.ready{background:var(--green-soft);border-color:#bfdfcd;color:var(--green)}
+.start-placeholder{min-height:58px;border-radius:18px;border:1.5px dashed #b7c5d8;background:#f8fafc;color:#66758a;display:grid;place-items:center;text-align:center;padding:10px 14px;font-size:.78rem;font-weight:900;line-height:1.35}
+.detail-sticky.final-gate{grid-template-columns:96px minmax(0,1fr)}
+.detail-sticky.final-gate .primary{animation:revealStart .28s ease}
+@keyframes revealStart{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.technical-report-end{height:1px}
+@media(max-width:365px){
+  .workflow-step{grid-template-columns:40px 1fr}.workflow-marker{width:40px;height:40px;border-radius:14px}
+  .workflow-step:not(:last-child):before{left:19px;top:38px}
+}
+
+
+/* Mockup 17 Definitivo — sinalização visual técnica */
+.risk-symbol-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.risk-symbol{background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px;display:grid;grid-template-columns:48px 1fr;gap:10px;align-items:center}
+.risk-symbol .symbol{width:48px;height:48px;border-radius:15px;background:#fff8df;border:1px solid #e8cf7c;display:grid;place-items:center;color:#755300}
+.risk-symbol .symbol svg{width:29px;height:29px}
+.risk-symbol strong{display:block;font-size:.83rem;line-height:1.2}.risk-symbol span{display:block;margin-top:4px;font-size:.71rem;color:var(--muted);line-height:1.3}
+.tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tool-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px;display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+.tool-card .tool-icon{width:44px;height:44px;border-radius:14px;background:var(--blue-soft);color:#174fc0;display:grid;place-items:center}
+.tool-card .tool-icon svg{width:25px;height:25px}
+.tool-card strong{display:block;font-size:.8rem;line-height:1.25}.tool-card span{display:block;margin-top:3px;font-size:.68rem;color:var(--muted)}
+.nr-info{display:grid;gap:9px}
+.nr-info-card{background:#fff;border:1px solid var(--line);border-radius:17px;padding:11px 12px;display:grid;grid-template-columns:54px 1fr;gap:11px;align-items:start}
+.nr-info-card .nr-badge{padding:8px 6px;border-radius:13px;background:#172234;color:#fff;text-align:center;font-size:.76rem;font-weight:950}
+.nr-info-card strong{display:block;font-size:.82rem}.nr-info-card p{margin-top:4px;font-size:.72rem;color:var(--muted);line-height:1.35}
+.nr-explain{padding:10px 11px;border-radius:15px;background:#f6f8fb;border:1px solid var(--line);font-size:.74rem;color:#526176;line-height:1.4}
+.exec-screen{min-height:100%;display:flex!important;flex-direction:column!important;align-content:initial!important}
+.exec-head{flex:0 0 auto}
+.delay-alert,.alert{flex:0 0 auto}
+.step{flex:0 0 auto;align-content:start!important;gap:10px!important;padding:14px!important}
+.step h2{margin-top:2px}
+.step p{margin-top:0}
+.step .options,.step .measure,.step .photo{margin-top:8px}
+.options{gap:8px}
+.option{min-height:48px;padding:10px 12px}
+.photo{min-height:112px;padding:14px}
+.exec-actions{margin-top:auto!important;position:sticky!important;bottom:0!important;z-index:20!important;background:var(--bg)!important;padding-top:10px!important}
+.main:has(.exec-screen){padding-bottom:0}
+@media(max-width:365px){.risk-symbol-grid,.tool-grid{grid-template-columns:1fr}}
+
+
+/* Mockup 17 definitivo */
+.bottom-nav{grid-template-columns:repeat(3,1fr)}
+.header{position:relative;z-index:25}
+.read-progress-fixed{position:sticky;top:0;z-index:24;background:rgba(244,247,251,.97);backdrop-filter:blur(8px);padding:8px 0 10px;margin:-14px 0 4px}
+.read-progress-fixed .read-progress{box-shadow:0 8px 18px rgba(28,45,72,.06)}
+.nr-chip-list{display:flex;flex-wrap:wrap;gap:8px}
+.nr-chip{padding:9px 11px;border-radius:14px;background:#172234;color:#fff;font-size:.74rem;font-weight:950}
+.tool-list-compact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.tool-item-compact{background:#fff;border:1px solid var(--line);border-radius:17px;padding:11px;display:grid;grid-template-columns:42px 1fr;gap:9px;align-items:center}
+.tool-item-compact .tool-icon{width:42px;height:42px;border-radius:13px;background:var(--blue-soft);color:#174fc0;display:grid;place-items:center}
+.tool-item-compact .tool-icon svg{width:24px;height:24px}
+.tool-item-compact strong{font-size:.79rem;line-height:1.22}
+.safety-list-compact{margin:0;padding-left:19px;color:#49586d;font-size:.8rem;line-height:1.45}
+.read-gate .read-progress{display:none}
+@media(max-width:365px){.tool-list-compact{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+<div class="stage">
+  <section class="device">
+    <div class="app">
+      <header class="header">
+        <div class="identity"><strong>Olá, Carlos</strong><span>Operador · Turno A</span></div>
+        <div class="status-row"><div class="online">Online</div><button class="icon-btn" id="notifBtn" aria-label="Notificações"><span class="bubble">2</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></button></div>
+      </header>
+      <main class="main" id="main"></main>
+      <nav class="bottom-nav">
+        <button class="nav-btn active" data-nav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Início</span></button>
+        <button class="nav-btn" data-nav="qr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M8 8h3v3H8zM14 8h2v2h-2zM8 14h2v2H8zM14 14h3v3h-3z"/></svg><span>QR Code</span></button>
+        <button class="nav-btn" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.2a1.6 1.6 0 0 0 .9-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 .9 1.5h.2a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.2a1.6 1.6 0 0 0 1.5.9H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg><span>Configurações</span></button>
+      </nav>
+    </div>
+    <div class="sync-overlay" id="overlay"></div>
+    <div class="modal" id="modal"></div>
+    <div class="toast" id="toast"></div><div class="notification-pop" id="notificationPop"></div>
+  </section>
+</div>
+<script>
+const icons={
+  back:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>`,
+  check:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>`,
+  camera:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h4l1.5-2h5L16 8h4v11H4z"/><circle cx="12" cy="13" r="3"/></svg>`,
+  qr:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M8 8h3v3H8zM14 8h2v2h-2zM8 14h2v2H8zM14 14h3v3h-3z"/></svg>`
+};
+
+const safetyIcons={
+  electric:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></svg>`,
+  cut:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c2-1 3-3 4-6l2 1 1-5 2 1-1 5 2 1 2-4 2 1-2 6c-.6 2-2 4-4 5H8c-2 0-3-1-4-5Z"/><path d="m16 4 4 4"/></svg>`,
+  crush:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v4H4zM4 16h16v4H4z"/><path d="M8 11h8M10 9l-2 2 2 2M14 9l2 2-2 2"/></svg>`,
+  mechanical:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>`,
+  pressure:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="m12 12 4-3"/><path d="M7 17h10"/></svg>`,
+  heat:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v10"/><circle cx="12" cy="17" r="4"/><path d="M9 5h3"/></svg>`
+};
+const toolIcons={
+  wrench:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-3-3z"/></svg>`,
+  torque:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 16 8"/><path d="m14 6 4-4 4 4-4 4z"/><path d="M3 17l4 4"/></svg>`,
+  measure:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="m12 12 3-4"/><path d="M8 17h8"/></svg>`,
+  electric:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h3M14 12h2M8 16h8"/></svg>`,
+  extractor:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v8M7 6h10M6 11h12l-2 9H8z"/></svg>`,
+  lock:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`
+};
+function getRiskVisual(text){
+  const t=text.toLowerCase();
+  if(t.includes('elétr')||t.includes('energia'))return {icon:safetyIcons.electric,label:'Choque elétrico'};
+  if(t.includes('corte')||t.includes('cort'))return {icon:safetyIcons.cut,label:'Corte'};
+  if(t.includes('esmag')||t.includes('aprision')||t.includes('prens'))return {icon:safetyIcons.crush,label:'Prensamento'};
+  if(t.includes('press')||t.includes('pneum'))return {icon:safetyIcons.pressure,label:'Pressão'};
+  if(t.includes('temper')||t.includes('quente'))return {icon:safetyIcons.heat,label:'Superfície quente'};
+  return {icon:safetyIcons.mechanical,label:'Risco mecânico'};
+}
+function getToolVisual(text){
+  const t=text.toLowerCase();
+  if(t.includes('torquí'))return {icon:toolIcons.torque,label:'Torque'};
+  if(t.includes('vibração')||t.includes('termômetro')||t.includes('medidor')||t.includes('pressão'))return {icon:toolIcons.measure,label:'Instrumento'};
+  if(t.includes('multí')||t.includes('ohm')||t.includes('elétr'))return {icon:toolIcons.electric,label:'Medição elétrica'};
+  if(t.includes('extrator'))return {icon:toolIcons.extractor,label:'Extração'};
+  if(t.includes('bloqueio')||t.includes('etiquet'))return {icon:toolIcons.lock,label:'Segurança'};
+  return {icon:toolIcons.wrench,label:'Ferramenta'};
+}
+function nrExplanation(item){
+  const code=(item.split(' · ')[0]||item).trim();
+  const map={
+    'NR-06':'Define o uso e a responsabilidade sobre EPIs adequados à atividade.',
+    'NR-10':'Estabelece controles para trabalhos com eletricidade e energias associadas.',
+    'NR-12':'Define requisitos de segurança para intervenção em máquinas e equipamentos.'
+  };
+  return map[code]||'Norma aplicável à segurança e ao controle desta atividade.';
+}
+
+
+const now=Date.now();
+const jobs=[
+  {
+    id:'CHK-URG-001',group:'unscheduled',type:'EMERGENCIAL',priority:4,status:'PENDENTE',title:'Substituição do rolamento do eixo principal',asset:'SEL-001 — Seladora 01',component:'ROL-EIXO-01 — Rolamento principal',crew:['Eletromecânica','Segurança do trabalho'],description:'Temperatura e vibração acima do limite. Intervenção imediata.',what:'O rolamento apresentou elevação rápida de temperatura, ruído metálico e vibração acima do limite durante o turno.',cause:'Indício de desgaste severo, possível perda de lubrificação e desalinhamento do conjunto.',service:'Parar a seladora, aplicar bloqueios, substituir o rolamento, conferir alinhamento e repetir as medições antes da liberação.',safety:['Isolar a área e comunicar a produção.','Aplicar bloqueio elétrico e pneumático.','Confirmar ausência de energia antes da desmontagem.','Liberar a máquina somente após teste funcional.'],tools:['Jogo de chaves e soquetes','Extrator de rolamento','Torquímetro','Termômetro infravermelho','Medidor de vibração','Kit de bloqueio e etiquetagem'],standards:['NR-06 · EPI','NR-10 · Eletricidade','NR-12 · Máquinas'],preparation:['Confirmar parada imediata com a produção.','Separar rolamento correto e instrumentos.','Definir área segura para desmontagem.'],window:'Início imediato',duration:'1 h 30 min',plannedSeconds:5400,testDelayAt:45,startAt:now-60000,endAt:now+90*60000,releasedNotified:true,
+    steps:[
+      {type:'oknok',title:'Área isolada e bloqueios aplicados',desc:'Confirme sinalização, bloqueio elétrico e bloqueio pneumático.'},
+      {type:'oknok',title:'Rolamento removido com segurança',desc:'Confirme a remoção sem danos no eixo ou alojamento.'},
+      {type:'number',title:'Temperatura após substituição',desc:'Meça a temperatura do novo rolamento após o teste funcional.',unit:'°C',min:25,max:55,value:'42'},
+      {type:'number',title:'Vibração RMS após substituição',desc:'Registre a vibração no mancal principal.',unit:'mm/s',min:0,max:4.5,value:'2.8'},
+      {type:'select',title:'Condição do alinhamento',desc:'Selecione a condição observada no alinhamento final.',options:['Conforme','Ajustado e conforme','Necessita nova intervenção']},
+      {type:'photo',title:'Evidências da intervenção',desc:'Registre o rolamento substituído, o novo conjunto e a medição final.',required:3}
+    ]
+  },
+  {
+    id:'CHK-PRG-001',group:'scheduled',type:'PROGRAMADA · PREVENTIVA',priority:2,status:'PENDENTE',title:'Troca preventiva da correia transportadora',asset:'EST-001 — Esteira de saída',component:'COR-TRAC-01 — Correia de tração',crew:['Manutenção mecânica'],description:'Atividade prevista no plano semanal.',what:'A correia atingiu o intervalo definido no plano preventivo e apresenta desgaste superficial.',cause:'Vida útil programada e perda gradual de tensão.',service:'Parar a esteira, bloquear o acionamento, substituir a correia e regular tensão e alinhamento.',safety:['Confirmar liberação da produção.','Aplicar bloqueio elétrico.','Proteger pontos de esmagamento.'],tools:['Jogo de chaves','Medidor de tensão','Régua de alinhamento','Kit de bloqueio'],standards:['NR-06 · EPI','NR-12 · Máquinas'],preparation:['Separar correia correta.','Confirmar janela de parada.','Organizar ferramentas antes da liberação.'],window:'Modo teste · libera em 30 segundos',duration:'1 h',plannedSeconds:3600,testDelayAt:45,startAt:now+30*1000,endAt:now+90*1000,releasedNotified:false,
+    steps:[
+      {type:'oknok',title:'Esteira liberada pela produção',desc:'Confirme parada e liberação da área.'},
+      {type:'oknok',title:'Bloqueio elétrico aplicado',desc:'Confirme bloqueio e teste de ausência de energia.'},
+      {type:'number',title:'Tensão final da correia',desc:'Informe a tensão medida após ajuste.',unit:'mm',min:8,max:12,value:'10'},
+      {type:'select',title:'Alinhamento da correia',desc:'Selecione a condição final.',options:['Centralizada','Ajustada e centralizada','Necessita retrabalho']},
+      {type:'photo',title:'Evidências finais',desc:'Registre a correia substituída e o alinhamento.',required:2}
+    ]
+  },
+  {
+    id:'CHK-PRG-002',group:'scheduled',type:'PROGRAMADA · PREDITIVA',priority:1,status:'PENDENTE',title:'Coleta de vibração do motorredutor',asset:'ENV-001 — Envasadora 01',component:'MTR-RED-01 — Motorredutor',crew:['Confiabilidade'],description:'Rota preditiva prevista para o turno.',what:'Coleta periódica para acompanhar a tendência de condição do motorredutor.',cause:'Plano preditivo por periodicidade.',service:'Coletar vibração nos pontos definidos, registrar temperatura e anexar evidência.',safety:['Manter distância de partes móveis.','Usar ponto de medição definido.','Não remover proteções durante a coleta.'],tools:['Medidor de vibração','Termômetro infravermelho','Tablet ou celular industrial'],standards:['NR-06 · EPI','NR-12 · Máquinas'],preparation:['Confirmar ponto de medição.','Verificar carga estável do equipamento.'],window:'Modo teste · libera em 1 minuto',duration:'30 min',plannedSeconds:1800,testDelayAt:45,startAt:now+60*1000,endAt:now+150*1000,releasedNotified:false,
+    steps:[
+      {type:'number',title:'Vibração horizontal',desc:'Registre a vibração horizontal do mancal.',unit:'mm/s',min:0,max:4.5,value:'3.1'},
+      {type:'number',title:'Vibração vertical',desc:'Registre a vibração vertical do mancal.',unit:'mm/s',min:0,max:4.5,value:'3.0'},
+      {type:'number',title:'Temperatura do mancal',desc:'Registre a temperatura do mancal.',unit:'°C',min:20,max:70,value:'48'},
+      {type:'number',title:'Rotação do motor',desc:'Registre a rotação medida no motor.',unit:'rpm',min:1720,max:1780,value:'1750'},
+      {type:'photo',title:'Evidência do ponto medido',desc:'Registre o sensor posicionado no ponto correto.',required:1}
+    ]
+  }
+];
+
+const asset={
+  id:'SEL-001',name:'Seladora 01',location:'Linha de embalagem · setor de produção',
+  parameters:[
+    {id:'TEMP-ROL',name:'Temperatura do rolamento',value:74,unit:'°C',min:25,max:70,date:'10/07/2026'},
+    {id:'VIB-RMS',name:'Vibração RMS',value:6.2,unit:'mm/s',min:0,max:4.5,date:'10/07/2026'},
+    {id:'PRESSAO',name:'Pressão pneumática',value:6.1,unit:'bar',min:5.5,max:7,date:'09/07/2026'}
+  ],
+  history:[
+    {title:'Manutenção preventiva programada',detail:'Revisão do conjunto de selagem prevista para 15/07/2026 às 08:00.',date:'15/07/2026',status:'Programada'},
+    {title:'Inspeção do conjunto de selagem',detail:'Checklist concluído sem bloqueios.',date:'08/07/2026',status:'Concluída'},
+    {title:'Lubrificação dos mancais',detail:'Lubrificante aplicado e temperatura estabilizada.',date:'02/07/2026',status:'Concluída'},
+    {title:'Troca do sensor de presença',detail:'Sensor substituído e teste funcional aprovado.',date:'18/06/2026',status:'Concluída'}
+  ],
+  stop:{active:false,startedAt:null,lastDuration:0},
+  occurrences:[
+    {id:'OCR-1001',symptom:'Ruído metálico intermitente',severity:'Alta',description:'Ruído percebido no lado do acionamento durante o início do ciclo.',date:'11/07/2026 · 14:20',shift:'Turno A',status:'Aguardando inspeção'},
+    {id:'OCR-0998',symptom:'Vibração acima do normal',severity:'Média',description:'Oscilação percebida durante lote anterior.',date:'10/07/2026 · 22:05',shift:'Turno B',status:'Inspeção solicitada'}
+  ]
+};
+
+const state={
+  screen:'home',tab:'pending',selectedJob:null,step:0,answers:{},photos:0,alert:'',executionStart:null,timerId:null,executionDelayed:false,delayNotified:false,
+  qrAsset:null,measureTarget:null,occurrencePhoto:false,notificationTimer:null,technicalAccepted:false,technicalReadComplete:false,technicalReadPct:0,
+  notifications:[
+    {title:'Manutenção emergencial disponível agora',subtitle:'SEL-001 · Rolamento principal',jobId:'CHK-URG-001',date:'Agora'},
+    {title:'Troca preventiva programada',subtitle:'Liberação automática em 30 segundos no modo de teste',jobId:'CHK-PRG-001',date:'Agora'}
+  ]
+};
+
+function fmtDuration(sec){sec=Math.max(0,Math.floor(sec));const h=String(Math.floor(sec/3600)).padStart(2,'0');const m=String(Math.floor((sec%3600)/60)).padStart(2,'0');const s=String(sec%60).padStart(2,'0');return `${h}:${m}:${s}`;}
+function fmtCountdown(ms){if(ms<=0)return 'Disponível agora';const total=Math.floor(ms/1000),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
+function fmtDate(ts){return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),1800);}
+function activeJobs(){return jobs.filter(j=>j.status!=='CONCLUIDA').sort((a,b)=>b.priority-a.priority||a.startAt-b.startAt);}
+function counts(){return {pending:jobs.filter(j=>j.status==='PENDENTE').length,running:jobs.filter(j=>j.status==='EM_EXECUCAO').length,done:jobs.filter(j=>j.status==='CONCLUIDA').length};}
+function currentBanner(){
+  const urgent=jobs.find(j=>j.group==='unscheduled'&&j.status==='PENDENTE');
+  if(urgent)return {kind:'emergency',job:urgent,kicker:'AÇÃO EMERGENCIAL AGORA',cta:'Iniciar agora'};
+  const released=jobs.find(j=>j.group==='scheduled'&&j.status==='PENDENTE'&&Date.now()>=j.startAt);
+  if(released)return {kind:'scheduled',job:released,kicker:'PROGRAMADA LIBERADA AGORA',cta:'Abrir atividade'};
+  return null;
+}
+function liveBanner(){const b=currentBanner();if(!b)return '';return `<button class="live-banner ${b.kind}" data-job="${b.job.id}"><div><div class="live-kicker">${b.kicker}</div><strong>${b.job.title}</strong><span>${b.job.asset} · ${b.job.component}</span></div><b>${b.cta} →</b></button>`;}
+function homeView(){
+  const c=counts();
+  const uns=activeJobs().filter(j=>j.group==='unscheduled');
+  const sch=activeJobs().filter(j=>j.group==='scheduled').sort((a,b)=>a.startAt-b.startAt);
+  return `<section class="screen">
+    ${liveBanner()}
+    <div class="queue-intro"><div class="eyebrow">Fila de operação</div><h1>Manutenções do turno</h1><p class="small">Não programadas aparecem primeiro. Programadas são liberadas automaticamente conforme a janela aprovada.</p></div>
+    <div class="summary">
+      <button class="${state.tab==='pending'?'active':''}" data-tab="pending"><strong>${c.pending}</strong><span>Pendentes</span></button>
+      <button class="${state.tab==='running'?'active':''}" data-tab="running"><strong>${c.running}</strong><span>Em execução</span></button>
+      <button class="${state.tab==='done'?'active':''}" data-tab="done"><strong>${c.done}</strong><span>Concluídas</span></button>
+    </div>
+    ${state.tab==='pending'?pendingSections(uns,sch):statusSection(state.tab)}
+    <div class="qr-card"><div class="qr-icon">${icons.qr}</div><div><strong>Consultar equipamento por QR</strong><span>Histórico, ocorrências, parâmetros cadastrados e inspeções disponíveis.</span></div><button class="mini-btn" data-action="scan">Ler</button></div>
+  </section>`;
+}
+function pendingSections(uns,sch){
+  return `${uns.length?`<div class="compact-section"><div class="section-head"><div><h2>Não programadas</h2><p class="small">Ação imediata por criticidade.</p></div><span class="section-count">${uns.length} urgente</span></div><div class="emergency-list">${uns.map(emergencyRow).join('')}</div></div>`:''}
+  <div class="compact-section"><div class="section-head"><div><h2>Programadas</h2><p class="small">Preparação e execução dentro da janela.</p></div><span class="section-count">${sch.length} hoje</span></div><div class="queue-list">${sch.map(jobCard).join('')}</div></div>`;
+}
+function emergencyRow(j){return `<button class="emergency-row" data-job="${j.id}"><div><div class="emergency-title">${j.title}</div><div class="emergency-meta">${j.asset}<br>${j.component} · ${j.crew.join(' + ')}</div></div><span class="emergency-cta">Iniciar agora</span></button>`;}
+function statusSection(tab){const wanted=tab==='running'?'EM_EXECUCAO':'CONCLUIDA';const list=jobs.filter(j=>j.status===wanted);return `<div class="section-head"><div><h2>${tab==='running'?'Em execução':'Concluídas'}</h2><p class="small">${tab==='running'?'Retome uma atividade iniciada.':'Atividades finalizadas no dispositivo.'}</p></div><span class="section-count">${list.length}</span></div>${list.length?`<div class="queue-list">${list.map(jobCard).join('')}</div>`:`<div class="card"><h3>Nenhuma atividade nesta categoria</h3><p class="small" style="margin-top:6px">A fila será atualizada automaticamente.</p></div>`}`;}
+function jobCard(j){const ready=Date.now()>=j.startAt;return `<button class="job programmed" data-job="${j.id}"><div class="job-top"><div><strong>${j.title}</strong><div class="asset">${j.asset}<br>${j.component}</div></div><span class="tag blue">${j.type.split(' · ')[1]||'PROGRAMADA'}</span></div><div class="job-desc">${j.description}</div><div class="tags"><span class="tag ${j.priority>=2?'orange':'gray'}">${j.priority>=2?'Prioridade alta':'Prioridade normal'}</span>${j.crew.map(c=>`<span class="tag gray">${c}</span>`).join('')}</div><div class="countdown"><span>${ready?'Janela liberada':'Liberação em'}</span><strong data-countdown="${j.id}">${fmtCountdown(j.startAt-Date.now())}</strong></div><div class="job-footer"><div class="crew">${j.window}<br>Duração prevista: ${j.duration}</div><div class="job-action">${j.status==='EM_EXECUCAO'?'Continuar':ready?'Abrir':'Preparar'}</div></div></button>`;}
+function detailView(){
+  const j=state.selectedJob,ready=Date.now()>=j.startAt;
+  const isScheduled=j.group==='scheduled';
+  const risks=j.group==='unscheduled'
+    ? ['Esmagamento e aprisionamento no conjunto mecânico.','Contato com energia elétrica ou pneumática residual.','Dano ao eixo ou alojamento durante a desmontagem.']
+    : ['Partida inesperada do equipamento.','Pontos de esmagamento durante ajuste e alinhamento.','Uso incorreto de ferramentas ou componente incompatível.'];
+
+  const workflow = isScheduled
+    ? [
+        {title:'Preparar a intervenção',text:'Confirmar janela com a produção, separar peças, ferramentas, instrumentos e documentação técnica.',meta:['Preparação','Antes da parada']},
+        {title:'Bloquear e tornar seguro',text:'Aplicar bloqueios definidos, testar ausência de energia e sinalizar a área de trabalho.',meta:['Segurança','LOTO']},
+        {title:'Executar o serviço',text:j.service,meta:['Execução técnica','Conforme plano']},
+        {title:'Inspecionar e medir',text:'Realizar ajustes finais, medições de controle e registrar evidências do resultado.',meta:['Qualidade','Medições']},
+        {title:'Testar e liberar',text:'Executar teste funcional, confirmar condição operacional e registrar o retorno da máquina.',meta:['Teste funcional','Liberação']}
+      ]
+    : [
+        {title:'Conter o risco imediato',text:'Isolar a área, comunicar a produção e impedir nova partida do equipamento.',meta:['Ação imediata','Segurança']},
+        {title:'Bloquear as energias',text:'Aplicar bloqueio elétrico e pneumático e confirmar ausência de energia residual.',meta:['LOTO','Obrigatório']},
+        {title:'Intervir no componente',text:j.service,meta:['Execução técnica','Corretiva']},
+        {title:'Verificar o resultado',text:'Conferir montagem, alinhamento, temperatura, vibração e demais parâmetros críticos.',meta:['Inspeção','Medição']},
+        {title:'Testar e retornar',text:'Realizar teste funcional controlado e confirmar condição segura para retomada.',meta:['Validação','Liberação']}
+      ];
+
+  return `<section class="screen" id="technicalScreen">
+    <div class="read-progress-fixed"><div class="read-progress"><div class="read-progress-top"><strong>Leitura do relatório</strong><span>${state.technicalReadComplete?'Concluída':Math.round(state.technicalReadPct)+'%'}</span></div><div class="read-bar"><b style="width:${state.technicalReadComplete?100:state.technicalReadPct}%"></b></div></div></div>
+    <div class="detail-hero">
+      <div class="backline"><button class="back-btn" data-action="back">${icons.back}</button><span class="tag ${j.group==='unscheduled'?'red':'blue'}">${j.type}</span></div>
+      <div><div class="detail-title">${j.title}</div><div class="detail-sub">${j.asset}<br>${j.component}</div></div>
+      <div class="info-tags">${j.group==='unscheduled'?'<span class="tag red">Início imediato</span>':'<span class="tag blue">Programada</span>'}${j.crew.map(c=>`<span class="tag gray">${c}</span>`).join('')}</div>
+      ${isScheduled?`<div class="countdown"><span>${ready?'Atividade liberada':'Tempo para liberação'}</span><strong data-countdown="${j.id}">${fmtCountdown(j.startAt-Date.now())}</strong></div>`:''}
+    </div>
+
+    ${isScheduled?`<div class="prep-strip"><strong>Tempo de preparação:</strong> 20 minutos antes da janela. Separar materiais, conferir ferramentas, validar liberação da produção e revisar bloqueios.</div>`:''}
+
+    <div class="technical-report">
+      <div class="report-summary">
+        <div class="eyebrow">Relatório técnico operacional</div>
+        <div class="report-row"><div class="report-index">01</div><div><strong>Situação identificada</strong><p>${j.what}</p></div></div>
+        <div class="report-row"><div class="report-index">02</div><div><strong>Causa provável</strong><p>${j.cause}</p></div></div>
+        <div class="report-row"><div class="report-index">03</div><div><strong>Resultado esperado</strong><p>${j.service}</p></div></div>
+      </div>
+
+      <div class="workflow-card">
+        <div class="workflow-head"><div><div class="eyebrow">Fluxo de execução</div><h2>Etapas do serviço</h2><p class="small" style="margin-top:5px">Siga a sequência indicada. O checklist será aberto após a confirmação deste relatório.</p></div><span class="section-count">${workflow.length} etapas</span></div>
+        <div class="workflow-track">
+          ${workflow.map((w,i)=>`<div class="workflow-step"><div class="workflow-marker">${String(i+1).padStart(2,'0')}</div><div class="workflow-content"><strong>${w.title}</strong><p>${w.text}</p><div class="step-meta">${w.meta.map(m=>`<span>${m}</span>`).join('')}</div></div></div>`).join('')}
+        </div>
+      </div>
+
+      <div class="analysis-card"><div class="eyebrow">Riscos da atividade</div><div class="risk-symbol-grid">${risks.map(r=>{const v=getRiskVisual(r);return `<div class="risk-symbol"><div class="symbol">${v.icon}</div><div><strong>${v.label}</strong><span>${r}</span></div></div>`}).join('')}</div></div>
+
+      <div class="analysis-card"><div class="eyebrow">Segurança obrigatória</div><h3>Medidas antes da execução</h3><ul class="safety-list-compact">${j.safety.map(x=>`<li>${x}</li>`).join('')}</ul><div class="nr-explain">As normas abaixo representam requisitos de segurança empregados nesta atividade. O não cumprimento elimina barreiras de proteção previstas pela empresa.</div><div class="nr-chip-list">${j.standards.map(x=>`<span class="nr-chip">${(x.split(' · ')[0]||x).trim()}</span>`).join('')}</div></div>
+
+      <div class="analysis-card"><div class="eyebrow">Recursos necessários</div><h3>Ferramentas e instrumentos</h3><div class="tool-list-compact">${j.tools.map(x=>{const v=getToolVisual(x);return `<div class="tool-item-compact"><div class="tool-icon">${v.icon}</div><strong>${x}</strong></div>`}).join('')}</div></div>
+
+      <div class="info-grid"><div class="info"><span>Janela</span><strong>${j.window}</strong></div><div class="info"><span>Duração prevista</span><strong>${j.duration}</strong></div><div class="info"><span>Início</span><strong>${fmtDate(j.startAt)}</strong></div><div class="info"><span>Término previsto</span><strong>${fmtDate(j.endAt)}</strong></div></div>
+
+      <div class="technical-report-end" id="technicalReportEnd"></div>
+    </div>
+
+    <div class="read-gate ${state.technicalReadComplete?'':'locked'}">
+      <div class="read-lock-note ${state.technicalReadComplete?'ready':''}">${state.technicalReadComplete?'Relatório percorrido até o final. Confirme abaixo para liberar o início.':'Role a ficha técnica até o final para liberar a confirmação.'}</div>
+      <div class="accept-row"><input id="technicalAccept" type="checkbox" ${state.technicalAccepted?'checked':''} ${state.technicalReadComplete?'':'disabled'}><label for="technicalAccept">Li todo o relatório, compreendi as etapas, os riscos e as orientações de segurança desta atividade.</label></div>
+    </div>
+
+    <div class="action-row detail-sticky final-gate">
+      <button class="secondary" data-action="back">Voltar</button>
+      ${state.technicalReadComplete&&state.technicalAccepted
+        ? `<button class="primary" data-action="start" ${(!ready&&j.status!=='EM_EXECUCAO')?'disabled':''}>${j.status==='EM_EXECUCAO'?'Continuar execução':ready?'Iniciar execução':'Aguardando liberação'}</button>`
+        : `<div class="start-placeholder">${state.technicalReadComplete?'Confirme a leitura para liberar':'Leia o relatório até o final'}</div>`}
+    </div>
+  </section>`;
+}
+function execView(){
+  const j=state.selectedJob,s=j.steps[state.step],done=j.steps.filter((_,i)=>answered(i)).length,pct=Math.round(done/j.steps.length*100);
+  return `<section class="screen exec-screen"><div class="exec-head"><div class="exec-headline"><div><div class="eyebrow">Execução em andamento</div><h2>${j.title}</h2><p class="small" style="margin-top:4px">${j.component}</p></div><div class="timer"><span>Tempo de execução</span><strong id="timer">${elapsed()}</strong></div></div><div class="progress"><b style="width:${pct}%"></b></div><div class="small">Item ${state.step+1} de ${j.steps.length} · ${done}/${j.steps.length} concluídos</div></div>${state.executionDelayed?`<div class="delay-alert"><div>⚠</div><div><strong>Tempo previsto excedido</strong><span>A execução ultrapassou o limite previsto. O atraso foi registrado para acompanhamento.</span></div></div>`:''}${state.alert?`<div class="alert">${state.alert}</div>`:''}<div class="step"><div class="step-kicker">Checklist dinâmico</div><h2>${s.title}</h2><p>${s.desc}</p>${stepBody(s)}</div><div class="action-row exec-actions"><button class="secondary" data-action="prev">Anterior</button><button class="primary" data-action="${state.step===j.steps.length-1?'finish':'next'}">${state.step===j.steps.length-1?'Finalizar e sincronizar':'Próximo item'}</button></div></section>`;
+}
+function stepBody(s){if(s.type==='oknok')return `<div class="options">${['OK','NOK','N/A'].map(v=>`<button class="option ${state.answers[state.step]===v?'selected':''}" data-answer="${v}">${v}</button>`).join('')}</div>`;if(s.type==='select')return `<div class="options">${s.options.map(v=>`<button class="option ${state.answers[state.step]===v?'selected':''}" data-answer="${v}">${v}</button>`).join('')}</div>`;if(s.type==='number'){const val=state.answers[state.step]??s.value;return `<div class="measure"><input id="numInput" type="number" step="0.1" inputmode="decimal" value="${val}"><div class="unit">${s.unit}</div></div><div class="range"><span>Faixa aceitável</span><strong>${s.min} até ${s.max} ${s.unit}</strong></div>`;}if(s.type==='photo')return `<button class="photo" data-action="photo">${icons.camera}<strong>${state.photos>=s.required?'Evidências completas':'Registrar evidências'}</strong><small>${state.photos}/${s.required} fotos registradas</small></button>`;return '';}
+function qrView(){if(!state.qrAsset)return `<section class="screen"><div><div class="eyebrow">Consulta técnica</div><h1>Histórico por QR Code</h1><p class="small" style="margin-top:6px">Consulte o equipamento, parâmetros cadastrados, ocorrências entre turnos e checklists disponíveis.</p></div><div class="card" style="text-align:center;padding:28px 18px"><div class="qr-icon" style="margin:0 auto 14px;width:72px;height:72px">${icons.qr}</div><h2>Ler QR Code do equipamento</h2><p class="small" style="margin-top:7px">A leitura abre a ficha técnica do ativo sem alterar a fila do turno.</p><button class="primary" data-action="scan" style="width:100%;margin-top:16px">Iniciar leitura</button></div></section>`;return assetHistoryView();}
+function assetHistoryView(){
+  const related=jobs.find(j=>j.asset.startsWith(asset.id)&&j.status!=='CONCLUIDA');
+  const stopped=asset.stop.active;
+  return `<section class="screen">
+    <div class="detail-hero asset-summary"><div class="backline"><button class="back-btn" data-action="clear-qr">${icons.back}</button><span class="tag green">Equipamento identificado</span></div><div><div class="detail-title">${asset.id} — ${asset.name}</div><div class="detail-sub">${asset.location}</div></div></div>
+
+    ${related?`<div class="action-available"><div class="eyebrow">Ação disponível neste equipamento</div><div class="row"><div><strong>${related.title}</strong><p>${related.component}<br>${related.group==='unscheduled'?'Início imediato':'Programada'}</p></div><button data-action="open-related">Abrir agora</button></div></div>`:''}
+
+    <div class="machine-state ${stopped?'stopped':''}"><div class="state-copy"><strong>${stopped?'Equipamento parado':'Equipamento em operação'}</strong><span>${stopped?'Parada iniciada pelo operador. A contagem continua mesmo ao sair desta tela.':'Nenhuma parada ativa registrada pelo operador.'}</span></div><span class="state-pill">${stopped?'PARADO':'OPERANDO'}</span></div>
+    ${stopped?`<div class="stop-clock"><div class="stop-top"><div><div class="eyebrow">Tempo de parada</div><strong>Contagem em andamento</strong></div><div class="clock" id="stopTimer">${stopElapsed()}</div></div><p>Ao finalizar, o equipamento volta ao estado operacional e o tempo de ociosidade fica registrado no histórico.</p><button data-action="finish-stop">Finalizar parada — máquina voltou a operar</button></div>`:''}
+
+    <div class="section-head"><div><h2>Parâmetros cadastrados</h2><p class="small">Registre leituras operacionais definidas para este equipamento.</p></div><span class="section-count">${asset.parameters.length}</span></div>
+    <div class="measurement-list">${asset.parameters.map(m=>`<div class="measurement-card"><div><strong>${m.name}: ${m.value} ${m.unit}</strong><span>Faixa aceitável: ${m.min} a ${m.max} ${m.unit}<br>Última medição: ${m.date}</span></div><button class="measure-now" data-measure="${m.id}">Medir agora</button></div>`).join('')}</div>
+
+    <div class="section-head"><div><h2>Histórico do equipamento</h2><p class="small">Manutenções, componentes substituídos, lubrificações, paradas e atividades programadas.</p></div></div>
+    <div class="timeline">
+      ${asset.occurrences.map(o=>`<div class="timeline-item"><div class="timeline-top"><strong>${o.symptom}</strong><span class="status-pill warn">${o.status}</span></div><span>${o.description}</span><span>${o.date} · ${o.shift}</span></div>`).join('')}
+      ${asset.history.map(h=>`<div class="timeline-item"><div class="timeline-top"><strong>${h.title}</strong><span class="status-pill ${h.status==='Concluída'?'ok':'warn'}">${h.status}</span></div><span>${h.detail}</span><span>${h.date}</span></div>`).join('')}
+    </div>
+
+    <div class="qr-actions">
+      <button class="occ" data-action="open-occurrence">Informar ocorrência</button>
+      <button class="stop ${stopped?'resume':''}" data-action="${stopped?'finish-stop':'start-stop'}">${stopped?'Finalizar parada':'Iniciar parada agora'}</button>
+    </div>
+    <div class="info-note">Ocorrências apoiam a análise técnica. Paradas registram o tempo real de ociosidade do equipamento para gestão, qualidade e PCM.</div>
+  </section>`;
+}
+function historyView(){state.screen='qr';return qrView();}
+function settingsView(){return `<section class="screen"><div><div class="eyebrow">Configurações</div><h1>Preferências do operador</h1></div><div class="card block"><h3>Alertas operacionais</h3><p>Liberações programadas e ações emergenciais aparecem como cards acionáveis na tela.</p><span class="tag green">Ativados</span></div><div class="card block"><h3>Sincronização</h3><p>Checklist, medições, ocorrências e evidências são enviados automaticamente quando houver conexão.</p><span class="tag green">Online</span></div></section>`;}
+function answered(i){const s=state.selectedJob.steps[i];if(s.type==='photo')return state.photos>=s.required;return state.answers[i]!==undefined&&state.answers[i]!=='';}
+function elapsed(){return state.executionStart?fmtDuration((Date.now()-state.executionStart)/1000):'00:00:00';}
+
+function setupTechnicalReadGate(){
+  const main=document.getElementById('main');
+  const end=document.getElementById('technicalReportEnd');
+  if(!main||!end)return;
+  const evaluate=()=>{
+    const max=Math.max(1,main.scrollHeight-main.clientHeight);
+    const pct=Math.min(100,Math.max(0,(main.scrollTop/max)*100));
+    state.technicalReadPct=pct;
+    const endRect=end.getBoundingClientRect();
+    const mainRect=main.getBoundingClientRect();
+    const reached=endRect.top<=mainRect.bottom-24;
+    if(reached&&!state.technicalReadComplete){
+      state.technicalReadComplete=true;
+      state.technicalReadPct=100;
+      render();
+      setTimeout(()=>{const m=document.getElementById('main');if(m)m.scrollTop=m.scrollHeight;},0);
+      return;
+    }
+    const label=document.querySelector('.read-progress-top span');
+    const bar=document.querySelector('.read-bar b');
+    if(label&&!state.technicalReadComplete)label.textContent=Math.round(pct)+'%';
+    if(bar&&!state.technicalReadComplete)bar.style.width=pct+'%';
+  };
+  main.onscroll=evaluate;
+  setTimeout(evaluate,0);
+}
+
+function render(){let html='';if(state.screen==='home')html=homeView();else if(state.screen==='detail')html=detailView();else if(state.screen==='exec')html=execView();else if(state.screen==='qr')html=qrView();else if(state.screen==='history')html=historyView();else html=settingsView();document.getElementById('main').innerHTML=html;setNav();bind();startUiTicker();}
+function setNav(){document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav===state.screen||(state.screen==='detail'||state.screen==='exec')&&b.dataset.nav==='home'));}
+function bind(){document.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>act(b.dataset.action));const ta=document.getElementById('technicalAccept');if(ta)ta.onchange=()=>{if(!state.technicalReadComplete){ta.checked=false;return;}state.technicalAccepted=ta.checked;render();};if(state.screen==='detail')setupTechnicalReadGate();document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;render();});document.querySelectorAll('[data-job]').forEach(b=>b.onclick=()=>openJob(b.dataset.job));document.querySelectorAll('[data-measure]').forEach(b=>b.onclick=()=>openMeasure(b.dataset.measure));document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{state.answers[state.step]=b.dataset.answer;state.alert='';render();});document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{state.screen=b.dataset.nav;render();});const notif=document.getElementById('notifBtn');if(notif)notif.onclick=openNotifications;}
+function openJob(id){state.selectedJob=jobs.find(j=>j.id===id);if(!state.selectedJob)return;state.technicalAccepted=false;state.technicalReadComplete=false;state.technicalReadPct=0;state.screen='detail';render();}
+function act(a){if(a==='back'){state.screen='home';render();return;}if(a==='scan'){scanFlow();return;}if(a==='clear-qr'){state.qrAsset=null;state.screen='qr';render();return;}if(a==='open-related'){const related=jobs.find(j=>j.asset.startsWith(asset.id)&&j.status!=='CONCLUIDA');if(related)openJob(related.id);return;}if(a==='open-occurrence'){openOccurrence();return;}if(a==='start-stop'){startStop();return;}if(a==='finish-stop'){finishStop();return;}if(a==='start'){const j=state.selectedJob;if(Date.now()<j.startAt&&j.status!=='EM_EXECUCAO')return;if((!state.technicalReadComplete||!state.technicalAccepted)&&j.status!=='EM_EXECUCAO'){toast('Leia até o final e confirme o relatório técnico');return;}j.status='EM_EXECUCAO';state.screen='exec';state.step=0;state.answers={};state.photos=0;state.alert='';state.executionStart=state.executionStart||Date.now();state.executionDelayed=false;state.delayNotified=false;render();return;}if(a==='prev'){if(state.step>0){state.step--;state.alert='';render();}else{state.screen='detail';render();}return;}if(a==='next'){if(validate()){state.step++;state.alert='';render();}return;}if(a==='finish'){if(validate())finishFlow();return;}if(a==='photo'){const s=state.selectedJob.steps[state.step];state.photos=Math.min(state.photos+1,s.required);toast(`Foto ${state.photos} registrada`);render();return;}}
+function persistNumber(){const s=state.selectedJob.steps[state.step];if(s.type==='number')state.answers[state.step]=document.getElementById('numInput')?.value??s.value;}
+function validate(){const s=state.selectedJob.steps[state.step];state.alert='';if(s.type==='number'){persistNumber();const v=parseFloat(state.answers[state.step]);if(Number.isNaN(v)){state.alert='Informe um valor válido.';render();return false;}if(v<s.min||v>s.max){state.alert=`Valor fora da faixa aceitável de ${s.min} a ${s.max} ${s.unit}.`;render();return false;}return true;}if(s.type==='photo'){if(state.photos<s.required){state.alert=`Registre ${s.required} foto(s) antes de finalizar.`;render();return false;}return true;}if(!answered(state.step)){state.alert='Responda este item antes de continuar.';render();return false;}return true;}
+function startUiTicker(){clearInterval(state.timerId);state.timerId=setInterval(()=>{const t=document.getElementById('timer');if(t&&state.executionStart)t.textContent=elapsed();const st=document.getElementById('stopTimer');if(st&&asset.stop.active)st.textContent=stopElapsed();document.querySelectorAll('[data-countdown]').forEach(el=>{const j=jobs.find(x=>x.id===el.dataset.countdown);if(j)el.textContent=fmtCountdown(j.startAt-Date.now());});const startBtn=document.querySelector('[data-action="start"]');if(startBtn&&state.selectedJob&&Date.now()>=state.selectedJob.startAt&&state.selectedJob.status!=='EM_EXECUCAO'){startBtn.disabled=false;startBtn.textContent='Iniciar execução';}jobs.filter(j=>j.group==='scheduled').forEach(j=>{if(Date.now()>=j.startAt&&!j.releasedNotified){j.releasedNotified=true;state.notifications.unshift({title:'Operação programada liberada agora',subtitle:j.title,jobId:j.id,date:'Agora'});showOperationalNotification(j,'OPERAÇÃO PROGRAMADA LIBERADA');if(state.screen==='home')render();}});if(state.screen==='exec'&&state.executionStart&&state.selectedJob){const sec=(Date.now()-state.executionStart)/1000;if(sec>=state.selectedJob.testDelayAt&&!state.delayNotified){state.delayNotified=true;state.executionDelayed=true;state.notifications.unshift({title:'Tempo previsto excedido',subtitle:state.selectedJob.title,jobId:state.selectedJob.id,date:'Agora'});render();}}},1000);}
+function showOperationalNotification(job,kicker){const pop=document.getElementById('notificationPop');pop.innerHTML=`<button id="openNotification"><div><div class="np-kicker">${kicker}</div><strong>${job.title}</strong><span>${job.asset}</span></div><b>Abrir agora →</b></button>`;pop.classList.add('show');document.getElementById('openNotification').onclick=()=>{pop.classList.remove('show');openJob(job.id);};clearTimeout(state.notificationTimer);state.notificationTimer=setTimeout(()=>pop.classList.remove('show'),9000);}
+function finishFlow(){const j=state.selectedJob,overlay=document.getElementById('overlay');overlay.className='sync-overlay show';overlay.innerHTML=`<div class="center"><div class="spinner"></div><h2>Sincronizando dados</h2><p>Enviando checklist, parâmetros, evidências e tempo total.</p></div>`;setTimeout(()=>{j.status='CONCLUIDA';const total=elapsed();const sec=Math.floor((Date.now()-state.executionStart)/1000);const delta=sec-j.testDelayAt;const performance=delta<=0?'Dentro do tempo previsto':`${fmtDuration(delta)} acima do limite de teste`;overlay.innerHTML=`<div class="center"><div class="check">${icons.check}</div><h2>Execução concluída</h2><p>Dados sincronizados com sucesso.</p><div class="result-grid"><div class="result"><span>Tempo de execução</span><strong>${total}</strong></div><div class="result"><span>Comparação</span><strong>${performance}</strong></div><div class="result"><span>Checklist</span><strong>${j.steps.length}/${j.steps.length}</strong></div><div class="result"><span>Evidências</span><strong>${state.photos} foto(s)</strong></div></div></div>`;},900);setTimeout(()=>{overlay.className='sync-overlay';overlay.innerHTML='';state.screen='home';state.tab='done';state.selectedJob=null;state.step=0;state.answers={};state.photos=0;state.executionStart=null;state.executionDelayed=false;state.delayNotified=false;render();},2900);}
+function scanFlow(){const overlay=document.getElementById('overlay');overlay.className='sync-overlay show';overlay.innerHTML=`<div class="center"><div class="scanbox"><div class="scanframe"></div></div><h2>Lendo QR Code</h2><p>Consultando ficha técnica, parâmetros e histórico.</p></div>`;setTimeout(()=>{overlay.innerHTML=`<div class="center"><div class="check">${icons.check}</div><h2>${asset.id} identificado</h2><p>Histórico técnico carregado.</p></div>`;},850);setTimeout(()=>{overlay.className='sync-overlay';overlay.innerHTML='';state.qrAsset=asset.id;state.screen='qr';render();},1600);}
+
+function restoreStop(){
+  try{
+    const raw=localStorage.getItem('fab_control_stop_'+asset.id);
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    if(data&&data.active&&data.startedAt){asset.stop.active=true;asset.stop.startedAt=data.startedAt;}
+  }catch(e){}
+}
+function persistStop(){
+  try{localStorage.setItem('fab_control_stop_'+asset.id,JSON.stringify(asset.stop));}catch(e){}
+}
+function stopElapsed(){
+  if(!asset.stop.active||!asset.stop.startedAt)return '00:00:00';
+  return fmtDuration((Date.now()-asset.stop.startedAt)/1000);
+}
+function startStop(){
+  if(asset.stop.active)return;
+  asset.stop.active=true;
+  asset.stop.startedAt=Date.now();
+  persistStop();
+  asset.occurrences.unshift({id:'STOP-'+Date.now(),symptom:'Parada não programada iniciada',severity:'Alta',description:'Equipamento marcado como parado pelo operador. Contagem de ociosidade iniciada.',date:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),shift:'Turno A',status:'Parada em andamento'});
+  state.notifications.unshift({title:'Equipamento parado',subtitle:`${asset.id} — contagem iniciada`,jobId:null,date:'Agora'});
+  render();
+  toast('Parada iniciada');
+}
+function finishStop(){
+  if(!asset.stop.active)return;
+  const duration=Math.max(0,Math.floor((Date.now()-asset.stop.startedAt)/1000));
+  asset.stop.active=false;
+  asset.stop.lastDuration=duration;
+  asset.stop.startedAt=null;
+  try{localStorage.removeItem('fab_control_stop_'+asset.id);}catch(e){}
+  const running=asset.occurrences.find(o=>o.status==='Parada em andamento');
+  if(running){running.status='Finalizada';running.description=`Equipamento voltou a operar. Tempo total de parada: ${fmtDuration(duration)}.`;}
+  asset.history.unshift({title:'Parada não programada finalizada',detail:`Tempo de ociosidade registrado: ${fmtDuration(duration)}. Equipamento voltou a operar.`,date:new Date().toLocaleDateString('pt-BR'),status:'Concluída'});
+  state.notifications.unshift({title:'Parada finalizada',subtitle:`${asset.id} — ${fmtDuration(duration)} de ociosidade`,jobId:null,date:'Agora'});
+  render();
+  toast('Parada finalizada');
+}
+
+function openMeasure(id){const m=asset.parameters.find(x=>x.id===id);if(!m)return;state.measureTarget=m;const modal=document.getElementById('modal');modal.className='modal show';modal.innerHTML=`<div class="center measure-modal"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="eyebrow">Parâmetro cadastrado</div><h2>${m.name}</h2></div><button class="tag gray" id="cancelMeasure">Fechar</button></div><p>Último valor: ${m.value} ${m.unit} em ${m.date}.</p><div class="measure"><input id="measureInput" type="number" step="0.1" inputmode="decimal" value="${m.value}"><div class="unit">${m.unit}</div></div><div class="range" style="margin-top:10px"><span>Faixa aceitável</span><strong>${m.min} a ${m.max} ${m.unit}</strong></div><div id="measureStatus"></div><button class="primary" id="saveMeasure" style="width:100%;margin-top:14px">Registrar medição</button></div>`;document.getElementById('cancelMeasure').onclick=closeMeasure;document.getElementById('saveMeasure').onclick=saveMeasure;}
+function closeMeasure(){const modal=document.getElementById('modal');modal.className='modal';modal.innerHTML='';state.measureTarget=null;}
+function saveMeasure(){const m=state.measureTarget,input=document.getElementById('measureInput'),status=document.getElementById('measureStatus');if(!m||!input||!status)return;const value=parseFloat(input.value);if(Number.isNaN(value)){status.className='measure-status bad';status.textContent='Informe um valor numérico válido.';return;}m.value=value;m.date=new Date().toLocaleDateString('pt-BR');const outside=value<m.min||value>m.max;if(outside){asset.occurrences.unshift({id:'OCR-'+Date.now(),symptom:`${m.name} fora da faixa`,severity:'Alta',description:`Leitura registrada: ${value} ${m.unit}. Faixa configurada: ${m.min} a ${m.max} ${m.unit}.`,date:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),shift:'Turno A',status:'Inspeção solicitada'});state.notifications.unshift({title:'Inspeção solicitada por parâmetro fora da faixa',subtitle:`${m.name}: ${value} ${m.unit}`,jobId:null,date:'Agora'});status.className='measure-status bad';status.textContent='Valor fora da faixa. Solicitação de inspeção enviada para análise técnica.';}else{status.className='measure-status ok';status.textContent='Medição registrada dentro da faixa.';}setTimeout(()=>{closeMeasure();render();toast(outside?'Inspeção solicitada':'Medição registrada');},1200);}
+function openOccurrence(){state.occurrencePhoto=false;const modal=document.getElementById('modal');modal.className='modal show';modal.innerHTML=`<div class="center" style="text-align:left;max-height:88%;overflow:auto"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div class="eyebrow">${asset.id} — ${asset.name}</div><h2>Solicitar inspeção</h2></div><span class="tag orange">Registro do operador</span></div><div class="form-grid"><div class="field"><label for="occSymptom">O que foi observado?</label><select id="occSymptom"><option>Vibração muito alta</option><option>Ruído anormal</option><option>Aquecimento excessivo</option><option>Vazamento</option><option>Desalinhamento</option><option>Falha intermitente</option><option>Outro</option></select></div><div class="field"><label for="occSeverity">Percepção de risco</label><select id="occSeverity"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Crítica — parar e avaliar</option></select></div><div class="field"><label for="occDescription">Descrição do que aconteceu</label><textarea id="occDescription" placeholder="Ex.: A máquina apresentou vibração e ruído no lado do acionamento durante o ciclo."></textarea></div><button class="secondary" id="occPhoto" style="width:100%;min-height:46px">Adicionar foto opcional</button><div class="form-note">O envio cria uma solicitação de inspeção. Administração e gestão analisam o registro e definem a próxima ação técnica. Não é criada manutenção automaticamente.</div></div><div class="modal-actions"><button class="secondary" id="cancelOccurrence">Cancelar</button><button class="primary" id="saveOccurrence">Enviar para inspeção</button></div></div>`;document.getElementById('cancelOccurrence').onclick=closeOccurrence;document.getElementById('occPhoto').onclick=()=>{state.occurrencePhoto=!state.occurrencePhoto;document.getElementById('occPhoto').textContent=state.occurrencePhoto?'Foto adicionada ✓':'Adicionar foto opcional';};document.getElementById('saveOccurrence').onclick=saveOccurrence;}
+function closeOccurrence(){const modal=document.getElementById('modal');modal.className='modal';modal.innerHTML='';state.occurrencePhoto=false;}
+function saveOccurrence(){const symptom=document.getElementById('occSymptom')?.value||'',severity=document.getElementById('occSeverity')?.value||'',description=(document.getElementById('occDescription')?.value||'').trim();if(!description){toast('Descreva a condição observada');return;}asset.occurrences.unshift({id:'OCR-'+Date.now(),symptom,severity,description,date:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),shift:'Turno A',status:'Aguardando inspeção'});state.notifications.unshift({title:'Solicitação de inspeção registrada',subtitle:`${asset.id}: ${symptom}`,jobId:null,date:'Agora'});closeOccurrence();render();toast('Solicitação enviada para inspeção');}
+function openNotifications(){const m=document.getElementById('modal');m.className='modal show';m.innerHTML=`<div class="center" style="text-align:left"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2>Histórico de alertas</h2><button class="tag gray" id="closeModal">Fechar</button></div><div class="timeline" style="margin-top:14px">${state.notifications.map(n=>`<button class="timeline-item" ${n.jobId?`data-alert-job="${n.jobId}"`:''}><div class="timeline-top"><strong>${n.title}</strong><span class="status-pill">${n.date}</span></div><span>${n.subtitle}</span></button>`).join('')}</div></div>`;document.getElementById('closeModal').onclick=()=>{m.className='modal';m.innerHTML='';};document.querySelectorAll('[data-alert-job]').forEach(b=>b.onclick=()=>{m.className='modal';m.innerHTML='';openJob(b.dataset.alertJob);});}
+restoreStop();
+render();
+setTimeout(()=>{const urgent=jobs[0];if(state.screen==='home')showOperationalNotification(urgent,'AÇÃO EMERGENCIAL DISPONÍVEL');},650);
+</script>
+</body>
+</html>
