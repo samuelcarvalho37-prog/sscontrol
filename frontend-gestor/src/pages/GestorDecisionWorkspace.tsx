@@ -32,6 +32,7 @@ export interface GestorDecisionFocus {
 }
 
 interface GestorDecisionWorkspaceProps {
+  capabilities?: string[]
   initialView?: GestorWorkView
   focus?: GestorDecisionFocus | null
   onQueueCountChange: (count: number) => void
@@ -148,6 +149,7 @@ function includesSearch(item: DecisionItem, search: string): boolean {
 }
 
 export function GestorDecisionWorkspace({
+  capabilities,
   focus,
   onQueueCountChange,
   onOpenAnalytics,
@@ -180,8 +182,8 @@ export function GestorDecisionWorkspace({
     try {
       const [actionData, modelData, demandData, contextData] =
         await Promise.all([
-          getGestorActions(signal),
-          getGestorChecklistModels(signal),
+          capabilities === undefined || capabilities.includes('maintenance.executions.read') ? getGestorActions(signal) : Promise.resolve([]),
+          capabilities === undefined || capabilities.includes('maintenance.checklists.read') ? getGestorChecklistModels(signal) : Promise.resolve([]),
           getGestorTechnicalDemands(signal),
           getGestorTechnicalContext(signal),
         ])
@@ -227,7 +229,7 @@ export function GestorDecisionWorkspace({
         setRefreshing(false)
       }
     }
-  }, [onQueueCountChange, onSessionExpired])
+  }, [onQueueCountChange, onSessionExpired, capabilities])
 
   useEffect(() => {
     const controller = new AbortController()

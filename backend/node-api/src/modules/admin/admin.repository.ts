@@ -1,4 +1,5 @@
 import type { PoolClient, QueryResultRow } from 'pg';
+import { AppError } from '../../core/errors/app-error.js';
 
 import type {
   AdminAuditMetadata,
@@ -11,10 +12,6 @@ import type {
   SaveUserInput,
   UserListQuery,
 } from './admin.types.js';
-
-function profileRoleType(profile: AdminProfile): string {
-  return profile === 'GESTOR' ? 'MANAGER' : profile;
-}
 
 export interface MonitoringIssueRow extends QueryResultRow {
   readonly code: string;
@@ -29,11 +26,46 @@ export interface MonitoringSummaryRow extends QueryResultRow {
 }
 
 export class AdminRepository {
+  async identityRoles(client: PoolClient): Promise<readonly AdminRow[]> {
+    const result = await client.query<AdminRow>(
+      `SELECT id, code, name, role_type, protected FROM iam.roles
+       WHERE tenant_id=current_setting('app.tenant_id')::uuid
+         AND status='ACTIVE' AND deleted_at IS NULL
+       ORDER BY (role_type='ADMIN') DESC, code COLLATE "C", id`,
+    );
+    return result.rows;
+  }
+
+  async requireIdentityRole(client: PoolClient, code: string) {
+    const result = await client.query<{
+      id: string;
+      code: string;
+      role_type: string;
+      protected: boolean;
+    }>(
+      `SELECT id, code, role_type, protected FROM iam.roles
+       WHERE tenant_id=current_setting('app.tenant_id')::uuid
+         AND status='ACTIVE' AND deleted_at IS NULL
+         AND (code=$1 OR ($1='GESTOR' AND code='GESTOR_TECNICO'))
+       ORDER BY (code=$1) DESC LIMIT 1 FOR SHARE`,
+      [code],
+    );
+    const role = result.rows[0];
+    if (!role)
+      throw new AppError({
+        code: 'ADMIN_ROLE_NOT_FOUND',
+        message: 'Perfil ativo não encontrado nesta empresa.',
+        statusCode: 422,
+      });
+    return role;
+  }
+
   async listUsers(client: PoolClient, query: UserListQuery): Promise<readonly AdminRow[]> {
     const result = await client.query<AdminRow>(
       `SELECT usuario.id, usuario.name AS nome, usuario.email,
               usuario.employee_number AS matricula,
-              CASE papel.role_type WHEN 'ADMIN' THEN 'ADMIN' WHEN 'OPERATOR' THEN 'OPERADOR' ELSE 'GESTOR' END AS perfil,
+              COALESCE(papel.code,'') AS perfil, papel.code AS "primaryRoleCode", papel.role_type AS "roleType",
+              COALESCE(papel.codes, ARRAY[]::text[]) AS "roleCodes",
               CASE WHEN usuario.status = 'ACTIVE' THEN 'ATIVO' ELSE 'INATIVO' END AS status,
               CASE WHEN usuario.first_access_required THEN 'SIM' ELSE 'NAO' END AS primeiro_acesso,
               usuario.failed_login_attempts AS tentativas_login,
@@ -51,24 +83,36 @@ export class AdminRepository {
               usuario.specialties::text AS especialidades_json,
               COALESCE(usuario.metadata->'scope_ids', '[]'::jsonb)::text AS escopo_ids_json
        FROM iam.users usuario
-       LEFT JOIN iam.user_roles usuario_papel
-         ON usuario_papel.tenant_id = usuario.tenant_id AND usuario_papel.user_id = usuario.id
-        AND usuario_papel.valid_from <= clock_timestamp()
-        AND (usuario_papel.valid_until IS NULL OR usuario_papel.valid_until > clock_timestamp())
-       LEFT JOIN iam.roles papel
-         ON papel.tenant_id = usuario_papel.tenant_id AND papel.id = usuario_papel.role_id
+       LEFT JOIN LATERAL (
+         SELECT role.code, role.role_type,
+                array_agg(role.code) OVER (
+                  ORDER BY (role.role_type='ADMIN') DESC, role.code COLLATE "C", role.id
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS codes
+         FROM iam.user_roles link JOIN iam.roles role
+           ON role.tenant_id=link.tenant_id AND role.id=link.role_id
+         WHERE link.tenant_id=usuario.tenant_id AND link.user_id=usuario.id
+           AND link.valid_from <= clock_timestamp()
+           AND (link.valid_until IS NULL OR link.valid_until > clock_timestamp())
+           AND role.status='ACTIVE' AND role.deleted_at IS NULL
+         ORDER BY (role.role_type='ADMIN') DESC, role.code COLLATE "C", role.id LIMIT 1
+       ) papel ON true
        LEFT JOIN iam.user_technical_assignments atribuicao
          ON atribuicao.tenant_id = usuario.tenant_id AND atribuicao.user_id = usuario.id
         AND atribuicao.is_primary AND atribuicao.status = 'ACTIVE'
+        AND atribuicao.valid_from <= clock_timestamp()
+        AND (atribuicao.valid_until IS NULL OR atribuicao.valid_until > clock_timestamp())
        LEFT JOIN iam.sessions sessao
          ON sessao.tenant_id = usuario.tenant_id AND sessao.user_id = usuario.id
        WHERE usuario.deleted_at IS NULL
+         AND usuario.tenant_id=current_setting('app.tenant_id')::uuid
          AND ($1 = '' OR usuario.name ILIKE '%' || $1 || '%'
               OR usuario.employee_number ILIKE '%' || $1 || '%'
               OR COALESCE(usuario.email, '') ILIKE '%' || $1 || '%')
-         AND ($2::text IS NULL OR CASE papel.role_type WHEN 'ADMIN' THEN 'ADMIN' WHEN 'OPERATOR' THEN 'OPERADOR' ELSE 'GESTOR' END = $2)
+         AND ($2::text IS NULL OR $2=ANY(papel.codes)
+              OR ($2='GESTOR' AND 'GESTOR_TECNICO'=ANY(papel.codes)))
          AND ($3::text IS NULL OR CASE WHEN usuario.status = 'ACTIVE' THEN 'ATIVO' ELSE 'INATIVO' END = $3)
-       GROUP BY usuario.id, papel.role_type, atribuicao.technical_area_id, atribuicao.technical_role_id
+       GROUP BY usuario.id, papel.code, papel.role_type, papel.codes, atribuicao.technical_area_id, atribuicao.technical_role_id
        ORDER BY usuario.name, usuario.id
        LIMIT $4`,
       [query.search, query.profile, query.status, query.limit],
@@ -97,6 +141,7 @@ export class AdminRepository {
     readonly mode: 'insert' | 'update';
     readonly revoked: number;
   }> {
+    const role = await this.requireIdentityRole(client, input.profile);
     let userId = input.id;
     const mode = userId ? 'update' : 'insert';
     const metadata = JSON.stringify({ scope_ids: input.scopeIds });
@@ -135,19 +180,32 @@ export class AdminRepository {
     }
     if (!userId) throw new Error('O PostgreSQL não retornou o identificador do usuário.');
 
-    const role = await client.query<{ id: string }>(
-      `SELECT id FROM iam.roles
-       WHERE role_type=$1 AND status='ACTIVE' AND deleted_at IS NULL
-       ORDER BY protected DESC, created_at LIMIT 1`,
-      [profileRoleType(input.profile)],
+    // A legacy single-role edit replaces only the current primary role, preserving secondary roles.
+    const current = await client.query<{ role_id: string }>(
+      `SELECT link.role_id FROM iam.user_roles link JOIN iam.roles role
+         ON role.tenant_id=link.tenant_id AND role.id=link.role_id
+       WHERE link.tenant_id=$1 AND link.user_id=$2
+         AND link.valid_from <= clock_timestamp()
+         AND (link.valid_until IS NULL OR link.valid_until > clock_timestamp())
+         AND role.status='ACTIVE' AND role.deleted_at IS NULL
+       ORDER BY (role.role_type='ADMIN') DESC, role.code COLLATE "C", role.id LIMIT 1`,
+      [tenantId, userId],
     );
-    const roleId = role.rows[0]?.id;
-    if (!roleId) throw new Error(`Não existe papel ativo para o perfil ${input.profile}.`);
-    await client.query(`DELETE FROM iam.user_roles WHERE user_id=$1`, [userId]);
+    const previous = current.rows[0]?.role_id;
+    if (previous && previous !== role.id) {
+      await client.query(
+        `UPDATE iam.user_roles SET valid_until=clock_timestamp()
+        WHERE tenant_id=$1 AND user_id=$2 AND role_id=$3`,
+        [tenantId, userId, previous],
+      );
+    }
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id,assigned_by)
-       VALUES ($1,$2,$3,$4)`,
-      [tenantId, userId, roleId, actorId],
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (tenant_id,user_id,role_id) DO UPDATE
+       SET valid_from=LEAST(iam.user_roles.valid_from,clock_timestamp()), valid_until=NULL,
+           assigned_by=EXCLUDED.assigned_by`,
+      [tenantId, userId, role.id, actorId],
     );
 
     await client.query(
@@ -341,7 +399,7 @@ export class AdminRepository {
 
   async permissionMatrix(client: PoolClient): Promise<readonly AdminRow[]> {
     const result = await client.query<AdminRow>(
-      `SELECT role.role_type, capability.id, capability.code, capability.name,
+      `SELECT role.code AS role_code, role.role_type, capability.id, capability.code, capability.name,
               capability.description, capability.protected,
               COALESCE(role_capability.effect='ALLOW',false) AS allowed
        FROM iam.roles role
@@ -349,7 +407,8 @@ export class AdminRepository {
        LEFT JOIN iam.role_capabilities role_capability
          ON role_capability.role_id=role.id AND role_capability.capability_id=capability.id
        WHERE role.status='ACTIVE' AND capability.status='ACTIVE'
-         AND role.role_type IN ('ADMIN','MANAGER','OPERATOR')
+         AND role.deleted_at IS NULL
+         AND role.tenant_id=current_setting('app.tenant_id')::uuid
        ORDER BY role.role_type, capability.module, capability.name`,
     );
     return result.rows;
@@ -361,16 +420,25 @@ export class AdminRepository {
     permissions: Readonly<Record<string, boolean>>,
     actorId: string,
   ): Promise<void> {
-    const roleType = profileRoleType(profile);
+    const role = await this.requireIdentityRole(client, profile);
+    if (role.role_type === 'ADMIN' || role.protected) {
+      throw new AppError({
+        code: 'ADMIN_PROFILE_PROTECTED',
+        message: 'Este perfil possui permissões protegidas.',
+        statusCode: 409,
+      });
+    }
     for (const [code, allowed] of Object.entries(permissions)) {
       await client.query(
         `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect,granted_by)
          SELECT role.tenant_id,role.id,capability.id,$3,$4
          FROM iam.roles role JOIN iam.capabilities capability ON capability.code=$2
-         WHERE role.role_type=$1 AND role.status='ACTIVE'
+         WHERE role.id=$1 AND role.status='ACTIVE' AND role.deleted_at IS NULL
+           AND role.tenant_id=current_setting('app.tenant_id')::uuid
+           AND capability.status='ACTIVE'
          ON CONFLICT (tenant_id,role_id,capability_id) DO UPDATE
          SET effect=EXCLUDED.effect,granted_by=EXCLUDED.granted_by,granted_at=clock_timestamp()`,
-        [roleType, code, allowed ? 'ALLOW' : 'DENY', actorId],
+        [role.id, code, allowed ? 'ALLOW' : 'DENY', actorId],
       );
     }
   }

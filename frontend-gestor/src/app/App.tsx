@@ -60,7 +60,11 @@ export function App() {
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
-  const isAdmin = session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const isAdmin = session?.user.capacidades !== undefined
+    ? session.user.capacidades.includes('admin.identity.read')
+    : session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
+  const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const compactDevice = useAdaptiveDevice()
 
@@ -74,7 +78,7 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady) return
+    if (!session || isAdmin || isSystem || !workspaceReady || (session.user.capacidades !== undefined && !session.user.capacidades.includes('workflow.notifications.read'))) return
     const controller = new AbortController()
 
     async function refreshNotifications() {
@@ -105,19 +109,19 @@ export function App() {
   }, [expireSession, isAdmin, isSystem, session, workspaceReady])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady) return
+    if (!session || isAdmin || isSystem || !workspaceReady || !canReadWork) return
     const controller = new AbortController()
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
         setTechnicalContext(context)
-        if (!context.pode_validar) setSection('validations')
+        if (!context.pode_validar) setSection(canReadAnalytics ? 'validations' : 'more')
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
         if (isGestorAuthenticationError(cause)) expireSession()
       })
     return () => controller.abort()
-  }, [expireSession, isAdmin, isSystem, session, workspaceReady])
+  }, [expireSession, isAdmin, isSystem, session, workspaceReady, canReadWork, canReadAnalytics])
 
   useEffect(() => {
     if (!session) return
@@ -337,8 +341,9 @@ export function App() {
         </header>
 
         <div className="app-content">
-          {section === 'home' ? (
+          {section === 'home' && canReadWork ? (
             <GestorDecisionWorkspace
+              capabilities={session.user.capacidades}
               initialView={decisionView}
               focus={decisionFocus}
               onQueueCountChange={setValidationCount}
@@ -346,7 +351,7 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'validations' ? (
+          {section === 'validations' && canReadAnalytics ? (
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
@@ -374,7 +379,7 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'more' ? (
+          {section === 'more' || (section === 'home' && !canReadWork) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
         </div>
@@ -384,6 +389,7 @@ export function App() {
           validationCount={validationCount}
           showAdmin={false}
           canValidate={technicalContext?.pode_validar ?? false}
+          canReadAnalytics={canReadAnalytics}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}
         />

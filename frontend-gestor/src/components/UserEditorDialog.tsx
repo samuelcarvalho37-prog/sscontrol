@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   listTechnicalAreas,
+  getAdminPermissionMatrix,
   listTechnicalRoles,
   saveAdminUser,
 } from '../services/api/admin'
@@ -9,6 +10,7 @@ import type {
   AdminUserInput,
   AdminUserProfile,
   AdminUserStatus,
+  AdminPermissionProfile,
   TechnicalArea,
   TechnicalRole,
 } from '../types/admin'
@@ -27,7 +29,7 @@ function createTemporaryPassword(): string {
 }
 
 function passwordMeetsRules(value: string): boolean {
-  return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)
+  return value.length >= 12 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)
 }
 
 export function UserEditorDialog({
@@ -41,7 +43,8 @@ export function UserEditorDialog({
   const [name, setName] = useState(user?.nome ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [registration, setRegistration] = useState(user?.matricula ?? '')
-  const [profile, setProfile] = useState<AdminUserProfile>(user?.perfil ?? 'OPERADOR')
+  const [profile, setProfile] = useState<AdminUserProfile>(user?.perfil ?? '')
+  const [profiles, setProfiles] = useState<AdminPermissionProfile[]>([])
   const [status, setStatus] = useState<AdminUserStatus>(user?.status ?? 'ATIVO')
   const [areaId, setAreaId] = useState(user?.area_id ?? '')
   const [roleId, setRoleId] = useState(user?.cargo_id ?? '')
@@ -70,11 +73,13 @@ export function UserEditorDialog({
     void Promise.all([
       listTechnicalAreas(controller.signal),
       listTechnicalRoles('', controller.signal),
-    ]).then(([areaData, roleData]) => {
+      getAdminPermissionMatrix(controller.signal),
+    ]).then(([areaData, roleData, matrix]) => {
       setAreas(areaData)
       setRoles(roleData)
-    }).catch(() => {
-      // O cadastro continua disponÃ­vel mesmo se o catÃ¡logo tÃ©cnico falhar.
+      setProfiles(matrix.perfis)
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os perfis da empresa.')
     })
     return () => controller.abort()
   }, [])
@@ -84,6 +89,10 @@ export function UserEditorDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    if (!profiles.some((item) => item.perfil === profile)) {
+      setError('Selecione um perfil ativo da empresa.')
+      return
+    }
 
     if (name.trim().length < 3) {
       setError('Informe o nome completo do usuário.')
@@ -98,7 +107,7 @@ export function UserEditorDialog({
       return
     }
     if (!editing && !passwordMeetsRules(temporaryPassword)) {
-      setError('A senha temporária precisa ter 8 caracteres, letra maiúscula, minúscula e número.')
+      setError('A senha temporária precisa ter 12 caracteres, letra maiúscula, minúscula e número.')
       return
     }
 
@@ -110,14 +119,10 @@ export function UserEditorDialog({
       perfil: profile,
       status,
       senha_temporaria: editing ? undefined : temporaryPassword,
-      area_id: profile === 'GESTOR' ? areaId : '',
-      cargo_id: profile === 'GESTOR' ? roleId : '',
-      especialidades: profile === 'GESTOR'
-        ? specialties.split(',').map((value: string) => value.trim()).filter(Boolean)
-        : [],
-      escopo_ids: profile === 'GESTOR'
-        ? scopeIds.split(',').map((value: string) => value.trim()).filter(Boolean)
-        : [],
+      area_id: areaId,
+      cargo_id: roleId,
+      especialidades: specialties.split(',').map((value: string) => value.trim()).filter(Boolean),
+      escopo_ids: scopeIds.split(',').map((value: string) => value.trim()).filter(Boolean),
     }
 
     setSubmitting(true)
@@ -178,9 +183,8 @@ export function UserEditorDialog({
                 disabled={editingSelf}
                 onChange={(event) => setProfile(event.target.value as AdminUserProfile)}
               >
-                <option value="OPERADOR">Operador</option>
-                <option value="GESTOR">Gestor</option>
-                <option value="ADMIN">Administrador</option>
+                <option value="">Selecione um perfil</option>
+                {profiles.map((item) => <option key={item.perfil} value={item.perfil}>{item.nome ?? item.perfil} ({item.perfil})</option>)}
               </select>
             </label>
             <label>
@@ -194,7 +198,7 @@ export function UserEditorDialog({
                 <option value="INATIVO">Inativo</option>
               </select>
             </label>
-            {profile === 'GESTOR' ? (
+            {profile ? (
               <>
                 <label>
                   <span>Ãrea tÃ©cnica</span>

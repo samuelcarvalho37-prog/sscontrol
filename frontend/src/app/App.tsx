@@ -226,6 +226,7 @@ function mergeEvidenceIntoDetail(
 
 export function App() {
   const [operatorSession, setOperatorSession] = useState(readOperatorSession)
+  const canReadExecutions = operatorSession?.user.capacidades === undefined || operatorSession.user.capacidades.includes('maintenance.executions.read')
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
     readActiveExecutionContext(),
   )
@@ -316,6 +317,14 @@ export function App() {
   }
 
   const refresh = useCallback(async (options: RefreshOptions = {}) => {
+    if (!canReadExecutions) {
+      setActions([])
+      actionsRef.current = []
+      setLoading(false)
+      setError('')
+      setConnectionState('online')
+      return
+    }
     if (refreshInFlightRef.current) {
       await refreshInFlightRef.current
       return
@@ -392,7 +401,7 @@ export function App() {
     } finally {
       refreshInFlightRef.current = null
     }
-  }, [])
+  }, [canReadExecutions])
 
   useEffect(() => {
     if (!operatorSession) return
@@ -498,7 +507,7 @@ export function App() {
   }, [])
 
   useEffect(() => {
-  if (!operatorSession) return
+  if (!operatorSession || !canReadExecutions) return
 
   const stored =
     initialExecutionContextRef.current ?? readActiveExecutionContext()
@@ -528,7 +537,7 @@ export function App() {
       setView('action-detail')
     }
   })
-}, [configurationRevision, loadActionDetail, operatorSession?.token])
+}, [configurationRevision, loadActionDetail, operatorSession?.token, canReadExecutions])
   function openActionById(actionId: string) {
     selectedActionIdRef.current = actionId
     setSelectedActionId(actionId)

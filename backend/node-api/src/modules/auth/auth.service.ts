@@ -501,7 +501,7 @@ export class AuthService {
         if (
           window.userStatus !== 'ACTIVE' ||
           window.firstAccessRequired ||
-          baseUser.profile !== 'ADMIN'
+          baseUser.roleType !== 'ADMIN'
         ) {
           await this.repository.writeAuditEvent(client, {
             tenantId: window.tenantId,
@@ -802,6 +802,9 @@ export class AuthService {
       nome: user.name,
       email: user.email,
       perfil: user.profile,
+      primaryRoleCode: user.primaryRoleCode,
+      roleCodes: user.roleCodes,
+      roleType: user.roleType,
       area_id: user.areaId,
       cargo_tecnico_id: user.technicalRoleId,
       papeis: user.roles,

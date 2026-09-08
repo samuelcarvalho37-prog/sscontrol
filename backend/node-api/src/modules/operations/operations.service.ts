@@ -176,9 +176,12 @@ export class OperationsService {
           },
           areas: catalog.areas,
           cargos: catalog.roles,
-          pode_encaminhar: user.profile !== 'OPERADOR',
+          pode_encaminhar: user.capabilities.includes('maintenance.work-orders.review'),
           pode_assinar: canSign,
-          pode_validar: validationMode || user.profile === 'ADMIN',
+          pode_validar:
+            user.capabilities.includes('maintenance.work-orders.review') &&
+            validationMode &&
+            canSign,
           modo_trabalho: validationMode ? 'VALIDACAO' : 'ACOMPANHAMENTO',
           politicas_assinatura: [
             { codigo: 'QUALIDADE', nome: 'Qualidade', assinaturas: 1 },
@@ -206,7 +209,7 @@ export class OperationsService {
         const demands = await this.repository.listTechnicalDemands(
           client,
           user.id,
-          user.profile === 'ADMIN',
+          user.capabilities.includes('maintenance.work-orders.manage'),
           query,
         );
         return { total: demands.length, demandas: demands, limite: query.limit };
@@ -230,7 +233,7 @@ export class OperationsService {
             const visible = await this.repository.listTechnicalDemands(
               client,
               user.id,
-              user.profile === 'ADMIN',
+              user.capabilities.includes('maintenance.work-orders.manage'),
               { search: '', statuses: [], limit: 300 },
             );
             return {
@@ -258,7 +261,7 @@ export class OperationsService {
         const visible = await this.repository.listTechnicalDemands(
           client,
           user.id,
-          user.profile === 'ADMIN',
+          user.capabilities.includes('maintenance.work-orders.manage'),
           { search: '', statuses: [], limit: 300 },
         );
         const demand = visible.find((row) => row.id === demandId);
@@ -1198,7 +1201,10 @@ export class OperationsService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const detail = await this.requiredExecutionDetail(client, executionId);
-        if (user.profile === 'OPERADOR' && detail.operador_id !== user.id) {
+        if (
+          !user.capabilities.includes('maintenance.work-orders.review') &&
+          detail.operador_id !== user.id
+        ) {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         return detail;
@@ -1211,7 +1217,11 @@ export class OperationsService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const execution = await this.repository.findExecution(client, executionId);
-        if (!execution || (user.profile === 'OPERADOR' && execution.operator_id !== user.id)) {
+        if (
+          !execution ||
+          (!user.capabilities.includes('maintenance.work-orders.review') &&
+            execution.operator_id !== user.id)
+        ) {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         const blockers = await this.repository.blockingExecutionItems(client, executionId);

@@ -1,7 +1,8 @@
-export type AdminUserProfile = 'ADMIN' | 'GESTOR' | 'OPERADOR'
+export type AdminUserProfile = string
 export type AdminUserStatus = 'ATIVO' | 'INATIVO'
 
 export interface AdminUser {
+  roleCodes?: string[]
   id: string
   nome: string
   email: string
@@ -113,6 +114,8 @@ export interface AdminPermissionCapability {
 }
 
 export interface AdminPermissionProfile {
+  nome?: string
+  roleType?: string
   perfil: AdminUserProfile
   editavel: boolean
   acesso_total?: boolean

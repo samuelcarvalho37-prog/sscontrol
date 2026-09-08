@@ -169,12 +169,6 @@ function mapMaintenanceWindow(row: MaintenanceWindowRow): MaintenanceWindowRecor
   };
 }
 
-function profileFromRoles(roles: readonly RoleRow[]): AuthenticatedUser['profile'] {
-  if (roles.some((role) => role.role_type === 'ADMIN')) return 'ADMIN';
-  if (roles.some((role) => role.role_type === 'MANAGER')) return 'GESTOR';
-  return 'OPERADOR';
-}
-
 export class AuthRepository {
   async findCredentialForLogin(
     client: PoolClient,
@@ -272,7 +266,7 @@ export class AuthRepository {
             AND (user_role.valid_until IS NULL OR user_role.valid_until > clock_timestamp())
             AND role.status = 'ACTIVE'
             AND role.deleted_at IS NULL
-          ORDER BY role.code
+          ORDER BY (role.role_type = 'ADMIN') DESC, role.code COLLATE "C", role.id
         `,
       [session.tenantId, session.userId],
     );
@@ -342,7 +336,10 @@ export class AuthRepository {
       employeeNumber: session.employeeNumber,
       name: session.name,
       email: session.email,
-      profile: profileFromRoles(rolesResult.rows),
+      profile: rolesResult.rows[0]?.code ?? '',
+      primaryRoleCode: rolesResult.rows[0]?.code ?? null,
+      roleCodes: rolesResult.rows.map((role) => role.code),
+      roleType: rolesResult.rows[0]?.role_type ?? null,
       areaId: assignment?.technical_area_id ?? null,
       technicalRoleId: assignment?.technical_role_id ?? null,
       roles: rolesResult.rows.map((role) => role.code),

@@ -7,6 +7,10 @@ export interface AuthenticatedOperator {
   email: string
   matricula: string
   perfil: string
+  primaryRoleCode?: string | null
+  roleCodes?: string[]
+  roleType?: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'CUSTOM' | null
+  capacidades?: string[]
 }
 
 export interface OperatorSession {
