@@ -332,7 +332,7 @@ export function SettingsPage({
           <div className="settings-panel__heading">
             <div>
               <span className="settings-kicker">Aplicativo</span>
-              <h2>FAB Control Operador</h2>
+              <h2>VORQIX Operador</h2>
             </div>
             <span className="status-chip status-chip--online">8.5</span>
           </div>

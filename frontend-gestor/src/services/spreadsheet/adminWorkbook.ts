@@ -120,5 +120,5 @@ export async function downloadAdminImportTemplate(model: AdminImportModel): Prom
   worksheet['!cols'] = model.campos.map((field) => ({ wch: Math.max(14, field.chave.length + 3) }))
   const workbook = xlsx.utils.book_new()
   xlsx.utils.book_append_sheet(workbook, worksheet, safeWorksheetName(model.nome))
-  xlsx.writeFileXLSX(workbook, `modelo_fab_control_${model.tipo}.xlsx`, { compression: true })
+  xlsx.writeFileXLSX(workbook, `modelo_vorqix_${model.tipo}.xlsx`, { compression: true })
 }

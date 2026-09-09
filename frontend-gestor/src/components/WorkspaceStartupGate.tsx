@@ -87,9 +87,9 @@ export function WorkspaceStartupGate({
     <main className="workspace-startup-shell" aria-busy={!error}>
       <section className="workspace-startup-card" aria-live="polite">
         <div className="workspace-startup-brand">
-          <span className="auth-brand__mark" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
-            <span className="eyebrow">FAB CONTROL</span>
+            <span className="eyebrow">VORQIX</span>
             <strong>{role === 'ADMIN' ? 'Preparando Administração' : 'Preparando Gestão'}</strong>
           </div>
         </div>

@@ -161,7 +161,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     setSubmitting(true)
     try {
       const result = await loginGestor(normalizedRegistration, password)
-      if (!portalAllowsProfile(result.usuario.perfil)) {
+      if (!portalAllowsProfile(result.usuario.perfil, result.usuario.capacidades)) {
         const issuedToken = result.token || result.change_token
         if (issuedToken) {
           try {
@@ -328,9 +328,9 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     return (
       <main className="auth-shell auth-shell--startup">
         <section className="auth-startup" aria-live="polite" aria-busy="true">
-          <span className="auth-brand__mark auth-brand__mark--startup" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div className="auth-startup__spinner" aria-hidden="true" />
-          <h1>FAB Control</h1>
+          <h1>VORQIX</h1>
           <p>{startupLabel}</p>
           <div className="auth-startup__progress" aria-hidden="true">
             <span />
@@ -353,7 +353,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     <main className="auth-shell">
       <section className="auth-panel" aria-labelledby="auth-title">
         <div className="auth-brand">
-          <span className="auth-brand__mark" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
             <span className="eyebrow">{portal.eyebrow}</span>
             <h1 id="auth-title">{portal.title}</h1>

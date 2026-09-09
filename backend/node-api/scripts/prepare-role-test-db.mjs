@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pg from 'pg';
 
-// Copies schema and capability catalog only. Never copies users, sessions or operational data.
+// Copies schema and global catalogs only. Never copies users, sessions or operational data.
 const source = new URL(process.env.DATABASE_URL);
 if (
   !['localhost', '127.0.0.1'].includes(source.hostname) ||
@@ -52,6 +52,8 @@ run('pg_dump', [
   '--no-privileges',
   '-t',
   'iam.capabilities',
+  '-t',
+  'maintenance.checklist_item_types',
   '-t',
   'platform.schema_migrations',
   '-f',

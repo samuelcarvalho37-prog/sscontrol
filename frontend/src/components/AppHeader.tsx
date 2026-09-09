@@ -21,6 +21,7 @@ export function AppHeader({
   return (
     <header className="app-header">
       <div>
+        <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
         <strong>Olá, {operatorName}</strong>
         <span>Operador · {shift}</span>
       </div>

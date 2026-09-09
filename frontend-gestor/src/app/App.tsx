@@ -293,7 +293,7 @@ export function App() {
         <header className="topbar">
         <div className="topbar__identity topbar__identity--manager">
           <div>
-            <strong>Fab Control</strong>
+            <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
             <span>
               {technicalContext?.pode_validar
                 ? `Validação técnica · ${technicalContext.identidade.area_nome || 'Qualidade e segurança'}`

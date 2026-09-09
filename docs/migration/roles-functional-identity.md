@@ -39,6 +39,12 @@ node --env-file=.env scripts/run-role-tests.mjs
 
 O helper exige PostgreSQL local e recusa ambiente PRODUCTION. `POSTGRES_BIN` permite informar a pasta das ferramentas PostgreSQL. As credenciais existentes são transmitidas pelo ambiente dos processos, sem serem gravadas nos arquivos de teste. Para repetir a suíte inteira, prepare um banco novo, pois alguns testes existentes utilizam tenants fixos.
 
+### Verificação da rodada
+
+Após incluir também o catálogo global `maintenance.checklist_item_types` na preparação do banco isolado, a suíte completa executada via `npm test` passou: 18 testes, zero falhas, zero cancelados e zero pulados. Log local: `backend/node-api/var/role-tests/results-1788914226065.log`. Typecheck e lint do backend e build do frontend de gestão também passaram.
+
+A revisão da tela de login encontrou um filtro adicional em `portal.ts`. O portal compartilhado passa a aceitar códigos arbitrários, e os portais especializados usam as capabilities recebidas da API. Três testes em `tools/test-role-portal-access.mjs` cobrem códigos atuais/futuros, capabilities vazias e compatibilidade legada. O contrato estático de restauração operacional também passa a exigir a guarda de sessão **e** de capability.
+
 ## Continuidade
 
 O próximo bloco é a fase 8: ocorrência guiada, interface de execução do técnico, qualidade por exceção e dashboard PCM. Esta rodada não adiciona capabilities aos perfis de homologação nem concede execução à Produção. A atribuição de área/cargo e os requisitos da demanda continuam necessários para Qualidade e Segurança assinarem.

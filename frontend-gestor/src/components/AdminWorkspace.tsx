@@ -985,7 +985,8 @@ export function AdminWorkspace({
             <section className="admin-desktop-welcome">
               <div className="admin-welcome-card">
                 <div className="admin-welcome-copy">
-                  <span className="admin-welcome-eyebrow">FAB CONTROL · ADMINISTRAÇÃO INDUSTRIAL</span>
+                  <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+                  <span className="admin-welcome-eyebrow">VORQIX · ADMINISTRAÇÃO INDUSTRIAL</span>
                   <h1>Command Workspace</h1>
                   <p>Centralize configurações, governança, cadastros e decisões técnicas em um único ambiente operacional.</p>
                   <div className="admin-welcome-actions">

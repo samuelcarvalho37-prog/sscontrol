@@ -1,0 +1,34 @@
+﻿commit f4340810ccd3fa6c88f17d083168f9a3fe938acb
+Author: Samuel <samuel@vorqix.local>
+Date:   Tue Sep 8 19:14:26 2026 -0300
+
+    Checkpoint: mudan├ºas do Codex antes da revis├úo
+
+ backend/node-api/debug.mjs                         |  10 +
+ backend/node-api/eslint.config.js                  |   5 +-
+ backend/node-api/package-lock.json                 | 717 +++++++++++++++++++++
+ backend/node-api/scripts/prepare-role-test-db.mjs  |  63 ++
+ backend/node-api/scripts/run-role-tests.mjs        |  36 ++
+ .../node-api/src/modules/admin/admin.controller.ts |   2 +-
+ .../node-api/src/modules/admin/admin.repository.ts | 126 +++-
+ .../node-api/src/modules/admin/admin.schemas.ts    |   6 +-
+ .../node-api/src/modules/admin/admin.service.ts    |  17 +-
+ backend/node-api/src/modules/admin/admin.types.ts  |   2 +-
+ .../node-api/src/modules/auth/auth.repository.ts   |  13 +-
+ backend/node-api/src/modules/auth/auth.service.ts  |   5 +-
+ backend/node-api/src/modules/auth/auth.types.ts    |   6 +-
+ .../src/modules/operations/operations.service.ts   |  24 +-
+ backend/node-api/tests/roles.integration.test.ts   | 244 +++++++
+ docs/migration/roles-functional-identity.md        |  46 ++
+ frontend-gestor/src/app/App.tsx                    |  22 +-
+ frontend-gestor/src/components/AppNavigation.tsx   |   3 +
+ .../src/components/UserEditorDialog.tsx            |  40 +-
+ frontend-gestor/src/pages/AdminPage.tsx            |  20 +-
+ .../src/pages/GestorDecisionWorkspace.tsx          |   8 +-
+ frontend-gestor/src/services/api/auth.ts           |  13 +-
+ frontend-gestor/src/services/startup/workspace.ts  |  17 +-
+ frontend-gestor/src/types/admin.ts                 |   5 +-
+ frontend/package-lock.json                         |   4 +-
+ frontend/src/app/App.tsx                           |  15 +-
+ frontend/src/services/api/auth.ts                  |   4 +
+ 27 files changed, 1354 insertions(+), 119 deletions(-)

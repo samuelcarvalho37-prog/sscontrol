@@ -1,3 +1,4 @@
+import { allowsPortal } from './services/auth/portalAccess'
 export type PortalProfile = 'GESTOR' | 'ADMIN' | 'SHARED'
 
 export interface PortalPresentation {
@@ -20,17 +21,15 @@ function readPortalProfile(): PortalProfile {
 
 export const PORTAL_PROFILE = readPortalProfile()
 
-export function portalAllowsProfile(profile: string): boolean {
-  const normalized = profile.trim().toUpperCase()
-  if (PORTAL_PROFILE === 'SHARED') return ['GESTOR', 'ADMIN'].includes(normalized)
-  return normalized === PORTAL_PROFILE
+export function portalAllowsProfile(profile: string, capabilities?: readonly string[]): boolean {
+  return allowsPortal(PORTAL_PROFILE, profile, capabilities)
 }
 
 export function getPortalPresentation(): PortalPresentation {
   if (PORTAL_PROFILE === 'ADMIN') {
     return {
       profile: 'ADMIN',
-      eyebrow: 'FAB CONTROL · ADMINISTRAÇÃO',
+      eyebrow: 'VORQIX · ADMINISTRAÇÃO',
       title: 'Acesso do Administrador',
       intro: 'Configuração, governança, cadastros e controle integral do ambiente industrial.',
       exclusiveProfileLabel: 'Administrador',
@@ -40,7 +39,7 @@ export function getPortalPresentation(): PortalPresentation {
   if (PORTAL_PROFILE === 'GESTOR') {
     return {
       profile: 'GESTOR',
-      eyebrow: 'FAB CONTROL · GESTÃO',
+      eyebrow: 'VORQIX · GESTÃO',
       title: 'Acesso do Gestor',
       intro: 'Supervisão técnica, decisões, indicadores e liberação do trabalho operacional.',
       exclusiveProfileLabel: 'Gestor',
@@ -49,7 +48,7 @@ export function getPortalPresentation(): PortalPresentation {
 
   return {
     profile: 'SHARED',
-    eyebrow: 'FAB CONTROL',
+    eyebrow: 'VORQIX',
     title: 'Acesso de Gestão',
     intro: 'Supervisão técnica e administração do ambiente industrial.',
     exclusiveProfileLabel: 'Gestor ou Administrador',

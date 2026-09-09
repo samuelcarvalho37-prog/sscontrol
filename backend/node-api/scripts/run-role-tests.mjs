@@ -1,5 +1,6 @@
 import { readFileSync, openSync, closeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
 const name = readFileSync('var/role-tests/database.txt', 'utf8').trim();
 if (!/^vorqix_roles_test_\d+$/.test(name)) throw new Error('Invalid isolated database');
 const target = new URL(process.env.DATABASE_URL);
@@ -11,14 +12,14 @@ const log = openSync(logPath, 'w');
 console.log(`Running tests; output: ${logPath}`);
 const result = spawnSync(
   process.execPath,
-  [
+  files.length ? [
     '--import',
     'tsx',
     '--test',
     '--test-reporter=tap',
     '--test-concurrency=1',
-    ...(files.length ? files : ['tests/**/*.test.ts']),
-  ],
+    ...files,
+  ] : [resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), 'test'],
   {
     env: {
       ...process.env,

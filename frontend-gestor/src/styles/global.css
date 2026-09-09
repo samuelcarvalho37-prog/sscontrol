@@ -21823,3 +21823,10 @@ body,
       minmax(240px, 1.25fr);
   }
 }
+
+/* Marca visual VORQIX; os identificadores de sessão permanecem compatíveis. */
+.vorqix-logo { display: block; width: min(100%, 280px); height: auto; object-fit: contain; background: #fff; border-radius: 10px; }
+.vorqix-logo--compact { width: 124px; }
+.auth-brand:has(.vorqix-logo) { flex-direction: column; align-items: flex-start; }
+.auth-startup > .vorqix-logo { margin-inline: auto; }
+.platform-motor-brand > .vorqix-logo { width: 150px; }

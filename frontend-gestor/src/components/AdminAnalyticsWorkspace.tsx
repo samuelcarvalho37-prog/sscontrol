@@ -143,7 +143,7 @@ export function AdminAnalyticsWorkspace({ onSessionExpired }: AdminAnalyticsWork
   function exportReport() {
     const asset = assets.find((item) => item.id === assetId)
     const rows = [
-      ['Relatório', 'Indicadores técnicos Fab Control'],
+      ['Relatório', 'Indicadores técnicos VORQIX'],
       ['Ativo', asset ? `${asset.tag || asset.id} - ${asset.nome}` : 'Todos os ativos'],
       ['Início', kpis.inicio_em], ['Fim', kpis.fim_em], ['Ativos considerados', kpis.ativos_considerados],
       ['Disponibilidade (%)', kpis.disponibilidade_pct ?? 'Sem amostra'],
@@ -160,7 +160,7 @@ export function AdminAnalyticsWorkspace({ onSessionExpired }: AdminAnalyticsWork
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `fab-control-indicadores-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.download = `vorqix-indicadores-${new Date().toISOString().slice(0, 10)}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
   }

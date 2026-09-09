@@ -151,7 +151,7 @@ export function OperatorHome({
         <div className="loading-panel" role="status">
           <span className="loading-spinner" aria-hidden="true" />
           <strong>Carregando ações do operador</strong>
-          <p>Consultando o FAB Control.</p>
+          <p>Consultando o VORQIX.</p>
         </div>
       </section>
     )
