@@ -244,8 +244,13 @@ test(
         tipo: 'FALHA_OPERACIONAL',
         titulo: 'Ruído anormal e equipamento parado',
         descricao: 'O equipamento apresentou ruído anormal e interrompeu a operação.',
-        severidade: 'CRITICAL',
-        equipamento_parado: true,
+        severidade: 'LOW',
+        equipamento_parado: false,
+        triagem: {
+          situacao_atual: 'Equipamento parou durante a produção',
+          equipamento_parado: true, risco_parada: true, risco_seguranca: false,
+          impacto_producao: true, impacto_qualidade: false, existe_redundancia: false,
+        },
         tipo_parada: 'NAO_PLANEJADA',
         motivo_parada: 'Falha mecânica sob investigação.',
         ocorrida_em: new Date(Date.now() - 60_000).toISOString(),
@@ -256,6 +261,12 @@ test(
     const occurrenceId: string = occurrence.id;
     const stopId: string = occurrence.parada.id;
     assert.equal(occurrence.status, 'OPEN');
+    assert.equal(occurrence.severidade, 'CRITICAL', 'A API deve recalcular a prioridade e a condição de parada');
+    const reported = await app.inject({ method: 'GET',
+      url: `/v1/maintenance/occurrences/${occurrenceId}`, headers: bearer(tokens.operator) });
+    assert.equal(reported.statusCode, 200, reported.body);
+    assert.equal(reported.json().data.relato_producao.triagem.impacto_producao, true);
+    assert.equal(reported.json().data.relato_producao.regra_prioridade, 'v1');
 
     const assetStopped = await transaction(pool, async (client) =>
       client.query(`SELECT operational_status FROM cmms.assets WHERE id=$1`, [ids.asset]),

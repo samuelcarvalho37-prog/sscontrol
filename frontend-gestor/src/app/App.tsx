@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
+import { getApiUrl } from '../services/api/config'
 import {
   AppNavigation,
   type GestorSection,
@@ -64,6 +66,7 @@ export function App() {
     ? session.user.capacidades.includes('admin.identity.read')
     : session?.user.perfil.trim().toUpperCase() === 'ADMIN'
   const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
+  const canReportOccurrence = session?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const compactDevice = useAdaptiveDevice()
@@ -341,6 +344,7 @@ export function App() {
         </header>
 
         <div className="app-content">
+          {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
           {section === 'home' && canReadWork ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
@@ -379,7 +383,7 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'more' || (section === 'home' && !canReadWork) || (section === 'validations' && !canReadAnalytics) ? (
+          {section === 'more' || (section === 'home' && !canReadWork && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
         </div>

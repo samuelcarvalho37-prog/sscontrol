@@ -202,6 +202,13 @@ export class MonitoringRepository {
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.created_at AS criada_em,
               occurrence.updated_at AS atualizada_em, occurrence.closed_at AS encerrada_em,
+              (SELECT jsonb_build_object('triagem',history.payload->'triagem','foto',history.payload->'foto',
+                       'regra_prioridade',history.payload->'regra_prioridade')
+               FROM maintenance.history_events history
+               WHERE history.tenant_id=occurrence.tenant_id AND history.asset_id=occurrence.asset_id
+                 AND history.event_type='OCCURRENCE_REPORTED'
+                 AND history.payload->>'occurrenceId'=occurrence.id::text
+               ORDER BY history.occurred_at DESC LIMIT 1) AS relato_producao,
               CASE WHEN stop.id IS NULL THEN NULL ELSE jsonb_build_object(
                 'id',stop.id,'status',stop.status,'tipo',stop.stop_type,'motivo',stop.reason,
                 'iniciada_em',stop.started_at,'concluida_em',stop.completed_at,

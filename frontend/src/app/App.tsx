@@ -4,6 +4,8 @@ import { BottomNavigation, type AppSection } from '../components/BottomNavigatio
 import { ExecutionErrorBoundary } from '../components/ExecutionErrorBoundary'
 import { OperationOverlay } from '../components/OperationOverlay'
 import { ActionDetailPage } from '../pages/ActionDetailPage'
+import { OccurrenceWizard } from '../components/OccurrenceWizard'
+import { getApiUrl } from '../services/api/config'
 import { ChecklistExecutionPage } from '../pages/ChecklistExecutionPage'
 import { OperatorHome } from '../pages/OperatorHome'
 import { LoginPage } from '../pages/LoginPage'
@@ -227,6 +229,7 @@ function mergeEvidenceIntoDetail(
 export function App() {
   const [operatorSession, setOperatorSession] = useState(readOperatorSession)
   const canReadExecutions = operatorSession?.user.capacidades === undefined || operatorSession.user.capacidades.includes('maintenance.executions.read')
+  const canReportOccurrence = operatorSession?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
     readActiveExecutionContext(),
   )
@@ -997,7 +1000,8 @@ export function App() {
             )
           ) : (
            <>
-              {section === 'home' && (
+              {section === 'home' && canReportOccurrence && !canReadExecutions && <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />}
+              {section === 'home' && (canReadExecutions || !canReportOccurrence) && (
                 <OperatorHome
                   actions={actions}
                   loading={loading}

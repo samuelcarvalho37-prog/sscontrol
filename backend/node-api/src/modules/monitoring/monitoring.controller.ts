@@ -24,6 +24,8 @@ interface OccurrenceQuery {
 }
 
 interface OccurrenceBody {
+  readonly triagem?: import('./occurrence-assessment.js').OccurrenceAssessment;
+  readonly foto?: string;
   readonly ativo_id: string;
   readonly componente_id: string | null;
   readonly tipo: string;
@@ -183,6 +185,8 @@ export class MonitoringController {
           stopType: request.body.tipo_parada,
           stopReason: request.body.motivo_parada,
           occurredAt: request.body.ocorrida_em,
+          ...(request.body.triagem ? { assessment: request.body.triagem } : {}),
+          ...(request.body.foto ? { photo: request.body.foto } : {}),
         },
         audit(request),
       ),
