@@ -11,6 +11,8 @@ const ids = {
   safety: '00000000-0000-4000-8000-000000000103',
   maintenance: '00000000-0000-4000-8000-000000000104',
   operator: '00000000-0000-4000-8000-000000000105',
+  pcm: '00000000-0000-4000-8000-000000000106',
+  production: '00000000-0000-4000-8000-000000000107',
   adminRole: '00000000-0000-4000-8000-000000000201',
   managerRole: '00000000-0000-4000-8000-000000000202',
   operatorRole: '00000000-0000-4000-8000-000000000203',
@@ -87,7 +89,12 @@ async function setContext(client: PoolClient, tenantId: string): Promise<void> {
 async function seedIdentities(
   client: PoolClient,
   tenantId: string,
-  passwords: Readonly<Record<'admin' | 'quality' | 'safety' | 'maintenance' | 'operator', string>>,
+  passwords: Readonly<
+    Record<
+      'admin' | 'quality' | 'safety' | 'maintenance' | 'operator' | 'pcm' | 'production',
+      string
+    >
+  >,
   passwordService: PasswordService,
 ): Promise<void> {
   const users = [
@@ -96,6 +103,8 @@ async function seedIdentities(
     [ids.safety, 'USR-SEG-DEMO', 'Especialista de Segurança', 'seguranca.demo@fabcontrol.local'],
     [ids.maintenance, 'USR-MAN-DEMO', 'Técnico de Manutenção', 'manutencao.demo@fabcontrol.local'],
     [ids.operator, 'USR-OPE-DEMO', 'Operador de Homologação', 'operador.demo@fabcontrol.local'],
+    [ids.pcm, 'USR-PCM-DEMO', 'Planejador PCM de Homologação', 'pcm.demo@vorqix.local'],
+    [ids.production, 'USR-PRO-DEMO', 'Produção de Homologação', 'producao.demo@vorqix.local'],
   ] as const;
   const roles = [
     [ids.adminRole, 'ADMIN', 'Administrador', 'ADMIN'],
@@ -137,18 +146,41 @@ async function seedIdentities(
   }
 
   const roleAssignments = [
-    [ids.admin, ids.adminRole],
-    [ids.quality, ids.managerRole],
-    [ids.safety, ids.managerRole],
-    [ids.maintenance, ids.managerRole],
-    [ids.operator, ids.operatorRole],
+    [ids.admin, 'ADMIN'],
+    [ids.quality, 'QUALIDADE'],
+    [ids.safety, 'SEGURANCA'],
+    [ids.maintenance, 'TECNICO'],
+    [ids.operator, 'OPERADOR'],
+    [ids.pcm, 'PCM'],
+    [ids.production, 'PRODUCAO'],
   ] as const;
-  for (const [userId, roleId] of roleAssignments) {
+  for (const [userId, roleCode] of roleAssignments) {
+    const role = await client.query<{ id: string }>(
+      `SELECT id FROM iam.roles WHERE tenant_id=$1 AND code=$2
+       AND status='ACTIVE' AND deleted_at IS NULL`,
+      [tenantId, roleCode],
+    );
+    const roleId = role.rows[0]?.id;
+    if (!roleId)
+      throw new Error(
+        `Perfil ${roleCode} ausente: configure a identidade funcional antes do seed.`,
+      );
+    if ([ids.quality, ids.safety, ids.maintenance].some((id) => id === userId)) {
+      await client.query(
+        `UPDATE iam.user_roles assignment SET valid_until=clock_timestamp()
+         FROM iam.roles role WHERE assignment.tenant_id=$1 AND assignment.user_id=$2
+         AND role.tenant_id=assignment.tenant_id AND role.id=assignment.role_id
+         AND role.code='GESTOR_TECNICO'
+         AND (assignment.valid_until IS NULL OR assignment.valid_until>clock_timestamp())`,
+        [tenantId, userId],
+      );
+    }
     await client.query(
       `
         INSERT INTO iam.user_roles (tenant_id, user_id, role_id)
         VALUES ($1, $2, $3)
-        ON CONFLICT (tenant_id, user_id, role_id) DO NOTHING
+        ON CONFLICT (tenant_id, user_id, role_id) DO UPDATE
+        SET valid_from=LEAST(iam.user_roles.valid_from,clock_timestamp()), valid_until=NULL
       `,
       [tenantId, userId, roleId],
     );
@@ -160,7 +192,7 @@ async function seedIdentities(
       SELECT $1, $2, capability.id, 'ALLOW'
       FROM iam.capabilities capability
       WHERE capability.status = 'ACTIVE'
-      ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+      ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
     `,
     [tenantId, ids.adminRole],
   );
@@ -182,7 +214,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.managerRole, capabilityCode],
     );
@@ -192,7 +224,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.operatorRole, capabilityCode],
     );
@@ -204,7 +236,7 @@ async function seedIdentities(
       SELECT $1, $2, capability.id, 'ALLOW'
       FROM iam.capabilities capability
       WHERE capability.code = 'maintenance.checklists.review'
-      ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+      ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
     `,
     [tenantId, ids.managerRole],
   );
@@ -216,7 +248,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.managerRole, capabilityCode],
     );
@@ -239,7 +271,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.managerRole, capabilityCode],
     );
@@ -252,7 +284,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.operatorRole, capabilityCode],
     );
@@ -270,7 +302,7 @@ async function seedIdentities(
         SELECT $1, $2, capability.id, 'ALLOW'
         FROM iam.capabilities capability
         WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.operatorRole, capabilityCode],
     );
@@ -282,6 +314,8 @@ async function seedIdentities(
     [ids.safety, passwords.safety],
     [ids.maintenance, passwords.maintenance],
     [ids.operator, passwords.operator],
+    [ids.pcm, passwords.pcm],
+    [ids.production, passwords.production],
   ] as const;
   for (const [userId, password] of userPasswords) {
     const passwordHash = await passwordService.hash(password);
@@ -291,14 +325,7 @@ async function seedIdentities(
           tenant_id, user_id, credential_type, algorithm, password_hash
         )
         VALUES ($1, $2, 'PASSWORD', 'ARGON2ID', $3)
-        ON CONFLICT (tenant_id, user_id, credential_type) DO UPDATE
-        SET
-          algorithm = 'ARGON2ID',
-          password_hash = EXCLUDED.password_hash,
-          revoked_at = NULL,
-          legacy_hash = NULL,
-          legacy_algorithm = NULL,
-          legacy_migration_status = 'NOT_REQUIRED'
+        ON CONFLICT (tenant_id, user_id, credential_type) DO NOTHING
       `,
       [tenantId, userId, passwordHash],
     );
@@ -1461,6 +1488,8 @@ async function main(): Promise<void> {
     safety: requiredPassword('DEMO_SAFETY_PASSWORD'),
     maintenance: requiredPassword('DEMO_MAINTENANCE_PASSWORD'),
     operator: requiredPassword('DEMO_OPERATOR_PASSWORD'),
+    pcm: requiredPassword('DEMO_PCM_PASSWORD'),
+    production: requiredPassword('DEMO_PRODUCAO_PASSWORD'),
   };
   const passwordService = new PasswordService(environment.auth.passwordPepper);
   const pool = new Pool({ connectionString: environment.database.url, max: 1 });
@@ -1512,7 +1541,7 @@ async function main(): Promise<void> {
     await seedOperationalScenarios(client, environment.defaultTenantId);
     await client.query('COMMIT');
     process.stdout.write(
-      'Massa de homologação aplicada: 5 perfis, 4 ativos, 9 tipos de etapa, 1 checklist, 2 planos, 1 validação pendente e 1 ação liberada.\n',
+      'Massa de homologação aplicada: 7 perfis, 4 ativos, 9 tipos de etapa, 1 checklist, 2 planos, 1 validação pendente e 1 ação liberada.\n',
     );
   } catch (error) {
     await client.query('ROLLBACK');
