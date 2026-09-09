@@ -441,6 +441,7 @@ function operatorActionDetail(data: JsonRecord): JsonRecord {
           operador_id: stringValue(execution.operador_id),
           resultado: stringValue(execution.resultado),
           observacao: stringValue(execution.observacao),
+          relatorio_tecnico: execution.relatorio_tecnico,
           duracao_segundos: numberValue(execution.duracao_segundos),
           abriu_em: stringValue(execution.assumida_em),
           iniciou_em: stringValue(execution.iniciada_em),
@@ -1092,6 +1093,7 @@ function nodeActionRequest(
           resultado: result,
           observacao: stringValue(payload.observacao) || null,
           modo_parada: "EXECUTOR_DECISION",
+          ...(payload.relatorio_tecnico ? { relatorio_tecnico: payload.relatorio_tecnico } : {}),
         },
         transform: (data) => {
           const execution = asRecord(data.execucao);

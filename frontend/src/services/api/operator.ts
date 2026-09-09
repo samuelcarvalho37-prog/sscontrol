@@ -489,6 +489,7 @@ export async function finalizeOperatorAction(
       acao_id: actionId,
       resultado: input.resultado,
       resultado_operacional: input.resultado_operacional,
+      ...(input.relatorio_tecnico ? { relatorio_tecnico: input.relatorio_tecnico } : {}),
       observacao: input.observacao,
       duracao_segundos: input.duracao_segundos ?? 0,
     },

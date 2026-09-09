@@ -737,11 +737,25 @@ test(
       payload: {
         resultado: 'Preventiva concluída com sucesso.',
         observacao: 'Equipamento liberado.',
+        relatorio_tecnico: {
+          diagnostico_tecnico: 'Desgaste no rolamento confirmado.',
+          acao_realizada: 'Rolamento substituído e conjunto alinhado.',
+          pecas_materiais: '1 rolamento 6204; 30 g de graxa.',
+          medicoes: 'Vibração após intervenção: 1,2 mm/s.',
+        },
         modo_parada: 'STOPPED',
       },
     });
     assert.equal(completed.statusCode, 200, completed.body);
     assert.equal(completed.json().data.execucao.status, 'COMPLETED');
+    assert.equal(
+      completed.json().data.execucao.relatorio_tecnico.diagnostico_tecnico,
+      'Desgaste no rolamento confirmado.',
+    );
+    assert.equal(
+      completed.json().data.execucao.relatorio_tecnico.pecas_materiais,
+      '1 rolamento 6204; 30 g de graxa.',
+    );
 
     const completedAction = await app.inject({
       method: 'GET',

@@ -95,6 +95,7 @@ interface StartBody {
   readonly modo_parada: ExecutionStopMode;
 }
 interface CompleteBody {
+  readonly relatorio_tecnico?: import('./operations.types.js').CompletionInput['technicalReport'];
   readonly resultado: string;
   readonly observacao: string | null;
   readonly modo_parada: ExecutionStopMode;
@@ -417,6 +418,9 @@ export class OperationsController {
           result: request.body.resultado,
           observation: request.body.observacao,
           stopMode: request.body.modo_parada,
+          ...(request.body.relatorio_tecnico
+            ? { technicalReport: request.body.relatorio_tecnico }
+            : {}),
         },
         audit(request),
       ),
@@ -551,6 +555,9 @@ export class OperationsController {
           result: request.body.resultado,
           observation: request.body.observacao,
           stopMode: request.body.modo_parada,
+          ...(request.body.relatorio_tecnico
+            ? { technicalReport: request.body.relatorio_tecnico }
+            : {}),
         },
         audit(request),
       ),

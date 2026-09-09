@@ -100,6 +100,12 @@ export interface EvidenceUploadInput {
 }
 
 export interface CompletionInput {
+  readonly technicalReport?: Readonly<{
+    diagnostico_tecnico: string;
+    acao_realizada: string;
+    pecas_materiais: string;
+    medicoes: string;
+  }>;
   readonly result: string;
   readonly observation: string | null;
   readonly stopMode: ExecutionStopMode;

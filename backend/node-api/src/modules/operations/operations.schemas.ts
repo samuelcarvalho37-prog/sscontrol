@@ -173,6 +173,17 @@ export const startExecutionBodySchema = Type.Object(
 
 export const completeExecutionBodySchema = Type.Object(
   {
+    relatorio_tecnico: Type.Optional(
+      Type.Object(
+        {
+          diagnostico_tecnico: Type.String({ minLength: 3, maxLength: 8000 }),
+          acao_realizada: Type.String({ minLength: 3, maxLength: 8000 }),
+          pecas_materiais: Type.String({ minLength: 1, maxLength: 8000 }),
+          medicoes: Type.String({ minLength: 1, maxLength: 8000 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     resultado: Type.String({ minLength: 3, maxLength: 2_000 }),
     observacao: nullableText,
     modo_parada: Type.Union([

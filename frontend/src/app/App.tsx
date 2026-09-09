@@ -43,6 +43,7 @@ import type {
   ChecklistBatchItemInput,
   EvidencePhotoUploadInput,
   OperatorFinalOutcome,
+  ExecutionTechnicalReport,
   EvidenceSaveData,
   MaintenanceStartDecision,
   OperatorActionDetailData,
@@ -750,6 +751,7 @@ export function App() {
     observacao: string,
     resultadoOperacional: OperatorFinalOutcome,
     durationSeconds: number,
+    technicalReport: ExecutionTechnicalReport,
   ) {
     const actionId = selectedActionIdRef.current
     if (!actionId) throw new Error('Ação não identificada para finalização.')
@@ -770,6 +772,7 @@ export function App() {
         resultado_operacional: resultadoOperacional,
         observacao,
         duracao_segundos: durationSeconds,
+        relatorio_tecnico: technicalReport,
       })
 
       setActiveStop((current) => result.parada_operacional ?? result.parada ?? current)

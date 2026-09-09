@@ -134,6 +134,12 @@ function CompletedActionSummary({ detail, onBack }: { detail: OperatorActionDeta
           <div><span>OS</span><strong>{detail.os?.codigo || detail.os?.id || 'Não informada'}</strong></div>
         </div>
         {detail.execucao?.observacao && <div className="completed-action-observation"><span>Observação técnica</span><p>{detail.execucao.observacao}</p></div>}
+        {detail.execucao?.relatorio_tecnico && ([
+          ['diagnostico_tecnico', 'Diagnóstico técnico'], ['acao_realizada', 'Ação realizada'],
+          ['pecas_materiais', 'Peças e materiais utilizados'], ['medicoes', 'Medições'],
+        ] as const).map(([key, label]) => <div className="completed-action-observation" key={key}>
+          <strong>{label}</strong><p style={{ whiteSpace: 'pre-wrap' }}>{detail.execucao?.relatorio_tecnico?.[key]}</p>
+        </div>)}
       </article>
 
       <article className="completed-action-card">

@@ -976,6 +976,10 @@ export class OperationsRepository {
                execution.started_at AS iniciada_em, execution.completed_at AS concluida_em,
                execution.duration_seconds AS duracao_segundos, execution.result AS resultado,
                execution.observation AS observacao,
+               (SELECT history.payload FROM maintenance.history_events history
+                WHERE history.tenant_id=execution.tenant_id AND history.execution_id=execution.id
+                  AND history.event_type='EXECUTION_TECHNICAL_REPORT'
+                ORDER BY history.occurred_at DESC LIMIT 1) AS relatorio_tecnico,
                execution.execution_stop_mode AS modo_parada,
                work_order.code AS ordem_codigo,
                work_order.title AS titulo, asset.tag AS ativo_tag, asset.name AS ativo_nome,
@@ -1232,6 +1236,17 @@ export class OperationsRepository {
     execution: OperationsRow,
     input: CompletionInput,
   ): Promise<void> {
+    if (input.technicalReport) {
+      await client.query(
+        `INSERT INTO maintenance.history_events
+         (tenant_id,asset_id,component_id,work_order_id,work_order_action_id,execution_id,
+          event_type,description,user_id,payload)
+         SELECT tenant_id,asset_id,component_id,work_order_id,work_order_action_id,id,
+                'EXECUTION_TECHNICAL_REPORT','Relatório técnico de execução',operator_id,$2::jsonb
+         FROM maintenance.executions WHERE id=$1`,
+        [execution.id, JSON.stringify(input.technicalReport)],
+      );
+    }
     await client.query(
       `UPDATE maintenance.executions SET status='COMPLETED', result=$2, observation=$3,
        execution_stop_mode=$4, completed_at=clock_timestamp() WHERE id=$1`,
