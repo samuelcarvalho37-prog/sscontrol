@@ -1,0 +1,25 @@
+.pcm-dashboard { display:grid; gap:20px; padding:24px; color:#16334a; background:#f4f7fb; border-radius:18px; }
+.pcm-heading { display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap; align-items:center; }
+.pcm-heading h1 { margin:8px 0; font-size:clamp(24px,3vw,34px); }
+.pcm-dashboard h2 { font-size:18px; margin:0; }
+.pcm-dashboard p { line-height:1.6; margin:4px 0; }
+.pcm-controls { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
+.pcm-controls label { display:grid; gap:6px; font-weight:600; }
+.pcm-controls select,.pcm-controls button { min-height:42px; padding:8px 12px; border:1px solid #bccbd7; border-radius:8px; background:white; color:#16334a; font:inherit; }
+.pcm-controls button { background:#145dcc; color:white; cursor:pointer; }
+.pcm-controls button:disabled { opacity:.65; cursor:wait; }
+.pcm-timestamp { color:#566b7b; font-size:13px; }
+.pcm-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.pcm-metric { display:flex; flex-direction:column; gap:10px; background:white; border:1px solid #dce5ee; border-top:3px solid #1482dc; border-radius:12px; padding:18px; }
+.pcm-metric strong { font-size:28px; line-height:1.2; color:#0d3556; }
+.pcm-metric small { color:#566b7b; line-height:1.5; }
+.pcm-tables { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.pcm-tables section { background:white; border:1px solid #dce5ee; border-radius:12px; padding:20px; overflow:auto; }
+.pcm-tables h2 { margin-bottom:16px; }
+.pcm-tables table { width:100%; border-collapse:collapse; font-size:14px; }
+.pcm-tables th,.pcm-tables td { padding:12px 8px; text-align:left; border-bottom:1px solid #e8edf2; }
+.pcm-tables td small { display:block; margin-top:4px; color:#566b7b; }
+.pcm-method { padding:16px; background:#e9f1f8; border-radius:10px; }
+.pcm-method summary { cursor:pointer; font-weight:600; }
+.pcm-method p { margin-top:12px; font-size:14px; }
+@media(max-width:700px) { .pcm-dashboard { padding:14px; } .pcm-tables { grid-template-columns:1fr; } .pcm-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .pcm-metric { padding:12px; } .pcm-metric strong { font-size:23px; } }

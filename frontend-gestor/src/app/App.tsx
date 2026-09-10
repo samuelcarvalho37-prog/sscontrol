@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
-import { getApiUrl } from '../services/api/config'
+import { getApiUrl, usesNodeApi } from '../services/api/config'
+import { PcmDashboard } from '../components/PcmDashboard'
 import {
   AppNavigation,
   type GestorSection,
@@ -54,6 +55,7 @@ export function App() {
   const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(null)
   const [analyticsFocusAsset, setAnalyticsFocusAsset] = useState('')
   const [analyticsFocusOccurrence, setAnalyticsFocusOccurrence] = useState('')
+  const [detailedAnalytics, setDetailedAnalytics] = useState(false)
   const [adminModule, setAdminModule] = useState<AdminModule>('overview')
   const [validationCount, setValidationCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(0)
@@ -184,6 +186,7 @@ export function App() {
   function handleOpenAnalytics(assetId = '', occurrenceId = '') {
     setAnalyticsFocusAsset(assetId)
     setAnalyticsFocusOccurrence(occurrenceId)
+    setDetailedAnalytics(true)
     setSection('validations')
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
@@ -356,6 +359,12 @@ export function App() {
             />
           ) : null}
           {section === 'validations' && canReadAnalytics ? (
+            <>
+            {usesNodeApi() && <div className="pcm-controls" style={{ marginBottom: 16 }}>
+              <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
+              <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
+            </div>}
+            {usesNodeApi() && !detailedAnalytics ? <PcmDashboard onSessionExpired={expireSession} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
@@ -376,6 +385,8 @@ export function App() {
               }}
               onSessionExpired={expireSession}
             />
+            }
+            </>
           ) : null}
           {section === 'scan' ? (
             <GestorQrWorkspace

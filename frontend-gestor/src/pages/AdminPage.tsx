@@ -8,6 +8,8 @@ import { AdminChecklistBuilder } from '../components/AdminChecklistBuilder'
 import { AdminTechnicalStructure } from '../components/AdminTechnicalStructure'
 import { AdminInterventionsWorkspace } from '../components/AdminInterventionsWorkspace'
 import { AdminAnalyticsWorkspace } from '../components/AdminAnalyticsWorkspace'
+import { PcmDashboard } from '../components/PcmDashboard'
+import { usesNodeApi } from '../services/api/config'
 import { AdminDocumentsWorkspace } from '../components/AdminDocumentsWorkspace'
 import { AdminGovernanceWorkspace } from '../components/AdminGovernanceWorkspace'
 import { AdminBackupWorkspace } from '../components/AdminBackupWorkspace'
@@ -412,7 +414,7 @@ export function AdminPage({
         />
       ) : null}
 
-      {tab === 'analytics' ? <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} /> : null}
+      {tab === 'analytics' ? (usesNodeApi() ? <PcmDashboard onSessionExpired={onSessionExpired} /> : <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} />) : null}
 
       {tab === 'documents' ? <AdminDocumentsWorkspace onSessionExpired={onSessionExpired} /> : null}
 

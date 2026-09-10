@@ -1265,6 +1265,17 @@ function nodeActionRequest(
           },
         }),
       };
+    case "cmms.pcm_dashboard": {
+      const period = defaultAnalyticsPeriod(payload);
+      return {
+        method: "GET",
+        path: queryPath("/v1/analytics/technical-summary", {
+          inicio: period.inicio, fim: period.fim, limite_ranking: 10,
+        }),
+        token,
+        transform: (data) => record(data.pcm),
+      };
+    }
     case "cmms.kpis_base": {
       const period = defaultAnalyticsPeriod(payload);
       return {

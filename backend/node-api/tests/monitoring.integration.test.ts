@@ -6,6 +6,7 @@ import { Pool, type PoolClient } from 'pg';
 
 import { buildApp } from '../src/app.js';
 import { createTestEnvironment } from './helpers/environment.js';
+import { loadPcmDashboard } from '../src/modules/monitoring/pcm-dashboard.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const integrationEnabled = Boolean(databaseUrl);
@@ -476,5 +477,42 @@ test(
     assert.equal(repeatedTreatment.statusCode, 200, repeatedTreatment.body);
     assert.equal(repeatedTreatment.json().data.already_exists, true);
     assert.equal(repeatedTreatment.json().data.occurrence.id, treatmentOccurrenceId);
+
+    // Two 30-minute failures and one overlapping planned stop: 1 hour of actual downtime.
+    await transaction(pool, async (client) => {
+      for (const status of ['IN_MAINTENANCE', 'WAITING_OPERATIONAL_RETURN', 'COMPLETED']) {
+        await client.query('UPDATE maintenance.equipment_stops SET status=$2 WHERE id=$1', [directStopId, status]);
+      }
+      const plannedId = randomUUID();
+      await client.query(`INSERT INTO maintenance.equipment_stops
+        (id,tenant_id,asset_id,origin,stop_type,started_at,started_by,reason)
+        VALUES ($1,$2,$3,'MANAGER','PLANNED',now()-interval '2 hours',$4,'Preventiva programada')`,
+      [plannedId,tenantId,ids.asset,ids.manager]);
+      for (const status of ['IN_MAINTENANCE', 'WAITING_OPERATIONAL_RETURN', 'COMPLETED']) {
+        await client.query('UPDATE maintenance.equipment_stops SET status=$2 WHERE id=$1', [plannedId, status]);
+      }
+      const end = new Date(Date.now()-60_000);
+      const start = new Date(end.getTime()-4*3600_000);
+      for (const [id, offset] of [[stopId,120],[directStopId,90],[plannedId,120]] as const) {
+        await client.query(`UPDATE maintenance.equipment_stops SET started_at=$2,completed_at=$3 WHERE id=$1`,
+          [id,new Date(end.getTime()-offset*60_000),new Date(end.getTime()-(offset-30)*60_000)]);
+      }
+      const query = {startAt:start.toISOString(),endAt:end.toISOString(),assetId:null,rankingLimit:10};
+      const pcm = await loadPcmDashboard(client,query);
+      assert.equal(pcm.confiabilidade.falhas,2);
+      assert.equal(pcm.confiabilidade.mttr_segundos,1800);
+      assert.equal(pcm.confiabilidade.mtbf_segundos,5400);
+      assert.equal(pcm.confiabilidade.disponibilidade_percentual,75);
+      assert.equal(pcm.confiabilidade.reincidencias,1);
+      assert.equal(pcm.falhas_por_ativo[0].ativo_id,ids.asset);
+      assert.equal(pcm.falhas_por_setor[0].falhas,2);
+      assert.equal(pcm.atual.ativos_parados,0);
+      await client.query("SELECT set_config('app.tenant_id',$1,true)",[randomUUID()]);
+      const otherTenant = await loadPcmDashboard(client,query);
+      assert.equal(otherTenant.confiabilidade.ativos_considerados,0);
+      assert.equal(otherTenant.confiabilidade.disponibilidade_percentual,null);
+      assert.equal(otherTenant.atual.ordens_abertas,0);
+      assert.deepEqual(otherTenant.falhas_por_ativo,[]);
+    });
   },
 );

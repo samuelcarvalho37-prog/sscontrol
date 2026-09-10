@@ -148,6 +148,7 @@ async function seed(pool: Pool): Promise<Identities> {
           'maintenance.work-orders.manage',
           'maintenance.work-orders.release',
           'maintenance.executions.read',
+          'analytics.technical.read',
         ],
       ],
     );
@@ -586,6 +587,11 @@ test(
       payload: { modo_parada: 'STOPPED' },
     });
     assert.equal(started.statusCode, 200, started.body);
+    const pcmUrl = `/v1/analytics/technical-summary?inicio=${encodeURIComponent(new Date(Date.now()-86400000).toISOString())}&fim=${encodeURIComponent(new Date(Date.now()+60000).toISOString())}`;
+    const activePcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
+    assert.equal(activePcm.statusCode,200,activePcm.body);
+    assert.equal(activePcm.json().data.pcm.atual.tecnicos_em_atividade,1);
+    assert.equal(activePcm.json().data.pcm.tecnicos[0].id,ids.operator);
 
     const resumedAtomically = await app.inject({
       method: 'POST',
@@ -870,9 +876,9 @@ test(
           tipo_trabalho: scenario.type,
           titulo: 'Atividade sem validação obrigatória',
           descricao: 'Fluxo comum sem exigência de Qualidade/Segurança.',
-          prioridade: 'LOW',
+          prioridade: scenario.type === 'CORRECTIVE' ? 'CRITICAL' : 'LOW',
           responsavel_id: null,
-          programada_para: scenario.scheduled ? new Date().toISOString() : null,
+          programada_para: scenario.scheduled ? new Date(Date.now() + (scenario.type === 'PREVENTIVE' ? 86400000 : -60000)).toISOString() : null,
           analise_tecnica: { exige_liberacao_pos_intervencao: scenario.release },
         },
       });
@@ -892,5 +898,14 @@ test(
       assert.equal(released.json().data.validacao, null);
       assert.equal(released.json().data.status, 'RELEASED');
     }
+    const finalPcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
+    assert.equal(finalPcm.statusCode,200,finalPcm.body);
+    assert.equal(finalPcm.json().data.pcm.atual.tecnicos_em_atividade,0);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_abertas,5);
+    assert.equal(finalPcm.json().data.pcm.atual.backlog_horas_estimadas,3.75);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_criticas,1);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_atrasadas,3);
+    assert.equal(finalPcm.json().data.pcm.atual.preventivas_proximas,1);
+    assert.equal(finalPcm.json().data.pcm.preventivas.length,1);
   },
 );
