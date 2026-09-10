@@ -1,4 +1,5 @@
 import type { PoolClient, QueryResultRow } from 'pg';
+import { createHash } from 'node:crypto';
 
 import type { StoredObject } from '../../infrastructure/storage/object-storage.js';
 
@@ -346,7 +347,7 @@ export class OperationsRepository {
     tenantId: string,
     demandId: string,
     code: string,
-    areaId: string,
+    areaId: string | null,
   ): Promise<void> {
     await client.query(
       `INSERT INTO workflow.demand_validator_requirements
@@ -362,6 +363,74 @@ export class OperationsRepository {
        SET technical_demand_id = $2, status = 'IN_TECHNICAL_REVIEW', submitted_at = clock_timestamp()
        WHERE id = $1`,
       [workOrderId, demandId],
+    );
+  }
+
+  async preparePostInterventionRelease(
+    client: PoolClient,
+    order: OperationsRow,
+    demandId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE workflow.technical_demands SET demand_type='POST_INTERVENTION_RELEASE', status='OPEN' WHERE id=$1`,
+      [demandId],
+    );
+    await client.query(`UPDATE maintenance.work_orders SET technical_demand_id=$2 WHERE id=$1`, [
+      order.id,
+      demandId,
+    ]);
+    await this.releaseWorkOrder(client, { ...order, technical_demand_id: demandId });
+  }
+
+  async hasActiveWorkOrderExecution(client: PoolClient, orderId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM maintenance.executions WHERE work_order_id=$1
+      AND status IN ('OPEN','IN_PROGRESS','PAUSED','BLOCKED') LIMIT 1`,
+      [orderId],
+    );
+    return result.rows.length > 0;
+  }
+
+  async canSignPostIntervention(client: PoolClient, orderId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM maintenance.work_order_actions action
+      JOIN maintenance.executions execution ON execution.work_order_action_id=action.id AND execution.tenant_id=action.tenant_id
+      WHERE action.work_order_id=$1 AND action.status='PENDING' AND execution.status='COMPLETED'
+      AND NOT EXISTS (SELECT 1 FROM maintenance.executions active WHERE active.work_order_id=$1
+        AND active.status IN ('OPEN','IN_PROGRESS','PAUSED','BLOCKED')) LIMIT 1`,
+      [orderId],
+    );
+    return result.rows.length > 0;
+  }
+
+  async hasPendingPostIntervention(client: PoolClient, orderId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM workflow.technical_demands demand
+      JOIN maintenance.work_orders work_order ON work_order.technical_demand_id=demand.id AND work_order.tenant_id=demand.tenant_id
+      WHERE work_order.id=$1 AND demand.demand_type='POST_INTERVENTION_RELEASE'
+        AND demand.status NOT IN ('COMPLETED','CANCELLED')`,
+      [orderId],
+    );
+    return result.rows.length > 0;
+  }
+
+  async completePostIntervention(
+    client: PoolClient,
+    demandId: string,
+    orderId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE workflow.technical_demands SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1`,
+      [demandId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_order_actions SET status='COMPLETED',updated_at=clock_timestamp()
+      WHERE work_order_id=$1 AND status='PENDING'`,
+      [orderId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1`,
+      [orderId],
     );
   }
 
@@ -494,7 +563,7 @@ export class OperationsRepository {
               SELECT 1
               FROM workflow.demand_validator_requirements requirement
               JOIN iam.user_technical_assignments assignment
-                ON assignment.technical_area_id = requirement.technical_area_id
+                ON (assignment.technical_area_id = requirement.technical_area_id OR requirement.technical_area_id IS NULL)
                AND assignment.user_id = $4
                AND assignment.status = 'ACTIVE'
                AND assignment.valid_from <= clock_timestamp()
@@ -530,7 +599,7 @@ export class OperationsRepository {
            SELECT 1
            FROM workflow.demand_validator_requirements requirement
            JOIN iam.user_technical_assignments assignment
-             ON assignment.technical_area_id = requirement.technical_area_id
+             ON (assignment.technical_area_id = requirement.technical_area_id OR requirement.technical_area_id IS NULL)
             AND assignment.user_id = $2
             AND assignment.status = 'ACTIVE'
             AND assignment.valid_from <= clock_timestamp()
@@ -550,7 +619,7 @@ export class OperationsRepository {
   ): Promise<OperationsRow | null> {
     const result = await client.query<OperationsRow>(
       `SELECT * FROM workflow.demand_validator_requirements
-       WHERE technical_demand_id = $1 AND technical_area_id = $2
+       WHERE technical_demand_id = $1 AND (technical_area_id = $2 OR technical_area_id IS NULL)
          AND status IN ('PENDING', 'PARTIALLY_FULFILLED')
        ORDER BY created_at LIMIT 1 FOR UPDATE`,
       [demandId, areaId],
@@ -625,6 +694,12 @@ export class OperationsRepository {
 
   async requestChanges(client: PoolClient, demandId: string, workOrderId: string): Promise<void> {
     await client.query(
+      `UPDATE maintenance.work_order_actions SET status='CANCELLED',updated_at=clock_timestamp()
+      WHERE work_order_id=$2 AND status IN ('READY','PENDING') AND EXISTS
+      (SELECT 1 FROM workflow.technical_demands WHERE id=$1 AND demand_type='POST_INTERVENTION_RELEASE')`,
+      [demandId, workOrderId],
+    );
+    await client.query(
       `UPDATE workflow.technical_demands SET status = 'CHANGES_REQUESTED' WHERE id = $1`,
       [demandId],
     );
@@ -662,7 +737,7 @@ export class OperationsRepository {
       await client.query(
         `UPDATE workflow.technical_demands
          SET status = 'RELEASED_TO_OPERATION', completed_at = COALESCE(completed_at, clock_timestamp())
-         WHERE id = $1`,
+         WHERE id = $1 AND demand_type <> 'POST_INTERVENTION_RELEASE'`,
         [workOrder.technical_demand_id],
       );
     }
@@ -673,6 +748,13 @@ export class OperationsRepository {
           origin, action_type, title, description, priority, status, responsible_id,
           maintenance_stop_mode, technical_analysis
         ) VALUES ($1,$2,$3,$4,$5,'WORK_ORDER_RELEASE',$6,$7,$8,$9,'READY',$10,$11,$12::jsonb)
+        ON CONFLICT (tenant_id, work_order_id, origin) WHERE origin = 'WORK_ORDER_RELEASE'
+        DO UPDATE SET status='READY', title=EXCLUDED.title, description=EXCLUDED.description,
+          priority=EXCLUDED.priority, responsible_id=EXCLUDED.responsible_id,
+          maintenance_stop_mode=EXCLUDED.maintenance_stop_mode,
+          technical_analysis=EXCLUDED.technical_analysis,
+          maintenance_plan_version_id=EXCLUDED.maintenance_plan_version_id,
+          started_at=NULL, completed_at=NULL, updated_at=clock_timestamp()
         RETURNING id
       `,
       [
@@ -1257,6 +1339,22 @@ export class OperationsRepository {
        SET status='PENDING', completed_at=clock_timestamp(), updated_at=clock_timestamp()
        WHERE id=$1`,
       [execution.work_order_action_id],
+    );
+    const completedSnapshot = await this.getExecutionDetail(client, String(execution.id));
+    const completedHash = createHash('sha256')
+      .update(JSON.stringify(completedSnapshot))
+      .digest('hex');
+    await client.query(
+      `UPDATE workflow.technical_demands demand SET status='AWAITING_SIGNATURE',payload_hash_sha256=$2
+      FROM maintenance.work_orders work_order WHERE work_order.id=$1 AND demand.id=work_order.technical_demand_id
+      AND demand.tenant_id=work_order.tenant_id AND demand.demand_type='POST_INTERVENTION_RELEASE' AND demand.status='OPEN'`,
+      [execution.work_order_id, completedHash],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET status='IN_TECHNICAL_REVIEW'
+      WHERE id=$1 AND EXISTS (SELECT 1 FROM workflow.technical_demands demand WHERE demand.id=work_order.technical_demand_id
+        AND demand.demand_type='POST_INTERVENTION_RELEASE' AND demand.status='AWAITING_SIGNATURE')`,
+      [execution.work_order_id],
     );
   }
 

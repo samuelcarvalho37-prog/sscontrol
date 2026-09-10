@@ -6,6 +6,7 @@ import test from 'node:test';
 import { Pool, type PoolClient } from 'pg';
 
 import { buildApp } from '../src/app.js';
+import { MonitoringRepository } from '../src/modules/monitoring/monitoring.repository.js';
 import { createTestEnvironment } from './helpers/environment.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -344,8 +345,8 @@ test(
         descricao: 'Conteúdo inicial que será devolvido pela Qualidade.',
         prioridade: 'MEDIUM',
         responsavel_id: null,
-        programada_para: null,
-        analise_tecnica: { situacao: 'Análise inicial' },
+        programada_para: new Date(Date.now() - 60000).toISOString(),
+        analise_tecnica: { situacao: 'Análise inicial', exige_liberacao_pos_intervencao: true },
       },
     });
     assert.equal(correctionDraft.statusCode, 200, correctionDraft.body);
@@ -383,9 +384,10 @@ test(
         descricao: 'Riscos, bloqueio e resultado técnico foram detalhados para nova validação.',
         prioridade: 'HIGH',
         responsavel_id: null,
-        programada_para: null,
+        programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
           situacao: 'Revisão preventiva',
+          exige_liberacao_pos_intervencao: true,
           riscos: ['energia residual'],
           resultado_esperado: 'Equipamento seguro e liberado',
         },
@@ -420,6 +422,13 @@ test(
       assert.equal(Number(history.rows[0]!.review_count), 2);
     });
 
+    await app.inject({
+      method: 'POST',
+      url: `/v1/workflow/technical-demands/${correctionResubmitted.json().data.validacao.id}/request-changes`,
+      headers: bearer(identities.quality),
+      payload: { motivo: 'Manter esta ordem de teste em correção, sem execução disponível.' },
+    });
+
     const created = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/work-orders',
@@ -433,9 +442,10 @@ test(
         descricao: 'Executar checklist validado.',
         prioridade: 'HIGH',
         responsavel_id: null,
-        programada_para: null,
+        programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
           situacao: 'Manutenção programada',
+          exige_liberacao_pos_intervencao: true,
           resultado_esperado: 'Equipamento seguro',
         },
       },
@@ -469,7 +479,7 @@ test(
 
     const technicalQueue = await app.inject({
       method: 'GET',
-      url: '/v1/workflow/technical-demands?status=AWAITING_SIGNATURE',
+      url: '/v1/workflow/technical-demands?status=OPEN',
       headers: bearer(identities.quality),
     });
     assert.equal(technicalQueue.statusCode, 200, technicalQueue.body);
@@ -492,8 +502,7 @@ test(
         significado: 'Aprovação de Qualidade',
       },
     });
-    assert.equal(qualitySigned.statusCode, 200, qualitySigned.body);
-    assert.equal(qualitySigned.json().data.status, 'IN_TECHNICAL_REVIEW');
+    assert.equal(qualitySigned.statusCode, 409, qualitySigned.body);
 
     const prematureRelease = await app.inject({
       method: 'POST',
@@ -511,10 +520,10 @@ test(
         significado: 'Aprovação de Segurança',
       },
     });
-    assert.equal(safetySigned.statusCode, 200, safetySigned.body);
-    assert.equal(safetySigned.json().data.status, 'RELEASED');
-    assert.equal(safetySigned.json().data.validacao.assinaturas.length, 2);
-    assert.equal(safetySigned.json().data.acoes.length, 1);
+    assert.equal(safetySigned.statusCode, 409, safetySigned.body);
+    assert.equal(submitted.json().data.status, 'RELEASED');
+    assert.equal(submitted.json().data.validacao.assinaturas.length, 0);
+    assert.equal(submitted.json().data.acoes.length, 1);
 
     const workOrderList = await app.inject({
       method: 'GET',
@@ -531,7 +540,7 @@ test(
     assert.equal(listedWorkOrder.plano_versao_id, ids.planVersion);
     assert.equal(listedWorkOrder.plano_itens_count, 3);
     assert.equal(listedWorkOrder.acao_status, 'READY');
-    assert.equal(listedWorkOrder.assinaturas_realizadas, 2);
+    assert.equal(listedWorkOrder.assinaturas_realizadas, 0);
 
     const managerActions = await app.inject({
       method: 'GET',
@@ -757,13 +766,45 @@ test(
       '1 rolamento 6204; 30 g de graxa.',
     );
 
+    await transaction(pool, async client => {
+      assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),true);
+    });
+    const bypassRelease = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/actions/${actionId}/review`,
+      headers: bearer(identities.quality),
+      payload: { decisao: 'APPROVE', comentario: 'Tentativa de aprovação sem as assinaturas.' },
+    });
+    assert.equal(bypassRelease.statusCode, 409, bypassRelease.body);
+    for (const token of [identities.quality, identities.safety]) {
+      const signedAfterExecution = await app.inject({
+        method: 'POST',
+        url: `/v1/workflow/technical-demands/${demandId}/sign`,
+        headers: bearer(token),
+        payload: {
+          declaracao:
+            'Confirmo a liberação após verificar o relatório e as evidências da intervenção.',
+          significado: 'Liberação pós-intervenção',
+        },
+      });
+      assert.equal(signedAfterExecution.statusCode, 200, signedAfterExecution.body);
+      assert.equal(
+        signedAfterExecution.json().data.acoes.length,
+        1,
+        'Assinar a liberação não deve gerar outra ação',
+      );
+    }
+
+    await transaction(pool, async client => {
+      assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),false);
+    });
     const completedAction = await app.inject({
       method: 'GET',
       url: `/v1/maintenance/actions/${actionId}`,
       headers: bearer(identities.quality),
     });
     assert.equal(completedAction.statusCode, 200, completedAction.body);
-    assert.equal(completedAction.json().data.acao.status, 'PENDING');
+    assert.equal(completedAction.json().data.acao.status, 'COMPLETED');
     assert.equal(completedAction.json().data.execucao.status, 'COMPLETED');
     assert.equal(completedAction.json().data.execucao.itens.length, 3);
 
@@ -786,7 +827,7 @@ test(
     });
     assert.equal(reviewed.statusCode, 200, reviewed.body);
     assert.equal(reviewed.json().data.status, 'COMPLETED');
-    assert.equal(reviewed.json().data.already_validated, false);
+    assert.equal(reviewed.json().data.already_validated, true);
 
     const repeatedReview = await app.inject({
       method: 'POST',
@@ -812,5 +853,44 @@ test(
       assert.equal(Number(persisted.rows[0]!.readings), 1);
       assert.equal(persisted.rows[0]!.work_order_status, 'COMPLETED');
     });
+    for (const scenario of [
+      { type: 'CORRECTIVE', scheduled: true, release: true },
+      { type: 'INSPECTION', scheduled: true, release: true },
+      { type: 'PREVENTIVE', scheduled: true, release: false },
+      { type: 'PREVENTIVE', scheduled: false, release: true },
+    ]) {
+      const ordinary = await app.inject({
+        method: 'POST',
+        url: '/v1/maintenance/work-orders',
+        headers: bearer(identities.admin),
+        payload: {
+          plano_versao_id: ids.planVersion,
+          tipo_origem: 'ADMIN',
+          entidade_origem_id: null,
+          tipo_trabalho: scenario.type,
+          titulo: 'Atividade sem validação obrigatória',
+          descricao: 'Fluxo comum sem exigência de Qualidade/Segurança.',
+          prioridade: 'LOW',
+          responsavel_id: null,
+          programada_para: scenario.scheduled ? new Date().toISOString() : null,
+          analise_tecnica: { exige_liberacao_pos_intervencao: scenario.release },
+        },
+      });
+      assert.equal(ordinary.statusCode, 200, ordinary.body);
+      const released = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/submit-review`,
+        headers: bearer(identities.admin),
+        payload: {
+          politica_assinatura: 'QUALIDADE_E_SEGURANCA',
+          assinaturas_exigidas: 2,
+          primeira_resposta_ate: null,
+          resolucao_ate: null,
+        },
+      });
+      assert.equal(released.statusCode, 200, released.body);
+      assert.equal(released.json().data.validacao, null);
+      assert.equal(released.json().data.status, 'RELEASED');
+    }
   },
 );

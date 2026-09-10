@@ -13,6 +13,7 @@ export interface AdminTechnicalDemandSummary extends AdminEntityRecord {
 }
 
 export interface AdminIntervention {
+  exige_liberacao_pos_intervencao?: boolean
   id: string
   codigo: string
   ativo_id: string
@@ -42,6 +43,7 @@ export interface AdminIntervention {
 }
 
 export interface AdminInterventionInput {
+  exige_liberacao_pos_intervencao?: boolean
   id?: string
   ativo_id: string
   componente_id?: string

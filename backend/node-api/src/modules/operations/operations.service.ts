@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { requiresPostInterventionRelease } from './post-intervention-policy.js';
 
 import type { PoolClient } from 'pg';
 
@@ -440,7 +441,6 @@ export class OperationsService {
     input: ReviewSubmissionInput,
     audit: RequestAuditMetadata,
   ) {
-    this.validateSignaturePolicy(input);
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
@@ -461,6 +461,22 @@ export class OperationsService {
             409,
           );
         }
+        if (!requiresPostInterventionRelease(workOrder)) {
+          await this.repository.releaseWorkOrder(client, workOrder);
+          const detail = await this.requiredWorkOrderDetail(client, workOrderId);
+          await this.repository.writeAudit(
+            client,
+            user.tenantId,
+            user.id,
+            audit,
+            'WORK_ORDER_RELEASED_WITHOUT_EXCEPTION',
+            'WORK_ORDER',
+            workOrderId,
+            detail,
+          );
+          return detail;
+        }
+        this.validateSignaturePolicy(input);
         const areas = await this.repository.findTechnicalAreas(client);
         const qualityArea = areas.find((area) => area.code === 'QUALITY');
         const safetyArea = areas.find((area) => area.code === 'SAFETY');
@@ -497,6 +513,14 @@ export class OperationsService {
             'SAFETY',
             safetyArea.id,
           );
+        } else if (input.signaturePolicy === 'QUALIDADE_OU_SEGURANCA') {
+          await this.repository.createRequirement(
+            client,
+            user.tenantId,
+            demandId,
+            'QUALITY_OR_SAFETY',
+            null,
+          );
         } else if (input.signaturePolicy === 'QUALIDADE_E_SEGURANCA') {
           await this.repository.createRequirement(
             client,
@@ -513,7 +537,7 @@ export class OperationsService {
             safetyArea.id,
           );
         }
-        await this.repository.attachDemand(client, workOrderId, demandId);
+        await this.repository.preparePostInterventionRelease(client, workOrder, demandId);
         await this.repository.appendDemandEvent(
           client,
           user.tenantId,
@@ -556,6 +580,16 @@ export class OperationsService {
           throw error(
             'TECHNICAL_DEMAND_NOT_SIGNABLE',
             'A demanda não aceita novas assinaturas.',
+            409,
+          );
+        }
+        if (
+          demand.demand_type === 'POST_INTERVENTION_RELEASE' &&
+          !(await this.repository.canSignPostIntervention(client, text(demand, 'entity_id')))
+        ) {
+          throw error(
+            'POST_INTERVENTION_EXECUTION_REQUIRED',
+            'A liberação exige execução concluída e aguardando validação.',
             409,
           );
         }
@@ -613,7 +647,13 @@ export class OperationsService {
             integer(state, 'required_signature_count') &&
           integer(state, 'pending_requirements') === 0;
         let releasedActionId: string | null = null;
-        if (approved) {
+        if (approved && demand.demand_type === 'POST_INTERVENTION_RELEASE') {
+          await this.repository.completePostIntervention(
+            client,
+            demandId,
+            text(demand, 'entity_id'),
+          );
+        } else if (approved) {
           await this.repository.approveDemand(client, demandId, text(demand, 'entity_id'));
           const approvedWorkOrder = await this.repository.findWorkOrder(
             client,
@@ -668,7 +708,13 @@ export class OperationsService {
         const demand = await this.repository.findDemand(client, demandId, true);
         if (!demand)
           throw error('TECHNICAL_DEMAND_NOT_FOUND', 'Demanda técnica não encontrada.', 404);
-        if (!['AWAITING_SIGNATURE', 'IN_TECHNICAL_REVIEW'].includes(text(demand, 'status'))) {
+        if (
+          ![
+            'AWAITING_SIGNATURE',
+            'IN_TECHNICAL_REVIEW',
+            ...(demand.demand_type === 'POST_INTERVENTION_RELEASE' ? ['OPEN'] : []),
+          ].includes(text(demand, 'status'))
+        ) {
           throw error(
             'TECHNICAL_DEMAND_NOT_REVIEWABLE',
             'A demanda não aceita solicitação de ajustes.',
@@ -687,6 +733,16 @@ export class OperationsService {
             'TECHNICAL_REVIEW_NOT_ALLOWED',
             'Seu vínculo técnico não pode revisar esta demanda.',
             403,
+          );
+        }
+        if (
+          demand.demand_type === 'POST_INTERVENTION_RELEASE' &&
+          (await this.repository.hasActiveWorkOrderExecution(client, text(demand, 'entity_id')))
+        ) {
+          throw error(
+            'WORK_ORDER_EXECUTION_ACTIVE',
+            'A execução em andamento deve ser encerrada antes de corrigir a ordem.',
+            409,
           );
         }
         const normalizedReason = reason.trim();
@@ -1122,6 +1178,15 @@ export class OperationsService {
           );
         }
 
+        if (
+          await this.repository.hasPendingPostIntervention(client, text(action, 'work_order_id'))
+        ) {
+          throw error(
+            'POST_INTERVENTION_SIGNATURES_REQUIRED',
+            'Esta preventiva exige as assinaturas de liberação pós-intervenção.',
+            409,
+          );
+        }
         await this.repository.reviewCompletedAction(client, action, execution, input.decision);
         const result = {
           validated: true,

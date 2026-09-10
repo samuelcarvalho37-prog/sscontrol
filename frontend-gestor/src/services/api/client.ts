@@ -307,9 +307,12 @@ function workOrderRow(value: unknown): JsonRecord {
   const validationStatus = item.validacao_status ?? validation.status;
   return {
     ...item,
+    exige_liberacao_pos_intervencao: record(item.analise_tecnica).exige_liberacao_pos_intervencao === true,
+    planejada_para: item.programada_para ?? item.planejada_para,
+    modo_parada_manutencao: stopModeFromNode[upperText(item.modo_parada ?? item.modo_parada_manutencao)] ?? item.modo_parada ?? item.modo_parada_manutencao,
     status: workOrderStatusFromNode[upperText(item.status)] ?? item.status,
     prioridade: priorityFromNode[upperText(item.prioridade)] ?? item.prioridade,
-    tipo: planTypeFromNode[upperText(item.tipo)] ?? item.tipo,
+    tipo: planTypeFromNode[upperText(item.tipo ?? item.tipo_trabalho)] ?? item.tipo ?? item.tipo_trabalho,
     plano_id: item.plano_id,
     plano_versao_id: item.plano_versao_id,
     plano_itens_count: Number(item.plano_itens_count ?? records(item.checklist_itens).length),
@@ -345,6 +348,7 @@ function workOrderBody(data: JsonRecord, creating: boolean): JsonRecord {
     analise_tecnica: {
       ...record(data.analise_tecnica),
       briefing_operador: data.descricao,
+      exige_liberacao_pos_intervencao: data.exige_liberacao_pos_intervencao === true,
       modo_parada: data.modo_parada_manutencao,
     },
   };

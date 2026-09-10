@@ -213,6 +213,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       })
     } catch (cause) {
       if (cause instanceof ApiRequestError) {
+        if (cause.code === 'CORS_ORIGIN_DENIED') {
+          setError('O endereço deste portal não está autorizado na API. Verifique a configuração da conexão.')
+          return
+        }
         if (cause.code === 'PORTAL_PROFILE_MISMATCH') {
           setError(cause.message)
           return

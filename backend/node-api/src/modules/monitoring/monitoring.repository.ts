@@ -21,6 +21,20 @@ function first(rows: readonly MonitoringRow[]): MonitoringRow | null {
 }
 
 export class MonitoringRepository {
+  async hasPendingPostInterventionRelease(client: PoolClient, assetId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM maintenance.work_orders work_order
+      WHERE work_order.asset_id=$1 AND work_order.status NOT IN ('COMPLETED','CANCELLED')
+        AND EXISTS (SELECT 1 FROM workflow.technical_demands demand WHERE demand.tenant_id=work_order.tenant_id
+          AND demand.entity_id=work_order.id AND demand.demand_type='POST_INTERVENTION_RELEASE') AND EXISTS (
+          SELECT 1 FROM maintenance.work_order_actions action JOIN maintenance.executions execution
+          ON execution.work_order_action_id=action.id AND execution.tenant_id=action.tenant_id
+          WHERE action.work_order_id=work_order.id
+            AND execution.status IN ('IN_PROGRESS','PAUSED','BLOCKED','COMPLETED')) LIMIT 1`,
+      [assetId],
+    );
+    return result.rows.length > 0;
+  }
   async findParameterReadingContext(
     client: PoolClient,
     readingId: string,

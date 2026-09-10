@@ -783,6 +783,16 @@ export class MonitoringService {
             422,
           );
         }
+        if (
+          input.status === 'COMPLETED' &&
+          (await this.repository.hasPendingPostInterventionRelease(client, text(stop, 'asset_id')))
+        ) {
+          throw appError(
+            'POST_INTERVENTION_RELEASE_PENDING',
+            'O retorno do equipamento aguarda a liberação pós-intervenção.',
+            409,
+          );
+        }
         await this.repository.transitionStop(client, stopId, user.id, input);
         if (input.status === 'COMPLETED') {
           await this.repository.resolveEntitiesLinkedToStop(client, stopId, user.id);

@@ -39,6 +39,12 @@ function editable(intervention: AdminIntervention): boolean {
   return ['RASCUNHO', 'DEVOLVIDA_ADMIN'].includes(intervention.status)
 }
 
+function requiresRelease(intervention: AdminIntervention): boolean {
+  return intervention.exige_liberacao_pos_intervencao === true
+    && intervention.tipo === 'PREVENTIVA' && Boolean(intervention.planejada_para)
+    && ['OBRIGATORIA', 'MANDATORY_STOP'].includes(intervention.modo_parada_manutencao ?? '')
+}
+
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
     RASCUNHO: 'Rascunho', AGUARDANDO_VALIDACAO: 'Aguardando validação', DEVOLVIDA_ADMIN: 'Devolvida ao Admin',
@@ -298,6 +304,7 @@ export function AdminInterventionsWorkspace({
       plano_id: intervention.plano_id || '', plano_versao_id: intervention.plano_versao_id || '',
       tipo: intervention.tipo, titulo: intervention.titulo, descricao: intervention.descricao,
       prioridade: intervention.prioridade, planejada_para: intervention.planejada_para,
+      exige_liberacao_pos_intervencao: intervention.exige_liberacao_pos_intervencao ?? false,
       modo_parada_manutencao: intervention.modo_parada_manutencao || 'DECISAO_EXECUTOR',
     } : emptyIntervention())
     setError('')
@@ -378,7 +385,7 @@ export function AdminInterventionsWorkspace({
       await sendAdminInterventionForValidation({ intervencao_id: routing.id, ...routeDraft })
       await loadData()
       setRouting(null)
-      setNotice('Intervenção enviada para assinatura técnica. A ação aparecerá ao Operador após todas as assinaturas exigidas.')
+      setNotice(requiresRelease(routing) ? 'Execução liberada. A liberação pós-intervenção ficará disponível para assinatura após a conclusão técnica.' : 'Execução liberada sem exigir assinatura de Qualidade ou Segurança.')
     } catch (cause) {
       handleFailure(cause, 'Não foi possível enviar a intervenção.')
     } finally {
@@ -528,22 +535,26 @@ export function AdminInterventionsWorkspace({
         <label><span>Tipo</span><select value={editor.tipo} onChange={(event) => setEditor((current) => current ? { ...current, tipo: event.target.value } : current)}><option value="CORRETIVA">Corretiva</option><option value="PREVENTIVA">Preventiva</option><option value="PREDITIVA">Preditiva</option><option value="INSPECAO">Inspeção</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option></select></label>
         <label><span>Prioridade</span><select value={editor.prioridade} onChange={(event) => setEditor((current) => current ? { ...current, prioridade: event.target.value } : current)}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></label>
         <label><span>Planejada para</span><input type="datetime-local" value={editor.planejada_para || ''} onChange={(event) => setEditor((current) => current ? { ...current, planejada_para: event.target.value } : current)} /></label>
+        <label style={{ gridColumn: '1 / -1' }}><span><input type="checkbox" checked={editor.exige_liberacao_pos_intervencao ?? false}
+          disabled={editor.tipo !== 'PREVENTIVA' || !editor.planejada_para}
+          onChange={event => setEditor(current => current ? { ...current, exige_liberacao_pos_intervencao: event.target.checked } : current)} /> Exigir liberação pós-intervenção</span>
+          <small>Aplicável somente à preventiva programada cujo plano exige parada obrigatória. Qualidade/Segurança assinam após a execução.</small></label>
         <label><span>Modo de parada</span><select value={editor.modo_parada_manutencao} onChange={(event) => setEditor((current) => current ? { ...current, modo_parada_manutencao: event.target.value } : current)}><option value="DECISAO_EXECUTOR">Decisão do executor</option><option value="OBRIGATORIA">Parada obrigatória</option><option value="SEM_PARADA">Executar sem parada</option></select></label>
         <label style={{ gridColumn: '1 / -1' }}><span>Título *</span><input value={editor.titulo} onChange={(event) => setEditor((current) => current ? { ...current, titulo: event.target.value } : current)} /></label>
         <label style={{ gridColumn: '1 / -1' }}><span>Descrição do serviço *</span><textarea rows={5} value={editor.descricao} onChange={(event) => setEditor((current) => current ? { ...current, descricao: event.target.value } : current)} /></label>
       </div><footer><span>Salvar não cria ação operacional.</span><div><button type="button" disabled={saving} onClick={() => setEditor(null)}>Cancelar</button><button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button></div></footer></section></div> : null}
 
       {routing ? <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !sending) setRouting(null) }}><section role="dialog" aria-modal="true" aria-labelledby="intervention-route-title"><header><div><span className="eyebrow">FILTRO TÉCNICO</span><h2 id="intervention-route-title">Enviar {routing.codigo}</h2></div><button type="button" onClick={() => setRouting(null)}>×</button></header><div className="admin-catalog-form">
-        <ValidationPolicySelector
+        {requiresRelease(routing) && <ValidationPolicySelector
           value={routeDraft}
           users={users}
           roles={roles}
           onChange={setRouteDraft}
           allowCustom={false}
-        />
-        <label><span>Segregar criador e aprovador</span><select value={routeDraft.exige_segregacao} onChange={(event) => setRouteDraft((current) => ({ ...current, exige_segregacao: event.target.value }))}><option value="SIM">Sim</option><option value="NAO">Não</option></select></label>
+        />}
+        {requiresRelease(routing) && <label><span>Segregar criador e aprovador</span><select value={routeDraft.exige_segregacao} onChange={(event) => setRouteDraft((current) => ({ ...current, exige_segregacao: event.target.value }))}><option value="SIM">Sim</option><option value="NAO">Não</option></select></label>}
         <label style={{ gridColumn: '1 / -1' }}><span>Orientação ao Gestor *</span><textarea rows={4} value={routeDraft.comentario} onChange={(event) => setRouteDraft((current) => ({ ...current, comentario: event.target.value }))} /></label>
-      </div><footer><span>A ação operacional só será criada depois das assinaturas técnicas.</span><div><button type="button" disabled={sending} onClick={() => setRouting(null)}>Cancelar</button><button className="primary-button" type="button" disabled={sending} onClick={() => void send()}>{sending ? 'Enviando…' : 'Enviar para assinatura'}</button></div></footer></section></div> : null}
+      </div><footer><span>{requiresRelease(routing) ? 'A assinatura de liberação será exigida após a execução.' : 'Esta intervenção não exige assinatura de Qualidade/Segurança.'}</span><div><button type="button" disabled={sending} onClick={() => setRouting(null)}>Cancelar</button><button className="primary-button" type="button" disabled={sending} onClick={() => void send()}>{sending ? 'Enviando…' : 'Liberar execução'}</button></div></footer></section></div> : null}
 
       {viewingAnalysis ? (
         <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => {
