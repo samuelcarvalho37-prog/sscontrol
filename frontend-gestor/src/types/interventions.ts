@@ -30,6 +30,14 @@ export interface AdminIntervention {
   modo_parada_manutencao?: string
   ativo_tag?: string
   ativo_nome?: string
+  linha_id?: string
+  linha_tag?: string
+  linha_nome?: string
+  setor_id?: string
+  setor_tag?: string
+  setor_nome?: string
+  responsavel_id?: string
+  responsavel_nome?: string
   componente_tag?: string
   componente_nome?: string
   plano_nome?: string

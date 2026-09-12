@@ -360,7 +360,7 @@ export function App() {
           ) : null}
           {section === 'validations' && canReadAnalytics ? (
             <>
-            {usesNodeApi() && <div className="pcm-controls" style={{ marginBottom: 16 }}>
+            {usesNodeApi() && <div className="pcm-view-switch">
               <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
               <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
             </div>}

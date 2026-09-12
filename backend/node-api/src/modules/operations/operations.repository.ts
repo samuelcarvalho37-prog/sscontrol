@@ -145,6 +145,10 @@ export class OperationsRepository {
                work_order.origin_entity_id AS entidade_origem_id,
                work_order.work_type AS tipo,
                work_order.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
+               line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
+               sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
+               work_order.responsible_id AS responsavel_id,
+               responsible.name AS responsavel_nome,
                work_order.component_id AS componente_id,
                component.tag AS componente_tag, component.name AS componente_nome,
                work_order.maintenance_plan_version_id AS plano_versao_id,
@@ -170,6 +174,9 @@ export class OperationsRepository {
                action.status AS acao_status
         FROM maintenance.work_orders work_order
         JOIN cmms.assets asset ON asset.id = work_order.asset_id
+        JOIN cmms.lines line ON line.id = asset.line_id
+        JOIN cmms.sectors sector ON sector.id = line.sector_id
+        LEFT JOIN iam.users responsible ON responsible.id = work_order.responsible_id
         LEFT JOIN cmms.components component ON component.id = work_order.component_id
         JOIN maintenance.maintenance_plan_versions plan_version
           ON plan_version.id = work_order.maintenance_plan_version_id
@@ -219,6 +226,9 @@ export class OperationsRepository {
                work_order.origin_entity_id AS entidade_origem_id,
                work_order.work_type AS tipo_trabalho, work_order.asset_id AS ativo_id,
                asset.tag AS ativo_tag, asset.name AS ativo_nome,
+        line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
+        sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
+        work_order.responsible_id AS responsavel_id, responsible.name AS responsavel_nome,
                work_order.component_id AS componente_id, component.tag AS componente_tag,
                component.name AS componente_nome,
                work_order.maintenance_plan_version_id AS plano_versao_id,
@@ -280,6 +290,9 @@ export class OperationsRepository {
                WHERE action.work_order_id = work_order.id), '[]'::jsonb) AS acoes
         FROM maintenance.work_orders work_order
         JOIN cmms.assets asset ON asset.id = work_order.asset_id
+        JOIN cmms.lines line ON line.id = asset.line_id
+        JOIN cmms.sectors sector ON sector.id = line.sector_id
+        LEFT JOIN iam.users responsible ON responsible.id = work_order.responsible_id
         LEFT JOIN cmms.components component ON component.id = work_order.component_id
         JOIN maintenance.maintenance_plan_versions plan_version ON plan_version.id = work_order.maintenance_plan_version_id
         JOIN maintenance.maintenance_plans plan ON plan.id = plan_version.maintenance_plan_id

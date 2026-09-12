@@ -14,7 +14,6 @@ export interface ApiCallOptions {
   dedupe?: boolean;
   dedupeKey?: string;
 }
-
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -1404,6 +1403,13 @@ function nodeActionRequest(
           const interventions = records(data.itens).map(workOrderRow);
           return { total: interventions.length, intervencoes: interventions };
         },
+      };
+    case "admin.intervencoes.detalhe":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.intervencao_id))}`,
+        token,
+        transform: (data) => workOrderRow(data),
       };
     case "admin.intervencoes.salvar": {
       const data = record(payload.dados);
