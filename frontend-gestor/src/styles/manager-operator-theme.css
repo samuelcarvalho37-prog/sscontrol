@@ -1,5 +1,5 @@
-/*
- * Assimilação visual Gestor → Operador.
+﻿/*
+ * AssimilaÃ§Ã£o visual Gestor â†’ Operador.
  * Todo o escopo fica isolado em .app-shell--manager para preservar o Command Workspace.
  */
 
@@ -48,21 +48,6 @@
 .app-shell--manager .topbar__identity--manager {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.app-shell--manager .topbar__identity--manager::before {
-  content: "FC";
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 14px;
-  color: #fff;
-  background: #172234;
-  display: grid;
-  place-items: center;
-  font-size: 0.72rem;
-  font-weight: 950;
-  letter-spacing: 0.04em;
 }
 
 .app-shell--manager .topbar__identity--manager strong {
@@ -298,7 +283,7 @@
   text-align: center;
 }
 
-/* Fila de validação. */
+/* Fila de validaÃ§Ã£o. */
 
 .app-shell--manager .manager-decision-workspace {
   gap: 13px;
@@ -808,7 +793,7 @@
   gap: 7px;
 }
 
-/* Desktop: usa toda a área disponível, sem simular uma moldura de tablet. */
+/* Desktop: usa toda a Ã¡rea disponÃ­vel, sem simular uma moldura de tablet. */
 @media (min-width: 901px) {
   .manager-app-stage {
     display: block;
@@ -1023,7 +1008,7 @@
   padding: 12px;
 }
 
-/* Biblioteca de ativos e ficha técnica. */
+/* Biblioteca de ativos e ficha tÃ©cnica. */
 
 .app-shell--manager .manager-library-layout {
   grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1.62fr);
@@ -1444,7 +1429,7 @@
   border-top: 1px solid var(--line);
 }
 
-/* Conta, central operacional e diálogos. */
+/* Conta, central operacional e diÃ¡logos. */
 
 .app-shell--manager .more-layout {
   gap: 10px;
@@ -1772,14 +1757,6 @@
     min-height: 62px;
     padding: 9px 10px;
     gap: 8px;
-  }
-
-  .app-shell--manager .topbar__identity--manager::before {
-    width: 34px;
-    height: 34px;
-    flex-basis: 34px;
-    border-radius: 11px;
-    font-size: 0.59rem;
   }
 
   .app-shell--manager .topbar__identity--manager strong {
@@ -2140,3 +2117,4 @@
     transition-duration: 0.01ms !important;
   }
 }
+
