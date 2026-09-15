@@ -61,6 +61,52 @@ export class OperationsRepository {
     return result.rows[0]?.exists ?? false;
   }
 
+  async listActiveTechnicians(client: PoolClient): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(
+      `SELECT user_account.id, user_account.name AS nome, user_account.employee_number AS matricula
+       FROM iam.users user_account
+       JOIN iam.user_roles user_role ON user_role.tenant_id=user_account.tenant_id AND user_role.user_id=user_account.id
+       JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+       WHERE user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
+         AND user_role.valid_from <= clock_timestamp()
+         AND (user_role.valid_until IS NULL OR user_role.valid_until > clock_timestamp())
+         AND role.code='TECNICO' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+       ORDER BY user_account.name, user_account.id`,
+    );
+    return result.rows;
+  }
+
+  async activeTechnicianExists(client: PoolClient, userId: string): Promise<boolean> {
+    const result = await client.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM iam.users user_account
+         JOIN iam.user_roles user_role ON user_role.tenant_id=user_account.tenant_id AND user_role.user_id=user_account.id
+         JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+         WHERE user_account.id=$1 AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
+           AND user_role.valid_from <= clock_timestamp()
+           AND (user_role.valid_until IS NULL OR user_role.valid_until > clock_timestamp())
+           AND role.code='TECNICO' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+       ) AS exists`,
+      [userId],
+    );
+    return result.rows[0]?.exists ?? false;
+  }
+
+  async assignAction(client: PoolClient, actionId: string, technicianId: string, supportTechnicianIds: readonly string[]): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.work_order_actions SET responsible_id=$2,
+       technical_analysis=jsonb_set(COALESCE(technical_analysis, '{}'::jsonb), '{tecnicos_apoio_ids}', $3::jsonb, true), updated_at=clock_timestamp()
+       WHERE id=$1 AND status='READY'`,
+      [actionId, technicianId, JSON.stringify(supportTechnicianIds)],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET responsible_id=$2, updated_at=clock_timestamp()
+       FROM maintenance.work_order_actions action
+       WHERE action.id=$1 AND work_order.id=action.work_order_id`,
+      [actionId, technicianId],
+    );
+  }
+
   async createWorkOrder(
     client: PoolClient,
     tenantId: string,
@@ -692,7 +738,7 @@ export class OperationsRepository {
       `,
       [demandId],
     );
-    return required(result.rows, 'A demanda desapareceu durante a validaÃ§Ã£o.');
+    return required(result.rows, 'A demanda desapareceu durante a validação.');
   }
 
   async approveDemand(client: PoolClient, demandId: string, workOrderId: string): Promise<void> {
@@ -785,7 +831,7 @@ export class OperationsRepository {
         JSON.stringify(workOrder.technical_analysis),
       ],
     );
-    return required(result.rows, 'A aÃ§Ã£o liberada nÃ£o foi retornada.').id;
+    return required(result.rows, 'A ação liberada não foi retornada.').id;
   }
 
   async listOperatorActions(
@@ -798,6 +844,8 @@ export class OperationsRepository {
         SELECT action.id, action.title AS titulo, action.description AS descricao,
                action.priority AS prioridade, action.status, action.asset_id AS ativo_id,
                asset.tag AS ativo_tag, asset.name AS ativo_nome,
+               line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
+               sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
                action.component_id AS componente_id, component.tag AS componente_tag,
                component.name AS componente_nome, action.action_type AS tipo,
                action.origin AS origem, action.maintenance_stop_mode AS modo_parada,
@@ -811,7 +859,9 @@ export class OperationsRepository {
                   AND item.status = 'ACTIVE') AS total_itens
         FROM maintenance.work_order_actions action
         JOIN maintenance.work_orders work_order ON work_order.id = action.work_order_id
-        JOIN cmms.assets asset ON asset.id = action.asset_id
+         JOIN cmms.assets asset ON asset.id = action.asset_id
+         JOIN cmms.lines line ON line.id = asset.line_id
+         JOIN cmms.sectors sector ON sector.id = line.sector_id
         LEFT JOIN cmms.components component ON component.id = action.component_id
         JOIN maintenance.maintenance_plan_versions plan_version ON plan_version.id = action.maintenance_plan_version_id
         JOIN maintenance.checklist_template_versions checklist_version ON checklist_version.id = plan_version.checklist_template_version_id
@@ -824,7 +874,7 @@ export class OperationsRepository {
           LIMIT 1
         ) execution ON true
         WHERE action.status IN ('READY','IN_PROGRESS','BLOCKED')
-          AND (action.responsible_id IS NULL OR action.responsible_id = $1)
+          AND action.responsible_id = $1
         ORDER BY CASE action.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                  action.generated_at, action.id LIMIT $2
       `,
@@ -907,7 +957,9 @@ export class OperationsRepository {
                work_order.id AS ordem_id, work_order.code AS ordem_codigo,
                work_order.status AS ordem_status, work_order.scheduled_for AS programada_para,
                work_order.created_at AS ordem_criada_em,
-               asset.id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
+                asset.id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
+                line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
+                sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
                asset.asset_type AS ativo_tipo, asset.criticality AS ativo_criticidade,
                asset.lifecycle_status AS ativo_status, asset.manufacturer AS ativo_fabricante,
                asset.model AS ativo_modelo, asset.serial_number AS ativo_numero_serie,
@@ -947,7 +999,9 @@ export class OperationsRepository {
                  AND item.status = 'ACTIVE'), '[]'::jsonb) AS checklist_itens
         FROM maintenance.work_order_actions action
         JOIN maintenance.work_orders work_order ON work_order.id = action.work_order_id
-        JOIN cmms.assets asset ON asset.id = action.asset_id
+         JOIN cmms.assets asset ON asset.id = action.asset_id
+         JOIN cmms.lines line ON line.id = asset.line_id
+         JOIN cmms.sectors sector ON sector.id = line.sector_id
         LEFT JOIN cmms.components component ON component.id = action.component_id
         JOIN maintenance.maintenance_plan_versions plan_version
           ON plan_version.id = action.maintenance_plan_version_id
@@ -1069,7 +1123,8 @@ export class OperationsRepository {
         SELECT execution.id, execution.status, execution.operator_id AS operador_id,
                operator.name AS operador_nome, execution.opened_at AS assumida_em,
                execution.started_at AS iniciada_em, execution.completed_at AS concluida_em,
-               execution.duration_seconds AS duracao_segundos, execution.result AS resultado,
+               execution.duration_seconds AS duracao_segundos, execution.paused_at AS pausada_em,
+               execution.paused_seconds AS segundos_pausados, execution.result AS resultado,
                execution.observation AS observacao,
                (SELECT history.payload FROM maintenance.history_events history
                 WHERE history.tenant_id=execution.tenant_id AND history.execution_id=execution.id
@@ -1314,16 +1369,68 @@ export class OperationsRepository {
     );
   }
 
+  async pauseExecution(client: PoolClient, executionId: string, reason: string): Promise<void> {
+    await client.query(`UPDATE maintenance.executions SET status='PAUSED', observation=concat_ws(E'\n', observation, 'Pausa: ' || $2) WHERE id=$1`, [executionId, reason]);
+  }
+
+  async resumeExecution(client: PoolClient, executionId: string): Promise<void> {
+    await client.query(`UPDATE maintenance.executions SET status='IN_PROGRESS' WHERE id=$1`, [executionId]);
+  }
+
   async blockingExecutionItems(client: PoolClient, executionId: string): Promise<OperationsRow> {
     const result = await client.query<OperationsRow>(
       `SELECT $1::uuid AS id,
               count(*) FILTER (WHERE required AND status NOT IN ('ANSWERED','NOT_APPLICABLE'))::integer AS pendentes,
               count(*) FILTER (WHERE evidence_required AND evidence_count < GREATEST(minimum_evidence_photos,1))::integer AS evidencias_pendentes,
-              count(*) FILTER (WHERE blocks_completion AND status='NONCOMPLIANT')::integer AS nao_conformes_bloqueantes
+              count(*) FILTER (WHERE blocks_completion AND status='NONCOMPLIANT')::integer AS nao_conformes_bloqueantes,
+              COALESCE((
+                SELECT jsonb_agg(
+                  jsonb_build_object(
+                    'item_id', item.id,
+                    'titulo', item.title_snapshot,
+                    'sequencia', item.sequence,
+                    'tipo', pending.tipo,
+                    'mensagem', pending.mensagem
+                  )
+                  ORDER BY item.sequence, pending.ordem
+                )
+                FROM maintenance.execution_checklist_items item
+                CROSS JOIN LATERAL (
+                  SELECT
+                    CASE WHEN item.response_type_code = 'PARAMETRO'
+                      THEN 'MEDICAO_OBRIGATORIA'
+                      ELSE 'RESPOSTA_OBRIGATORIA'
+                    END AS tipo,
+                    CASE WHEN item.response_type_code = 'PARAMETRO'
+                      THEN 'Medição obrigatória não informada.'
+                      ELSE 'Resposta obrigatória não preenchida.'
+                    END AS mensagem,
+                    1 AS ordem
+                  WHERE item.required AND item.status NOT IN ('ANSWERED','NOT_APPLICABLE')
+
+                  UNION ALL
+
+                  SELECT
+                    'EVIDENCIA_OBRIGATORIA',
+                    'Evidência obrigatória não anexada.',
+                    2
+                  WHERE item.evidence_required
+                    AND item.evidence_count < GREATEST(item.minimum_evidence_photos, 1)
+
+                  UNION ALL
+
+                  SELECT
+                    'ITEM_NAO_CONFORME_BLOQUEANTE',
+                    'Item não conforme bloqueia a conclusão.',
+                    3
+                  WHERE item.blocks_completion AND item.status = 'NONCOMPLIANT'
+                ) pending
+                WHERE item.execution_id = $1
+              ), '[]'::jsonb) AS pendencias
        FROM maintenance.execution_checklist_items WHERE execution_id=$1`,
       [executionId],
     );
-    return required(result.rows, 'NÃ£o foi possÃ­vel validar os itens da execuÃ§Ã£o.');
+    return required(result.rows, 'Não foi possível validar os itens da execução.');
   }
 
   async completeExecution(
@@ -1348,25 +1455,54 @@ export class OperationsRepository {
       [execution.id, input.result, input.observation, input.stopMode],
     );
     await client.query(
-      `UPDATE maintenance.work_order_actions
-       SET status='PENDING', completed_at=clock_timestamp(), updated_at=clock_timestamp()
-       WHERE id=$1`,
-      [execution.work_order_action_id],
-    );
-    const completedSnapshot = await this.getExecutionDetail(client, String(execution.id));
-    const completedHash = createHash('sha256')
-      .update(JSON.stringify(completedSnapshot))
-      .digest('hex');
-    await client.query(
       `UPDATE workflow.technical_demands demand SET status='AWAITING_SIGNATURE',payload_hash_sha256=$2
       FROM maintenance.work_orders work_order WHERE work_order.id=$1 AND demand.id=work_order.technical_demand_id
       AND demand.tenant_id=work_order.tenant_id AND demand.demand_type='POST_INTERVENTION_RELEASE' AND demand.status='OPEN'`,
-      [execution.work_order_id, completedHash],
+      [
+        execution.work_order_id,
+        createHash('sha256')
+          .update(JSON.stringify(await this.getExecutionDetail(client, String(execution.id))))
+          .digest('hex'),
+      ],
     );
     await client.query(
-      `UPDATE maintenance.work_orders work_order SET status='IN_TECHNICAL_REVIEW'
-      WHERE id=$1 AND EXISTS (SELECT 1 FROM workflow.technical_demands demand WHERE demand.id=work_order.technical_demand_id
-        AND demand.demand_type='POST_INTERVENTION_RELEASE' AND demand.status='AWAITING_SIGNATURE')`,
+      `UPDATE maintenance.work_order_actions action
+       SET status = CASE WHEN EXISTS (
+             SELECT 1
+             FROM maintenance.work_orders work_order
+             JOIN workflow.technical_demands demand
+               ON demand.tenant_id=work_order.tenant_id AND demand.id=work_order.technical_demand_id
+             WHERE work_order.id=action.work_order_id
+               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND demand.demand_type='POST_INTERVENTION_RELEASE'
+               AND demand.status<>'COMPLETED'
+           ) THEN 'PENDING' ELSE 'COMPLETED' END,
+           completed_at=clock_timestamp(), updated_at=clock_timestamp()
+       WHERE action.id=$1`,
+      [execution.work_order_action_id],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order
+       SET status = CASE WHEN EXISTS (
+             SELECT 1
+             FROM workflow.technical_demands demand
+             WHERE demand.tenant_id=work_order.tenant_id
+               AND demand.id=work_order.technical_demand_id
+               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND demand.demand_type='POST_INTERVENTION_RELEASE'
+               AND demand.status<>'COMPLETED'
+           ) THEN 'IN_TECHNICAL_REVIEW' ELSE 'COMPLETED' END,
+           completed_at = CASE WHEN EXISTS (
+             SELECT 1
+             FROM workflow.technical_demands demand
+             WHERE demand.tenant_id=work_order.tenant_id
+               AND demand.id=work_order.technical_demand_id
+               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND demand.demand_type='POST_INTERVENTION_RELEASE'
+               AND demand.status<>'COMPLETED'
+           ) THEN completed_at ELSE COALESCE(completed_at, clock_timestamp()) END,
+           updated_at=clock_timestamp()
+       WHERE work_order.id=$1 AND work_order.status='IN_PROGRESS'`,
       [execution.work_order_id],
     );
   }

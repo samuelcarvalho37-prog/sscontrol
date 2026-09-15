@@ -10,6 +10,8 @@ const ids = {
   quality: '00000000-0000-4000-8000-000000000102',
   safety: '00000000-0000-4000-8000-000000000103',
   maintenance: '00000000-0000-4000-8000-000000000104',
+  mechanicalMaintenance: '00000000-0000-4000-8000-000000000108',
+  electricalMaintenance: '00000000-0000-4000-8000-000000000109',
   operator: '00000000-0000-4000-8000-000000000105',
   pcm: '00000000-0000-4000-8000-000000000106',
   production: '00000000-0000-4000-8000-000000000107',
@@ -22,18 +24,44 @@ const ids = {
   qualityTechnicalRole: '00000000-0000-4000-8000-000000000401',
   safetyTechnicalRole: '00000000-0000-4000-8000-000000000402',
   maintenanceTechnicalRole: '00000000-0000-4000-8000-000000000403',
+  mechanicalTechnicalRole: '00000000-0000-4000-8000-000000000404',
+  electricalTechnicalRole: '00000000-0000-4000-8000-000000000405',
   plant: '00000000-0000-4000-8000-000000000501',
   utilitiesSector: '00000000-0000-4000-8000-000000000502',
   productionSector: '00000000-0000-4000-8000-000000000503',
   utilitiesLine: '00000000-0000-4000-8000-000000000504',
   packagingLine: '00000000-0000-4000-8000-000000000505',
+  fillingSector: '00000000-0000-4000-8000-000000000510',
+  packagingStoryboardSector: '00000000-0000-4000-8000-000000000511',
+  fillingLine1: '00000000-0000-4000-8000-000000000512',
+  fillingLine2: '00000000-0000-4000-8000-000000000513',
+  fillingLine3: '00000000-0000-4000-8000-000000000514',
+  packagingLine1: '00000000-0000-4000-8000-000000000515',
+  packagingLine2: '00000000-0000-4000-8000-000000000516',
+  packagingLine3: '00000000-0000-4000-8000-000000000517',
   pump: '00000000-0000-4000-8000-000000000601',
   motor: '00000000-0000-4000-8000-000000000602',
   compressor: '00000000-0000-4000-8000-000000000603',
   conveyor: '00000000-0000-4000-8000-000000000604',
+  fillingConveyor: '00000000-0000-4000-8000-000000000610',
+  packagingConveyor: '00000000-0000-4000-8000-000000000611',
+  fillerLine1: '00000000-0000-4000-8000-000000000612',
+  fillerLine2: '00000000-0000-4000-8000-000000000613',
+  fillerLine3: '00000000-0000-4000-8000-000000000614',
+  labelerLine1: '00000000-0000-4000-8000-000000000615',
+  labelerLine2: '00000000-0000-4000-8000-000000000616',
+  labelerLine3: '00000000-0000-4000-8000-000000000617',
   pumpBearing: '00000000-0000-4000-8000-000000000701',
   motorBearing: '00000000-0000-4000-8000-000000000702',
   compressorFilter: '00000000-0000-4000-8000-000000000703',
+  fillingConveyorMotor: '00000000-0000-4000-8000-000000000710',
+  packagingConveyorMotor: '00000000-0000-4000-8000-000000000711',
+  fillerLine1Motor: '00000000-0000-4000-8000-000000000712',
+  fillerLine2Motor: '00000000-0000-4000-8000-000000000713',
+  fillerLine3Motor: '00000000-0000-4000-8000-000000000714',
+  labelerLine1Motor: '00000000-0000-4000-8000-000000000715',
+  labelerLine2Motor: '00000000-0000-4000-8000-000000000716',
+  labelerLine3Motor: '00000000-0000-4000-8000-000000000717',
   bearingMaterial: '00000000-0000-4000-8000-000000000711',
   lubricantMaterial: '00000000-0000-4000-8000-000000000712',
   filterMaterial: '00000000-0000-4000-8000-000000000713',
@@ -57,6 +85,12 @@ const ids = {
   readyQualitySignature: '00000000-0000-4000-8000-000000001205',
   readySafetySignature: '00000000-0000-4000-8000-000000001206',
   readyAction: '00000000-0000-4000-8000-000000001207',
+  releaseWorkOrder: '00000000-0000-4000-8000-000000001221',
+  releaseDemand: '00000000-0000-4000-8000-000000001222',
+  releaseQualityRequirement: '00000000-0000-4000-8000-000000001223',
+  releaseSafetyRequirement: '00000000-0000-4000-8000-000000001224',
+  releaseQualitySignature: '00000000-0000-4000-8000-000000001225',
+  releaseSafetySignature: '00000000-0000-4000-8000-000000001226',
   reviewWorkOrder: '00000000-0000-4000-8000-000000001211',
   reviewDemand: '00000000-0000-4000-8000-000000001212',
   reviewQualityRequirement: '00000000-0000-4000-8000-000000001213',
@@ -102,6 +136,8 @@ async function seedIdentities(
     [ids.quality, 'USR-QUAL-DEMO', 'Especialista de Qualidade', 'qualidade.demo@fabcontrol.local'],
     [ids.safety, 'USR-SEG-DEMO', 'Especialista de Segurança', 'seguranca.demo@fabcontrol.local'],
     [ids.maintenance, 'USR-MAN-DEMO', 'Técnico de Manutenção', 'manutencao.demo@fabcontrol.local'],
+    [ids.mechanicalMaintenance, 'USR-MEC-SAMUEL', 'Mecânico Samuel', 'samuel.mecanica@fabcontrol.local'],
+    [ids.electricalMaintenance, 'USR-ELE-NATHAN', 'Eletricista Nathan', 'nathan.eletrica@fabcontrol.local'],
     [ids.operator, 'USR-OPE-DEMO', 'Operador de Homologação', 'operador.demo@fabcontrol.local'],
     [ids.pcm, 'USR-PCM-DEMO', 'Planejador PCM de Homologação', 'pcm.demo@vorqix.local'],
     [ids.production, 'USR-PRO-DEMO', 'Produção de Homologação', 'producao.demo@vorqix.local'],
@@ -150,6 +186,8 @@ async function seedIdentities(
     [ids.quality, 'QUALIDADE'],
     [ids.safety, 'SEGURANCA'],
     [ids.maintenance, 'TECNICO'],
+    [ids.mechanicalMaintenance, 'TECNICO'],
+    [ids.electricalMaintenance, 'TECNICO'],
     [ids.operator, 'OPERADOR'],
     [ids.pcm, 'PCM'],
     [ids.production, 'PRODUCAO'],
@@ -229,6 +267,23 @@ async function seedIdentities(
       [tenantId, ids.operatorRole, capabilityCode],
     );
   }
+
+  await client.query(
+    `
+      INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
+      SELECT $1, role.id, capability.id, 'ALLOW'
+      FROM iam.roles role
+      JOIN iam.capabilities capability ON capability.code IN (
+        'maintenance.actions.assign',
+        'maintenance.work-orders.release'
+      )
+      WHERE role.tenant_id = $1 AND role.code = 'PCM'
+        AND role.status = 'ACTIVE' AND role.deleted_at IS NULL
+        AND capability.status = 'ACTIVE'
+      ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+    `,
+    [tenantId],
+  );
 
   await client.query(
     `
@@ -313,6 +368,8 @@ async function seedIdentities(
     [ids.quality, passwords.quality],
     [ids.safety, passwords.safety],
     [ids.maintenance, passwords.maintenance],
+    [ids.mechanicalMaintenance, passwords.maintenance],
+    [ids.electricalMaintenance, passwords.maintenance],
     [ids.operator, passwords.operator],
     [ids.pcm, passwords.pcm],
     [ids.production, passwords.production],
@@ -367,6 +424,20 @@ async function seedTechnicalProfiles(client: PoolClient, tenantId: string): Prom
       'Técnico de Manutenção',
       false,
     ],
+    [
+      ids.mechanicalTechnicalRole,
+      ids.maintenanceArea,
+      'MECHANICAL_MAINTENANCE_TECHNICIAN',
+      'Mecânico de Manutenção',
+      false,
+    ],
+    [
+      ids.electricalTechnicalRole,
+      ids.maintenanceArea,
+      'ELECTRICAL_MAINTENANCE_TECHNICIAN',
+      'Eletricista de Manutenção',
+      false,
+    ],
   ] as const;
   for (const [id, areaId, code, name, canSign] of roles) {
     await client.query(
@@ -386,6 +457,8 @@ async function seedTechnicalProfiles(client: PoolClient, tenantId: string): Prom
     [ids.quality, ids.qualityArea, ids.qualityTechnicalRole],
     [ids.safety, ids.safetyArea, ids.safetyTechnicalRole],
     [ids.maintenance, ids.maintenanceArea, ids.maintenanceTechnicalRole],
+    [ids.mechanicalMaintenance, ids.maintenanceArea, ids.mechanicalTechnicalRole],
+    [ids.electricalMaintenance, ids.maintenanceArea, ids.electricalTechnicalRole],
   ] as const;
   for (const [userId, areaId, roleId] of assignments) {
     await client.query(
@@ -419,6 +492,8 @@ async function seedCatalog(client: PoolClient, tenantId: string): Promise<void> 
   const sectors = [
     [ids.utilitiesSector, 'UTIL', 'Utilidades'],
     [ids.productionSector, 'PROD', 'Produção e Embalagem'],
+    [ids.fillingSector, 'ENV', 'Envase'],
+    [ids.packagingStoryboardSector, 'EMB', 'Embalagem'],
   ] as const;
   for (const [id, tag, name] of sectors) {
     await client.query(
@@ -434,6 +509,12 @@ async function seedCatalog(client: PoolClient, tenantId: string): Promise<void> 
   const lines = [
     [ids.utilitiesLine, ids.utilitiesSector, 'LIN-UTIL', 'Linha de Utilidades'],
     [ids.packagingLine, ids.productionSector, 'LIN-EMB', 'Linha de Embalagem'],
+    [ids.fillingLine1, ids.fillingSector, 'LIN-ENV-01', 'Linha 01 · Envase'],
+    [ids.fillingLine2, ids.fillingSector, 'LIN-ENV-02', 'Linha 02 · Envase'],
+    [ids.fillingLine3, ids.fillingSector, 'LIN-ENV-03', 'Linha 03 · Envase'],
+    [ids.packagingLine1, ids.packagingStoryboardSector, 'LIN-EMB-01', 'Linha 01 · Embalagem'],
+    [ids.packagingLine2, ids.packagingStoryboardSector, 'LIN-EMB-02', 'Linha 02 · Embalagem'],
+    [ids.packagingLine3, ids.packagingStoryboardSector, 'LIN-EMB-03', 'Linha 03 · Embalagem'],
   ] as const;
   for (const [id, sectorId, tag, name] of lines) {
     await client.query(
@@ -495,6 +576,14 @@ async function seedCatalog(client: PoolClient, tenantId: string): Promise<void> 
       2940.1,
       'Embalagem / inspeção final',
     ],
+    [ids.fillingConveyor, ids.fillingLine1, 'EQ-EST-ENV-01', 'Esteira de entrada do Envase', 'CONVEYOR', 'HIGH', 'OPERATING', 96, 1810.5, 'Envase / alimentação das linhas'],
+    [ids.packagingConveyor, ids.packagingLine1, 'EQ-EST-EMB-01', 'Esteira de saída da Embalagem', 'CONVEYOR', 'HIGH', 'OPERATING', 95, 1807.2, 'Embalagem / saída das linhas'],
+    [ids.fillerLine1, ids.fillingLine1, 'EQ-ENV-01', 'Envasadora Linha 01', 'FILLING_MACHINE', 'CRITICAL', 'OPERATING', 94, 3215.7, 'Envase / Linha 01'],
+    [ids.fillerLine2, ids.fillingLine2, 'EQ-ENV-02', 'Envasadora Linha 02', 'FILLING_MACHINE', 'CRITICAL', 'OPERATING', 93, 3198.4, 'Envase / Linha 02'],
+    [ids.fillerLine3, ids.fillingLine3, 'EQ-ENV-03', 'Envasadora Linha 03', 'FILLING_MACHINE', 'CRITICAL', 'OPERATING', 95, 3227.9, 'Envase / Linha 03'],
+    [ids.labelerLine1, ids.packagingLine1, 'EQ-ROT-01', 'Rotuladora Linha 01', 'LABELING_MACHINE', 'HIGH', 'OPERATING', 92, 3188.1, 'Embalagem / Linha 01'],
+    [ids.labelerLine2, ids.packagingLine2, 'EQ-ROT-02', 'Rotuladora Linha 02', 'LABELING_MACHINE', 'HIGH', 'OPERATING', 91, 3179.6, 'Embalagem / Linha 02'],
+    [ids.labelerLine3, ids.packagingLine3, 'EQ-ROT-03', 'Rotuladora Linha 03', 'LABELING_MACHINE', 'HIGH', 'OPERATING', 94, 3204.3, 'Embalagem / Linha 03'],
   ] as const;
   for (const [
     id,
@@ -574,6 +663,14 @@ async function seedCatalog(client: PoolClient, tenantId: string): Promise<void> 
       'MEDIUM',
       'MAINTENANCE_PLANNED',
     ],
+    [ids.fillingConveyorMotor, ids.fillingConveyor, 'CMP-MOT-EST-ENV-01', 'Motor da esteira de entrada', 'ELECTRIC_MOTOR', 'HIGH', 'OPERATING'],
+    [ids.packagingConveyorMotor, ids.packagingConveyor, 'CMP-MOT-EST-EMB-01', 'Motor da esteira de saída', 'ELECTRIC_MOTOR', 'HIGH', 'OPERATING'],
+    [ids.fillerLine1Motor, ids.fillerLine1, 'CMP-MOT-ENV-01', 'Motor principal da envasadora 01', 'ELECTRIC_MOTOR', 'CRITICAL', 'OPERATING'],
+    [ids.fillerLine2Motor, ids.fillerLine2, 'CMP-MOT-ENV-02', 'Motor principal da envasadora 02', 'ELECTRIC_MOTOR', 'CRITICAL', 'OPERATING'],
+    [ids.fillerLine3Motor, ids.fillerLine3, 'CMP-MOT-ENV-03', 'Motor principal da envasadora 03', 'ELECTRIC_MOTOR', 'CRITICAL', 'OPERATING'],
+    [ids.labelerLine1Motor, ids.labelerLine1, 'CMP-MOT-ROT-01', 'Motor principal da rotuladora 01', 'ELECTRIC_MOTOR', 'HIGH', 'OPERATING'],
+    [ids.labelerLine2Motor, ids.labelerLine2, 'CMP-MOT-ROT-02', 'Motor principal da rotuladora 02', 'ELECTRIC_MOTOR', 'HIGH', 'OPERATING'],
+    [ids.labelerLine3Motor, ids.labelerLine3, 'CMP-MOT-ROT-03', 'Motor principal da rotuladora 03', 'ELECTRIC_MOTOR', 'HIGH', 'OPERATING'],
   ] as const;
   for (const [id, assetId, tag, name, type, criticality, operationalStatus] of components) {
     await client.query(
@@ -1225,6 +1322,13 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
     title: 'Diagnóstico após alerta de temperatura',
     revision: 1,
   });
+  const releaseHash = hashPolicy({
+    code: 'OS-HML-RELEASE-001',
+    planVersionId: ids.periodicPlanVersion,
+    checklistVersionId: ids.pumpChecklistVersion,
+    title: 'Preventiva aprovada aguardando liberação PCM',
+    revision: 1,
+  });
 
   const workOrders = [
     {
@@ -1237,7 +1341,21 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
       description: 'Cenário homologável com checklist completo e validações permanentes.',
       priority: 'HIGH',
       stopMode: 'MANDATORY_STOP',
+      requiresInitialValidation: true,
       hash: readyHash,
+    },
+    {
+      id: ids.releaseWorkOrder,
+      demandId: ids.releaseDemand,
+      code: 'OS-HML-RELEASE-001',
+      planVersionId: ids.periodicPlanVersion,
+      workType: 'PREVENTIVE',
+      title: 'Preventiva aprovada aguardando liberação PCM',
+      description: 'Cenário de homologação para liberação, atribuição e execução pelo técnico.',
+      priority: 'HIGH',
+      stopMode: 'EXECUTOR_DECISION',
+      requiresInitialValidation: false,
+      hash: releaseHash,
     },
     {
       id: ids.reviewWorkOrder,
@@ -1249,6 +1367,7 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
       description: 'Cenário pendente para testar a validação de Qualidade e Segurança.',
       priority: 'CRITICAL',
       stopMode: 'EXECUTOR_DECISION',
+      requiresInitialValidation: true,
       hash: reviewHash,
     },
   ] as const;
@@ -1287,6 +1406,16 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
         }),
       ],
     );
+
+    if (!workOrder.requiresInitialValidation) {
+      await client.query(
+        `UPDATE maintenance.work_orders
+         SET status='APPROVED', content_hash_sha256=$2
+         WHERE tenant_id=$1 AND id=$3 AND status='DRAFT'`,
+        [tenantId, workOrder.hash, workOrder.id],
+      );
+      continue;
+    }
 
     await client.query(
       `
@@ -1363,6 +1492,9 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
       roleId: ids.qualityTechnicalRole,
       roleSnapshot: 'GESTOR_TECNICO:QUALITY:QUALITY_INSPECTOR',
       declaration: 'Conteúdo e requisitos da Qualidade aprovados para homologação.',
+      demandId: ids.readyDemand,
+      workOrderId: ids.readyWorkOrder,
+      payloadHash: readyHash,
     },
     {
       id: ids.readySafetySignature,
@@ -1372,6 +1504,9 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
       roleId: ids.safetyTechnicalRole,
       roleSnapshot: 'GESTOR_TECNICO:SAFETY:SAFETY_TECHNICIAN',
       declaration: 'Riscos, bloqueio e requisitos de Segurança aprovados para homologação.',
+      demandId: ids.readyDemand,
+      workOrderId: ids.readyWorkOrder,
+      payloadHash: readyHash,
     },
   ] as const;
   for (const signature of signatures) {
@@ -1395,46 +1530,48 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
       [
         signature.id,
         tenantId,
-        ids.readyDemand,
+        signature.demandId,
         signature.requirementId,
-        ids.readyWorkOrder,
+        signature.workOrderId,
         signature.userId,
         signature.roleSnapshot,
         signature.areaId,
         signature.roleId,
         signature.declaration,
-        readyHash,
-        hashPolicy({ signatureId: signature.id, demandId: ids.readyDemand, payload: readyHash }),
+        signature.payloadHash,
+        hashPolicy({ signatureId: signature.id, demandId: signature.demandId, payload: signature.payloadHash }),
       ],
     );
   }
 
-  await client.query(
-    `
-      UPDATE workflow.technical_demands
-      SET status = 'TECHNICALLY_APPROVED',
-          completed_at = COALESCE(completed_at, clock_timestamp())
-      WHERE tenant_id = $1
-        AND id = $2
-        AND status = 'AWAITING_SIGNATURE'
-        AND completed_signature_count = required_signature_count
-    `,
-    [tenantId, ids.readyDemand],
-  );
-  await client.query(
-    `
-      UPDATE maintenance.work_orders work_order
-      SET status = 'APPROVED'
-      FROM workflow.technical_demands demand
-      WHERE work_order.tenant_id = $1
-        AND work_order.id = $2
-        AND work_order.status = 'IN_TECHNICAL_REVIEW'
-        AND demand.tenant_id = work_order.tenant_id
-        AND demand.id = work_order.technical_demand_id
-        AND demand.status = 'TECHNICALLY_APPROVED'
-    `,
-    [tenantId, ids.readyWorkOrder],
-  );
+  for (const [demandId, workOrderId] of [[ids.readyDemand, ids.readyWorkOrder]] as const) {
+    await client.query(
+      `
+        UPDATE workflow.technical_demands
+        SET status = 'TECHNICALLY_APPROVED',
+            completed_at = COALESCE(completed_at, clock_timestamp())
+        WHERE tenant_id = $1
+          AND id = $2
+          AND status = 'AWAITING_SIGNATURE'
+          AND completed_signature_count = required_signature_count
+      `,
+      [tenantId, demandId],
+    );
+    await client.query(
+      `
+        UPDATE maintenance.work_orders work_order
+        SET status = 'APPROVED'
+        FROM workflow.technical_demands demand
+        WHERE work_order.tenant_id = $1
+          AND work_order.id = $2
+          AND work_order.status = 'IN_TECHNICAL_REVIEW'
+          AND demand.tenant_id = work_order.tenant_id
+          AND demand.id = work_order.technical_demand_id
+          AND demand.status = 'TECHNICALLY_APPROVED'
+      `,
+      [tenantId, workOrderId],
+    );
+  }
   await client.query(
     `
       UPDATE maintenance.work_orders
@@ -1541,7 +1678,7 @@ async function main(): Promise<void> {
     await seedOperationalScenarios(client, environment.defaultTenantId);
     await client.query('COMMIT');
     process.stdout.write(
-      'Massa de homologação aplicada: 7 perfis, 4 ativos, 9 tipos de etapa, 1 checklist, 2 planos, 1 validação pendente e 1 ação liberada.\n',
+      'Massa de homologação aplicada: 9 perfis, 12 ativos, 3 linhas de Envase, 3 linhas de Embalagem, motores simulados, 1 checklist, 2 planos, 1 validação pendente, 1 OS aguardando liberação PCM e 1 ação liberada.\n',
     );
   } catch (error) {
     await client.query('ROLLBACK');

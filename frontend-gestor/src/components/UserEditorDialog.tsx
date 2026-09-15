@@ -201,7 +201,7 @@ export function UserEditorDialog({
             {profile ? (
               <>
                 <label>
-                  <span>Ãrea tÃ©cnica</span>
+                  <span>Área técnica</span>
                   <select
                     value={areaId}
                     onChange={(event) => {
@@ -209,16 +209,16 @@ export function UserEditorDialog({
                       setRoleId('')
                     }}
                   >
-                    <option value="">Gestor sem Ã¡rea definida</option>
+                    <option value="">Sem área definida</option>
                     {areas.map((area) => (
                       <option key={area.id} value={area.id}>{area.nome}</option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  <span>Cargo tÃ©cnico</span>
+                  <span>Cargo técnico</span>
                   <select value={roleId} onChange={(event) => setRoleId(event.target.value)}>
-                    <option value="">Sem cargo especÃ­fico</option>
+                    <option value="">Sem cargo específico</option>
                     {availableRoles.map((role) => (
                       <option key={role.id} value={role.id}>{role.nome}</option>
                     ))}
@@ -229,7 +229,7 @@ export function UserEditorDialog({
                   <input
                     value={specialties}
                     onChange={(event) => setSpecialties(event.target.value)}
-                    placeholder="ElÃ©trica, mecÃ¢nica, metrologia"
+                    placeholder="Elétrica, mecânica, metrologia"
                   />
                 </label>
                 <label>

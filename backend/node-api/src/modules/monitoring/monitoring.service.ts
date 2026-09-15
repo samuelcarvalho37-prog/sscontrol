@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { suggestOccurrencePriority } from './occurrence-assessment.js';
 import { loadPcmDashboard } from './pcm-dashboard.js';
+import { loadPcmReports } from './pcm-reports.js';
 
 import type { PoolClient } from 'pg';
 
@@ -1065,6 +1066,7 @@ export class MonitoringService {
           resumo: await this.repository.technicalSummary(client, normalizedQuery),
           ranking_ativos: await this.repository.assetRanking(client, normalizedQuery),
           pcm: await loadPcmDashboard(client, normalizedQuery),
+          relatorios: await loadPcmReports(client, normalizedQuery),
         };
       },
     );

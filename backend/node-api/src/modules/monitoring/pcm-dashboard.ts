@@ -90,7 +90,13 @@ export async function loadPcmDashboard(client: PoolClient, query: AnalyticsQuery
          (SELECT * FROM failures_by_asset ORDER BY falhas DESC,ativo_tag,ativo_id LIMIT $4) row),'[]'::jsonb),
        'falhas_por_setor',COALESCE((SELECT jsonb_agg(row) FROM
          (SELECT * FROM failures_by_sector ORDER BY falhas DESC,setor_nome,setor_id LIMIT $4) row),'[]'::jsonb),
-       'preventivas',COALESCE((SELECT jsonb_agg(row) FROM (SELECT * FROM upcoming LIMIT $4) row),'[]'::jsonb),
+       'ativos_parados_lista',COALESCE((SELECT jsonb_agg(row) FROM
+         (SELECT asset.id,asset.tag AS ativo_tag,asset.name AS ativo_nome,asset.sector_name AS setor_nome
+          FROM assets asset WHERE asset.operational_status='STOPPED'
+            OR EXISTS (SELECT 1 FROM maintenance.equipment_stops stop WHERE stop.asset_id=asset.id
+              AND stop.tenant_id=asset.tenant_id AND stop.status NOT IN ('COMPLETED','CANCELLED'))
+          ORDER BY asset.tag,asset.id LIMIT 50) row),'[]'::jsonb),
+       'preventivas',COALESCE((SELECT jsonb_agg(row) FROM (SELECT * FROM upcoming LIMIT 50) row),'[]'::jsonb),
        'tecnicos',COALESCE((SELECT jsonb_agg(row) FROM
          (SELECT id,name AS nome,executions AS execucoes FROM technicians ORDER BY name,id LIMIT $4) row),'[]'::jsonb)
      ) AS dashboard FROM bounds,downtime`,

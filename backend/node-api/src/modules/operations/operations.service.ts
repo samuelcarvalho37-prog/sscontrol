@@ -186,15 +186,15 @@ export class OperationsService {
           modo_trabalho: validationMode ? 'VALIDACAO' : 'ACOMPANHAMENTO',
           politicas_assinatura: [
             { codigo: 'QUALIDADE', nome: 'Qualidade', assinaturas: 1 },
-            { codigo: 'SEGURANCA', nome: 'SeguranÃ§a', assinaturas: 1 },
+            { codigo: 'SEGURANCA', nome: 'Segurança', assinaturas: 1 },
             {
               codigo: 'QUALIDADE_OU_SEGURANCA',
-              nome: 'Qualidade ou SeguranÃ§a',
+              nome: 'Qualidade ou Segurança',
               assinaturas: 1,
             },
             {
               codigo: 'QUALIDADE_E_SEGURANCA',
-              nome: 'Qualidade e SeguranÃ§a',
+              nome: 'Qualidade e Segurança',
               assinaturas: 2,
             },
           ],
@@ -229,7 +229,7 @@ export class OperationsService {
         const assumed = await this.repository.assumeTechnicalDemand(client, demandId, user.id);
         if (!assumed) {
           const demand = await this.repository.findDemand(client, demandId);
-          if (!demand) throw error('TECHNICAL_DEMAND_NOT_FOUND', 'Demanda nÃ£o encontrada.', 404);
+          if (!demand) throw error('TECHNICAL_DEMAND_NOT_FOUND', 'Demanda não encontrada.', 404);
           if (demand.current_responsible_id === user.id) {
             const visible = await this.repository.listTechnicalDemands(
               client,
@@ -245,7 +245,7 @@ export class OperationsService {
           }
           throw error(
             'TECHNICAL_DEMAND_NOT_ELIGIBLE',
-            'A demanda nÃ£o estÃ¡ disponÃ­vel para o seu escopo tÃ©cnico.',
+            'A demanda não está disponível para o seu escopo técnico.',
             409,
           );
         }
@@ -266,7 +266,7 @@ export class OperationsService {
           { search: '', statuses: [], limit: 300 },
         );
         const demand = visible.find((row) => row.id === demandId);
-        if (!demand) throw error('TECHNICAL_DEMAND_NOT_FOUND', 'Demanda nÃ£o encontrada.', 404);
+        if (!demand) throw error('TECHNICAL_DEMAND_NOT_FOUND', 'Demanda não encontrada.', 404);
         await this.repository.writeAudit(
           client,
           user.tenantId,
@@ -828,12 +828,59 @@ export class OperationsService {
     );
   }
 
+  async listActiveTechnicians(user: AuthenticatedUser) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => ({ tecnicos: await this.repository.listActiveTechnicians(client) }),
+    );
+  }
+
+  async assignMaintenanceAction(
+    user: AuthenticatedUser,
+    actionId: string,
+    technicianId: string,
+    supportTechnicianIds: readonly string[],
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const action = await this.repository.findAction(client, actionId, true);
+        if (!action) throw error('MAINTENANCE_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
+        if (text(action, 'status') !== 'READY') {
+          throw error('MAINTENANCE_ACTION_NOT_ASSIGNABLE', 'Somente uma ação pronta pode receber técnico.', 409);
+        }
+        const team = [technicianId, ...supportTechnicianIds];
+        if (team.length > 4 || new Set(team).size !== team.length) {
+          throw error('MAINTENANCE_TEAM_INVALID', 'A equipe deve ter um líder e até três técnicos de apoio distintos.', 422);
+        }
+        if (!(await this.repository.activeTechnicianExists(client, technicianId))) {
+          throw error('MAINTENANCE_TECHNICIAN_INVALID', 'O responsável deve ser um técnico ativo.', 422);
+        }
+        for (const supportId of supportTechnicianIds) {
+          if (!(await this.repository.activeTechnicianExists(client, supportId))) {
+            throw error('MAINTENANCE_TECHNICIAN_INVALID', 'Os técnicos de apoio devem estar ativos.', 422);
+          }
+        }
+        await this.repository.assignAction(client, actionId, technicianId, supportTechnicianIds);
+        const detail = await this.repository.getOperatorActionDetail(client, actionId);
+        if (!detail) throw error('MAINTENANCE_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
+        await this.repository.writeAudit(
+          client, user.tenantId, user.id, audit,
+          'MAINTENANCE_ACTION_ASSIGNED', 'WORK_ORDER_ACTION', actionId,
+          { responsavel_id: technicianId, tecnicos_apoio_ids: supportTechnicianIds, acao: detail },
+        );
+        return detail;
+      },
+    );
+  }
+
   async getMaintenanceAction(user: AuthenticatedUser, actionId: string) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const action = await this.repository.getOperatorActionDetail(client, actionId);
-        if (!action) throw error('MAINTENANCE_ACTION_NOT_FOUND', 'AÃ§Ã£o nÃ£o encontrada.', 404);
+        if (!action) throw error('MAINTENANCE_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
         const executionId = typeof action.execucao_id === 'string' ? action.execucao_id : null;
         const execution = executionId
           ? await this.repository.getExecutionDetail(client, executionId)
@@ -873,10 +920,10 @@ export class OperationsService {
         if (!action) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
-        if (action.responsible_id !== null && action.responsible_id !== user.id) {
+        if (action.responsible_id !== user.id) {
           throw error(
             'OPERATOR_ACTION_ASSIGNED_TO_ANOTHER_USER',
-            'A ação está atribuída a outro usuário.',
+            'A ação não está atribuída a este técnico.',
             403,
           );
         }
@@ -1236,10 +1283,10 @@ export class OperationsService {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         if (text(action, 'status') !== 'READY')
           throw error('OPERATOR_ACTION_NOT_READY', 'A ação não está disponível para assumir.', 409);
-        if (action.responsible_id !== null && action.responsible_id !== user.id) {
+        if (action.responsible_id !== user.id) {
           throw error(
             'OPERATOR_ACTION_ASSIGNED_TO_ANOTHER_USER',
-            'A ação está atribuída a outro usuário.',
+            'A ação não está atribuída a este técnico.',
             403,
           );
         }
@@ -1323,6 +1370,28 @@ export class OperationsService {
         return detail;
       },
     );
+  }
+
+  async pauseExecution(user: AuthenticatedUser, executionId: string, reason: string, audit: RequestAuditMetadata) {
+    return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
+      const execution = await this.ownedExecution(client, executionId, user.id);
+      if (text(execution, 'status') !== 'IN_PROGRESS') throw error('EXECUTION_NOT_IN_PROGRESS', 'Somente uma execução em andamento pode ser pausada.', 409);
+      await this.repository.pauseExecution(client, executionId, reason.trim());
+      const detail = await this.requiredExecutionDetail(client, executionId);
+      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'EXECUTION_PAUSED', 'EXECUTION', executionId, { motivo: reason.trim() }, detail);
+      return detail;
+    });
+  }
+
+  async resumeExecution(user: AuthenticatedUser, executionId: string, audit: RequestAuditMetadata) {
+    return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
+      const execution = await this.ownedExecution(client, executionId, user.id);
+      if (text(execution, 'status') !== 'PAUSED') throw error('EXECUTION_NOT_PAUSED', 'A execução não está pausada.', 409);
+      await this.repository.resumeExecution(client, executionId);
+      const detail = await this.requiredExecutionDetail(client, executionId);
+      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'EXECUTION_RESUMED', 'EXECUTION', executionId, null, detail);
+      return detail;
+    });
   }
 
   async answerItem(
@@ -1744,7 +1813,7 @@ export class OperationsService {
     const responsibleId = typeof action.responsavel_id === 'string' ? action.responsavel_id : null;
     const operatorId = typeof action.operador_id === 'string' ? action.operador_id : null;
     return (
-      (responsibleId === null || responsibleId === userId) &&
+      responsibleId === userId &&
       (operatorId === null || operatorId === userId)
     );
   }
@@ -1770,6 +1839,7 @@ export class OperationsService {
     detail: OperationsRow,
   ) {
     const items = Array.isArray(detail.itens) ? detail.itens : [];
+    const pendingItems = Array.isArray(blockers.pendencias) ? blockers.pendencias : [];
     const pending = integer(blockers, 'pendentes');
     const missingEvidence = integer(blockers, 'evidencias_pendentes');
     const noncompliant = integer(blockers, 'nao_conformes_bloqueantes');
@@ -1789,6 +1859,7 @@ export class OperationsService {
       respostas_pendentes: pending,
       evidencias_pendentes: missingEvidence,
       nao_conformes_bloqueantes: noncompliant,
+      pendencias: pendingItems,
     };
   }
 

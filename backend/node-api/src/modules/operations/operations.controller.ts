@@ -36,6 +36,7 @@ interface MaintenanceActionQuery {
   readonly ativo_id?: string;
   readonly limite?: number;
 }
+interface AssignActionBody { readonly responsavel_id: string; readonly tecnicos_apoio_ids?: readonly string[]; }
 interface WorkOrderBody {
   readonly plano_versao_id: string;
   readonly tipo_origem: string;
@@ -93,6 +94,9 @@ interface EvidenceBody {
 }
 interface StartBody {
   readonly modo_parada: ExecutionStopMode;
+}
+interface PauseBody {
+  readonly motivo: string;
 }
 interface CompleteBody {
   readonly relatorio_tecnico?: import('./operations.types.js').CompletionInput['technicalReport'];
@@ -331,6 +335,19 @@ export class OperationsController {
       ),
     );
 
+  listActiveTechnicians = async (request: FastifyRequest) =>
+    successEnvelope(request, 'maintenance.technicians.list', await this.service.listActiveTechnicians(user(request)));
+
+  assignMaintenanceAction = async (
+    request: FastifyRequest<{ Params: Params; Body: AssignActionBody }>,
+  ) => successEnvelope(
+    request,
+    'maintenance.actions.assign',
+    await this.service.assignMaintenanceAction(
+      user(request), id(request.params, 'actionId'), request.body.responsavel_id, request.body.tecnicos_apoio_ids ?? [], audit(request),
+    ),
+  );
+
   listOperatorActions = async (
     request: FastifyRequest<{ Querystring: { readonly limite?: number } }>,
   ) =>
@@ -462,6 +479,29 @@ export class OperationsController {
         user(request),
         id(request.params, 'executionId'),
         request.body.modo_parada,
+        audit(request),
+      ),
+    );
+
+  pauseExecution = async (request: FastifyRequest<{ Params: Params; Body: PauseBody }>) =>
+    successEnvelope(
+      request,
+      'maintenance.executions.pause',
+      await this.service.pauseExecution(
+        user(request),
+        id(request.params, 'executionId'),
+        request.body.motivo,
+        audit(request),
+      ),
+    );
+
+  resumeExecution = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(
+      request,
+      'maintenance.executions.resume',
+      await this.service.resumeExecution(
+        user(request),
+        id(request.params, 'executionId'),
         audit(request),
       ),
     );

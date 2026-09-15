@@ -35,6 +35,7 @@ const ids = {
   checklist: randomUUID(),
   checklistVersion: randomUUID(),
   confirmationItem: randomUUID(),
+  inspectionItem: randomUUID(),
   parameterItem: randomUUID(),
   evidenceItem: randomUUID(),
   plan: randomUUID(),
@@ -275,11 +276,13 @@ async function seed(pool: Pool): Promise<Identities> {
       `INSERT INTO maintenance.checklist_items
       (id,tenant_id,checklist_template_version_id,sequence,title,instruction,response_type_code,category,required,evidence_required,minimum_evidence_photos,blocks_completion,parameter_definition_id,minimum_value,maximum_value,unit)
       VALUES
-      ($1,$4,$5,1,'Confirmar bloqueio','Confirme o bloqueio seguro.','CONFIRMACAO','SEGURANCA',true,false,0,true,NULL,NULL,NULL,NULL),
-      ($2,$4,$5,2,'Medir temperatura','Registre a temperatura.','PARAMETRO','TECNICO',true,false,0,true,$6,150,170,'°C'),
-      ($3,$4,$5,3,'Fotografar condição','Registre evidência.','EVIDENCIA','TECNICO',true,true,1,true,NULL,NULL,NULL,NULL)`,
+      ($1,$5,$6,1,'Confirmar bloqueio','Confirme o bloqueio seguro.','CONFIRMACAO','SEGURANCA',true,false,0,true,NULL,NULL,NULL,NULL),
+      ($2,$5,$6,2,'Inspecionar condição do rolamento','Registre a condição encontrada.','OK_NOK','MECANICA',true,false,0,true,NULL,NULL,NULL,NULL),
+      ($3,$5,$6,3,'Medir temperatura','Registre a temperatura.','PARAMETRO','TECNICO',true,false,0,true,$7,150,170,'°C'),
+      ($4,$5,$6,4,'Fotografar condição','Registre evidência.','EVIDENCIA','TECNICO',true,true,1,true,NULL,NULL,NULL,NULL)`,
       [
         ids.confirmationItem,
+        ids.inspectionItem,
         ids.parameterItem,
         ids.evidenceItem,
         tenantId,
@@ -442,7 +445,7 @@ test(
         titulo: 'Preventiva integral da prensa',
         descricao: 'Executar checklist validado.',
         prioridade: 'HIGH',
-        responsavel_id: null,
+        responsavel_id: ids.operator,
         programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
           situacao: 'Manutenção programada',
@@ -467,7 +470,8 @@ test(
     });
     assert.equal(submitted.statusCode, 200, submitted.body);
     const demandId: string = submitted.json().data.validacao.id;
-    assert.equal(submitted.json().data.checklist_itens.length, 3);
+    // O cenário completo inclui confirmação, inspeção, parâmetro e evidência.
+    assert.equal(submitted.json().data.checklist_itens.length, 4);
 
     const technicalContext = await app.inject({
       method: 'GET',
@@ -539,7 +543,7 @@ test(
     assert.ok(listedWorkOrder);
     assert.equal(listedWorkOrder.plano_id, ids.plan);
     assert.equal(listedWorkOrder.plano_versao_id, ids.planVersion);
-    assert.equal(listedWorkOrder.plano_itens_count, 3);
+    assert.equal(listedWorkOrder.plano_itens_count, 4);
     assert.equal(listedWorkOrder.acao_status, 'READY');
     assert.equal(listedWorkOrder.assinaturas_realizadas, 0);
 
@@ -568,7 +572,7 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(actionContext.statusCode, 200, actionContext.body);
-    assert.equal(actionContext.json().data.acao.checklist_itens.length, 3);
+    assert.equal(actionContext.json().data.acao.checklist_itens.length, 4);
     assert.equal(actionContext.json().data.execucao, null);
 
     const assumed = await app.inject({
@@ -578,7 +582,7 @@ test(
     });
     assert.equal(assumed.statusCode, 200, assumed.body);
     const executionId: string = assumed.json().data.id;
-    assert.equal(assumed.json().data.itens.length, 3);
+    assert.equal(assumed.json().data.itens.length, 4);
 
     const started = await app.inject({
       method: 'POST',
@@ -606,8 +610,24 @@ test(
     const executionItems: readonly { id: string; tipo_resposta: string }[] =
       started.json().data.itens;
     const confirmation = executionItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
+    const inspection = executionItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
     const parameter = executionItems.find((item) => item.tipo_resposta === 'PARAMETRO')!;
     const evidence = executionItems.find((item) => item.tipo_resposta === 'EVIDENCIA')!;
+
+    const validationBeforeInspection = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/executions/${executionId}/validation`,
+      headers: bearer(identities.operator),
+    });
+    assert.equal(validationBeforeInspection.statusCode, 200, validationBeforeInspection.body);
+    assert.equal(validationBeforeInspection.json().data.pode_concluir, false);
+    assert.equal(
+      validationBeforeInspection.json().data.pendencias.some(
+        (item: { item_id: string; tipo: string }) =>
+          item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
+      ),
+      true,
+    );
 
     const answered = await app.inject({
       method: 'PUT',
@@ -622,6 +642,12 @@ test(
             observacao: null,
           },
           {
+            item_id: inspection.id,
+            resposta: 'OK',
+            valor: null,
+            observacao: 'Sem anormalidades.',
+          },
+          {
             item_id: parameter.id,
             resposta: null,
             valor: 160,
@@ -631,7 +657,24 @@ test(
       },
     });
     assert.equal(answered.statusCode, 200, answered.body);
-    assert.equal(answered.json().data.quantidade_salva, 2);
+    assert.equal(answered.json().data.quantidade_salva, 3);
+    const savedInspection = answered.json().data.execucao.itens.find(
+      (item: { id: string }) => item.id === inspection.id,
+    );
+    assert.equal(savedInspection.resposta_opcao, 'OK');
+    assert.equal(savedInspection.observacao, 'Sem anormalidades.');
+
+    const reloadedAction = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/operator-actions/${actionId}`,
+      headers: bearer(identities.operator),
+    });
+    assert.equal(reloadedAction.statusCode, 200, reloadedAction.body);
+    const reloadedInspection = reloadedAction.json().data.execucao.itens.find(
+      (item: { id: string }) => item.id === inspection.id,
+    );
+    assert.equal(reloadedInspection.resposta_opcao, 'OK');
+    assert.equal(reloadedInspection.observacao, 'Sem anormalidades.');
 
     const blockedCompletion = await app.inject({
       method: 'POST',
@@ -654,6 +697,24 @@ test(
     assert.equal(blockedValidation.statusCode, 200, blockedValidation.body);
     assert.equal(blockedValidation.json().data.pode_concluir, false);
     assert.equal(blockedValidation.json().data.evidencias_pendentes, 1);
+    assert.equal(
+      blockedValidation.json().data.pendencias.some(
+        (item: { item_id: string; tipo: string }) =>
+          item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
+      ),
+      false,
+    );
+    const evidenceBlocker = blockedValidation.json().data.pendencias.find(
+      (item: { item_id: string; tipo: string }) =>
+        item.item_id === evidence.id && item.tipo === 'EVIDENCIA_OBRIGATORIA',
+    );
+    assert.deepEqual(evidenceBlocker, {
+      item_id: evidence.id,
+      titulo: 'Fotografar condição',
+      sequencia: 4,
+      tipo: 'EVIDENCIA_OBRIGATORIA',
+      mensagem: 'Evidência obrigatória não anexada.',
+    });
 
     const evidenced = await app.inject({
       method: 'POST',
@@ -772,6 +833,14 @@ test(
       '1 rolamento 6204; 30 g de graxa.',
     );
 
+    const awaitingTechnicalReview = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/work-orders/${workOrderId}`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(awaitingTechnicalReview.statusCode, 200, awaitingTechnicalReview.body);
+    assert.equal(awaitingTechnicalReview.json().data.status, 'IN_TECHNICAL_REVIEW');
+
     await transaction(pool, async client => {
       assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),true);
     });
@@ -812,7 +881,7 @@ test(
     assert.equal(completedAction.statusCode, 200, completedAction.body);
     assert.equal(completedAction.json().data.acao.status, 'COMPLETED');
     assert.equal(completedAction.json().data.execucao.status, 'COMPLETED');
-    assert.equal(completedAction.json().data.execucao.itens.length, 3);
+    assert.equal(completedAction.json().data.execucao.itens.length, 4);
 
     const emptyQueue = await app.inject({
       method: 'GET',
@@ -907,5 +976,65 @@ test(
     assert.equal(finalPcm.json().data.pcm.atual.ordens_atrasadas,3);
     assert.equal(finalPcm.json().data.pcm.atual.preventivas_proximas,1);
     assert.equal(finalPcm.json().data.pcm.preventivas.length,1);
+
+    const normalWorkOrder = await app.inject({
+      method: 'POST', url: '/v1/maintenance/work-orders', headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion, tipo_origem: 'ADMIN', entidade_origem_id: null,
+        tipo_trabalho: 'PREVENTIVE', titulo: 'Preventiva normal concluída pelo técnico',
+        descricao: 'Fluxo normal sem validação posterior.', prioridade: 'MEDIUM',
+        responsavel_id: ids.operator, programada_para: new Date(Date.now() + 86400000).toISOString(),
+        analise_tecnica: { resultado_esperado: 'Equipamento liberado.' },
+      },
+    });
+    assert.equal(normalWorkOrder.statusCode, 200, normalWorkOrder.body);
+    const normalWorkOrderId: string = normalWorkOrder.json().data.id;
+    const normalReleased = await app.inject({
+      method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/submit-review`, headers: bearer(identities.admin),
+      payload: { politica_assinatura: 'QUALIDADE', assinaturas_exigidas: 1, primeira_resposta_ate: null, resolucao_ate: null },
+    });
+    assert.equal(normalReleased.statusCode, 200, normalReleased.body);
+    assert.equal(normalReleased.json().data.status, 'RELEASED');
+    assert.equal(normalReleased.json().data.validacao, null);
+
+    const normalQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.operator) });
+    assert.equal(normalQueue.statusCode, 200, normalQueue.body);
+    const normalActionId: string = normalQueue.json().data.itens[0].id;
+    const normalStarted = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`, headers: bearer(identities.operator),
+      payload: { modo_parada: 'NO_STOP' },
+    });
+    assert.equal(normalStarted.statusCode, 200, normalStarted.body);
+    const normalExecutionId: string = normalStarted.json().data.execucao.id;
+    const normalItems: readonly { id: string; tipo_resposta: string }[] = normalStarted.json().data.execucao.itens;
+    const normalConfirmation = normalItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
+    const normalInspection = normalItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
+    const normalParameter = normalItems.find((item) => item.tipo_resposta === 'PARAMETRO')!;
+    const normalEvidence = normalItems.find((item) => item.tipo_resposta === 'EVIDENCIA')!;
+    const normalResponses = await app.inject({
+      method: 'PUT', url: `/v1/maintenance/operator-actions/${normalActionId}/responses`, headers: bearer(identities.operator),
+      payload: { itens: [
+        { item_id: normalConfirmation.id, resposta: 'SIM', valor: null, observacao: null },
+        { item_id: normalInspection.id, resposta: 'OK', valor: null, observacao: 'Condição normal.' },
+        { item_id: normalParameter.id, resposta: null, valor: 160, observacao: null },
+      ] },
+    });
+    assert.equal(normalResponses.statusCode, 200, normalResponses.body);
+    const normalEvidenceSaved = await app.inject({
+      method: 'POST', url: `/v1/maintenance/executions/${normalExecutionId}/items/${normalEvidence.id}/evidence`, headers: bearer(identities.operator),
+      payload: { objeto_armazenamento_id: ids.storageObject, tipo: 'PHOTO', observacao: 'Evidência normal.', capturada_em: null },
+    });
+    assert.equal(normalEvidenceSaved.statusCode, 200, normalEvidenceSaved.body);
+    const normalCompleted = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/complete`, headers: bearer(identities.operator),
+      payload: { resultado: 'Preventiva normal concluída.', observacao: null, modo_parada: 'NO_STOP' },
+    });
+    assert.equal(normalCompleted.statusCode, 200, normalCompleted.body);
+    const normalClosed = await app.inject({
+      method: 'GET', url: `/v1/maintenance/work-orders/${normalWorkOrderId}`, headers: bearer(identities.admin),
+    });
+    assert.equal(normalClosed.statusCode, 200, normalClosed.body);
+    assert.equal(normalClosed.json().data.status, 'COMPLETED');
+    assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
   },
 );

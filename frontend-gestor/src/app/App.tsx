@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
 import { PcmDashboard } from '../components/PcmDashboard'
+import { TechnicianDashboard } from '../components/TechnicianDashboard'
 import {
   AppNavigation,
   type GestorSection,
@@ -45,6 +46,23 @@ import type {
   GestorWorkView,
 } from '../types/gestor'
 
+const PROFILE_TAB_TITLES: Record<string, string> = {
+  ADMIN: 'Administração',
+  SISTEMA: 'Administração',
+  GESTOR: 'PCM',
+  PCM: 'PCM',
+  TECNICO: 'Técnico',
+  PRODUCAO: 'Produção',
+  QUALIDADE: 'Qualidade',
+  SEGURANCA: 'Segurança',
+  OPERADOR: 'Operação',
+}
+
+function profileTabTitle(profile?: string) {
+  const normalizedProfile = profile?.trim().toUpperCase() ?? ''
+  return PROFILE_TAB_TITLES[normalizedProfile] ?? 'Gestão Industrial'
+}
+
 export function App() {
   const [session, setSession] = useState<GestorSession | null>(readGestorSession)
   const [maintenanceEntry, setMaintenanceEntry] = useState(
@@ -71,7 +89,14 @@ export function App() {
   const canReportOccurrence = session?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
+  const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const compactDevice = useAdaptiveDevice()
+
+  useEffect(() => {
+    document.title = session
+      ? `VORQIX ${profileTabTitle(session.user.perfil)}`
+      : 'VORQIX — Unidade Industrial'
+  }, [session])
 
   const expireSession = useCallback(() => {
     markExpiredGestorSession()
@@ -119,14 +144,14 @@ export function App() {
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
         setTechnicalContext(context)
-        if (!context.pode_validar) setSection(canReadAnalytics ? 'validations' : 'more')
+        if (!context.pode_validar && !isTechnician) setSection(canReadAnalytics ? 'validations' : 'more')
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
         if (isGestorAuthenticationError(cause)) expireSession()
       })
     return () => controller.abort()
-  }, [expireSession, isAdmin, isSystem, session, workspaceReady, canReadWork, canReadAnalytics])
+  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canReadWork, canReadAnalytics])
 
   useEffect(() => {
     if (!session) return
@@ -308,7 +333,7 @@ export function App() {
           </div>
         </div>
 
-        <div className="topbar__actions">
+        <div className={`topbar__actions${isTechnician ? ' topbar__actions--technician' : ''}`}>
           <span className="connection-chip">
             <i aria-hidden="true" />
             Online
@@ -348,7 +373,8 @@ export function App() {
 
         <div className="app-content">
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
-          {section === 'home' && canReadWork ? (
+          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
+          {section === 'home' && canReadWork && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
               initialView={decisionView}
@@ -404,6 +430,7 @@ export function App() {
           validationCount={validationCount}
           showAdmin={false}
           canValidate={technicalContext?.pode_validar ?? false}
+          isTechnician={isTechnician}
           canReadAnalytics={canReadAnalytics}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}

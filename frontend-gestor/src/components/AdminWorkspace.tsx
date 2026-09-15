@@ -902,11 +902,8 @@ export function AdminWorkspace({
       </section>
 
       <header className="admin-desktop-topbar">
-        <div className="admin-desktop-brand">
-          {companyProfile.logo_data_url
-            ? <img src={companyProfile.logo_data_url} alt="" />
-            : <span aria-hidden="true">TOZ</span>}
-          <strong title={companyProfile.nome}>{companyProfile.nome}</strong>
+        <div className="admin-desktop-brand" aria-label="VORQIX — Unidade Industrial">
+          <img src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
         </div>
 
         <button className="admin-desktop-command" type="button" onClick={() => setPaletteOpen(true)}>

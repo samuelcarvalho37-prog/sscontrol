@@ -12,6 +12,11 @@ const questions: [keyof Assessment, string][] = [
 const blank = (): Assessment => ({ equipamento_parado: null, risco_parada: null, risco_seguranca: null, impacto_producao: null, impacto_qualidade: null, existe_redundancia: null })
 const labels = ['Setor', 'Linha', 'Equipamento', 'Problema', 'Situação atual', 'Avaliação', 'Prioridade', 'Descrição e foto', 'Revisar e enviar']
 const priorities: Record<string, string> = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa' }
+function displayName(value: string): string {
+  return value
+    .replace(/\btranporte\b/giu, 'Transporte')
+    .replace(/\benbalagens\b/giu, 'Embalagens')
+}
 function priority(a: Assessment) {
   if (a.risco_seguranca || (a.equipamento_parado && a.impacto_producao && !a.existe_redundancia)) return 'CRITICAL'
   if (a.equipamento_parado || a.impacto_qualidade || (a.risco_parada && !a.existe_redundancia)) return 'HIGH'
@@ -50,7 +55,7 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
     const controller = new AbortController()
     setLoading(true); setError('')
     void request<Structure>('/v1/cmms/structure?status=ACTIVE', undefined, controller.signal)
-      .then(data => setSectors(data.plantas.flatMap(plant => plant.setores.map(item => ({ ...item, nome: `${plant.nome} · ${item.nome}` })))))
+      .then(data => setSectors(data.plantas.flatMap(plant => plant.setores.map(item => ({ ...item, nome: `${displayName(plant.nome)} · ${displayName(item.nome)}` })))))
       .catch(cause => { if (!controller.signal.aborted) setError(String(cause.message ?? cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
@@ -108,7 +113,7 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
     finally { setSending(false) }
   }
   const valid = [!!sector, !!line, !!asset, !!problem, situation.trim().length >= 3, questions.every(([key]) => answers[key] !== null), true, description.trim().length >= 3, true][step]
-  const select = (label: string, value: string, choices: Choice[], change: (value: string) => void) => <label style={{ display: 'grid', gap: 8 }}>{label}<select value={value} onChange={event => change(event.target.value)} style={{ padding: 12 }}><option value="">Selecione</option>{choices.map(item => <option key={item.id} value={item.id}>{item.tag ? `${item.tag} · ` : ''}{item.nome}</option>)}</select>{!loading && !choices.length && <span>Nenhum registro disponível.</span>}</label>
+  const select = (label: string, value: string, choices: Choice[], change: (value: string) => void) => <label style={{ display: 'grid', gap: 8 }}>{label}<select value={value} onChange={event => change(event.target.value)} style={{ padding: 12 }}><option value="">Selecione</option>{choices.map(item => <option key={item.id} value={item.id}>{item.tag ? `${item.tag} · ` : ''}{displayName(item.nome)}</option>)}</select>{!loading && !choices.length && <span>Nenhum registro disponível.</span>}</label>
   return <section style={{ maxWidth: 760, margin: '24px auto', padding: 24, background: '#fff', color: '#102d42', borderRadius: 18, display: 'grid', gap: 20 }}>
     <header><h1>Nova ocorrência</h1><p>Informe o problema para a equipe de manutenção.</p></header>
     {sent ? <><p role="status">Ocorrência enviada: {sent}</p><button onClick={() => { setSent(''); setStep(0); setSector(''); setLine(''); setAsset(''); setProblem(''); setSituation(''); setAnswers(blank()); setDescription('') }}>Registrar outra ocorrência</button></> : <>

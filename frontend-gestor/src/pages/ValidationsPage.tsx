@@ -44,7 +44,24 @@ function upper(value: unknown): string {
 }
 
 function humanize(value: unknown): string {
-  const normalized = String(value ?? '')
+  const raw = String(value ?? '').trim()
+  const knownLabels: Record<string, string> = {
+    LOW: 'Baixa',
+    MEDIUM: 'Média',
+    HIGH: 'Alta',
+    CRITICAL: 'Crítica',
+    PREVENTIVE: 'Preventiva',
+    CORRECTIVE: 'Corretiva',
+    PREDICTIVE: 'Preditiva',
+    INSPECTION: 'Inspeção',
+    IN_PROGRESS: 'Em execução',
+    COMPLETED: 'Concluída',
+    OPEN: 'Aberta',
+    READY: 'Pronta para execução',
+    PAUSED: 'Pausada',
+  }
+  if (knownLabels[raw.toUpperCase()]) return knownLabels[raw.toUpperCase()]
+  const normalized = raw
     .trim()
     .replaceAll('_', ' ')
     .toLocaleLowerCase('pt-BR')

@@ -95,6 +95,9 @@ function statusValue(value: unknown): 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' {
 function operationalStatus(value: unknown): string {
   const status = normalizedText(value).toUpperCase() || 'OPERANDO';
   const statuses: Readonly<Record<string, string>> = {
+    ATIVO: 'OPERATING',
+    ACTIVE: 'OPERATING',
+    SIM: 'OPERATING',
     OPERANDO: 'OPERATING',
     OPERATING: 'OPERATING',
     PARADO: 'STOPPED',

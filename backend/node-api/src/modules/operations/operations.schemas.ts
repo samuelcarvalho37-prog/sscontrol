@@ -48,6 +48,11 @@ export const maintenanceActionListQuerySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const assignActionBodySchema = Type.Object(
+  { responsavel_id: uuid, tecnicos_apoio_ids: Type.Optional(Type.Array(uuid, { maxItems: 3, uniqueItems: true })) },
+  { additionalProperties: false },
+);
+
 export const createWorkOrderBodySchema = Type.Object(
   {
     plano_versao_id: uuid,
@@ -168,6 +173,10 @@ export const startExecutionBodySchema = Type.Object(
       Type.Literal('EXECUTOR_DECISION'),
     ]),
   },
+  { additionalProperties: false },
+);
+export const pauseExecutionBodySchema = Type.Object(
+  { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
   { additionalProperties: false },
 );
 

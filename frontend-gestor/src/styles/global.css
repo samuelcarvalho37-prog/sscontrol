@@ -10793,9 +10793,8 @@ p {
 .admin-desktop-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 190px;
-  max-width: 270px;
+  min-width: 174px;
+  max-width: 210px;
   white-space: nowrap;
 }
 
@@ -10822,9 +10821,10 @@ p {
 }
 
 .admin-desktop-brand > img {
-  width: auto;
-  max-width: 76px;
-  height: 27px;
+  display: block;
+  width: 156px;
+  max-width: 100%;
+  height: 36px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -21830,3 +21830,206 @@ body,
 .auth-brand:has(.vorqix-logo) { flex-direction: column; align-items: flex-start; }
 .auth-startup > .vorqix-logo { margin-inline: auto; }
 .platform-motor-brand > .vorqix-logo { width: 150px; }
+
+/* Sistema visual VORQIX — linguagem compartilhada por todos os perfis. */
+:root {
+  --background: #f3f7fb;
+  --surface: #ffffff;
+  --surface-soft: #f7faff;
+  --text: #102a43;
+  --muted: #5f7389;
+  --line: #d5e1ec;
+  --blue: #0875e1;
+  --blue-dark: #075cb4;
+  --blue-soft: #e8f2ff;
+  --green: #087a55;
+  --green-soft: #e6f7ef;
+  --orange: #9b5d00;
+  --orange-soft: #fff4dc;
+  --red: #c53545;
+  --red-soft: #fff0f2;
+  --shadow: 0 14px 38px rgba(16, 42, 67, 0.10);
+}
+
+body {
+  color: var(--text);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 117, 225, 0.08), transparent 28rem),
+    var(--background);
+}
+
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-color: rgba(8, 117, 225, 0.34);
+}
+
+.topbar,
+.admin-desktop-topbar {
+  border-bottom-color: #cfdeeb;
+  box-shadow: 0 2px 12px rgba(16, 42, 67, 0.04);
+}
+
+.topbar .vorqix-logo,
+.admin-desktop-brand > img {
+  background: transparent;
+}
+
+.primary-button,
+.approve-button,
+.pcm-controls button {
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  border-color: #075fc4;
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.20);
+}
+
+.primary-button:hover:not(:disabled),
+.approve-button:hover:not(:disabled),
+.pcm-controls button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0869cc, #064f9f);
+  box-shadow: 0 10px 22px rgba(8, 117, 225, 0.26);
+}
+
+.secondary-button,
+.logout-button,
+.review-button {
+  border: 1px solid #c8d8e7;
+  color: #1b496d;
+  background: #ffffff;
+}
+
+.secondary-button:hover:not(:disabled),
+.logout-button:hover:not(:disabled),
+.review-button:hover:not(:disabled) {
+  border-color: #8ebee9;
+  background: #edf6ff;
+}
+
+/* Administração: interface clara, com azul reservado para ação e seleção. */
+.admin-desktop-shell {
+  --admin-brand: #0875e1;
+  --admin-brand-strong: #075cb4;
+  --admin-line: #d5e1ec;
+}
+
+.admin-desktop-command,
+.admin-desktop-top-actions > button:not(.admin-desktop-logout),
+.admin-command-sidebar nav button {
+  color: #31556f;
+}
+
+.admin-command-sidebar nav button.is-active,
+.admin-command-module-grid > button.is-active,
+.admin-catalog-summary > button.is-active {
+  color: #075cb4;
+  background: #e8f2ff;
+}
+
+.admin-app-window,
+.admin-catalog-panel,
+.admin-technical-panel,
+.admin-command-control-panel {
+  border-color: #d5e1ec;
+  box-shadow: 0 12px 30px rgba(16, 42, 67, 0.08);
+}
+
+/* Gestor, operador e técnico usam os mesmos níveis de informação. */
+.app-shell--manager .topbar,
+.app-shell--manager > .app-navigation {
+  border-color: #d5e1ec;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.app-shell--manager .app-navigation__item.is-active {
+  color: #075fc4;
+  background: #e8f2ff;
+}
+
+.app-shell--manager .primary-button,
+.app-shell--manager .approve-button,
+.app-shell--manager .manager-qr-dialog footer button,
+.app-shell--manager .manager-qr-result-footer button {
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.20);
+}
+
+.app-shell--manager .secondary-button,
+.app-shell--manager .reject-button,
+.app-shell--manager .logout-button {
+  border-color: #c8d8e7;
+  color: #1b496d;
+  background: #fff;
+}
+
+.app-shell--manager .page-heading h1,
+.app-shell--manager .manager-workspace-heading h1,
+.app-shell--manager .manager-qr-heading h1 {
+  color: #102a43;
+  letter-spacing: -0.035em;
+}
+
+.app-shell--manager .eyebrow,
+.app-shell--manager .pcm-section-kicker {
+  color: #0767bf;
+}
+
+.technician-dashboard__panel,
+.manager-dashboard__card,
+.manager-operation-strip,
+.manager-next-work,
+.simple-detail-panel {
+  border-color: #d5e1ec;
+  box-shadow: 0 10px 26px rgba(16, 42, 67, 0.07);
+}
+
+/* PCM: gráficos legíveis, sem usar cores de alerta como decoração. */
+.pcm-dashboard {
+  --pcm-ink: #102a43;
+  --pcm-muted: #5f7389;
+  --pcm-line: #d5e1ec;
+  --pcm-panel: #ffffff;
+  --pcm-bg: #f3f7fb;
+  --pcm-blue: #0875e1;
+  --pcm-cyan: #0b8bbd;
+  --pcm-green: #087a55;
+  --pcm-amber: #a66400;
+  --pcm-red: #c53545;
+  border: 1px solid #dbe6f0;
+  box-shadow: 0 16px 38px rgba(16, 42, 67, 0.07);
+}
+
+.pcm-metric,
+.pcm-indicator-chart,
+.pcm-panel,
+.pcm-tables section {
+  border-color: #d5e1ec;
+  box-shadow: 0 8px 22px rgba(16, 42, 67, 0.06);
+}
+
+.pcm-metric strong,
+.pcm-indicator-chart__heading h3,
+.pcm-indicator-bars__row strong,
+.pcm-indicator-bars__row b,
+.pcm-bar-chart__label strong,
+.pcm-bar-chart__value {
+  color: #102a43;
+}
+
+.pcm-indicator-chart__main-value { color: #075fc4; }
+.pcm-indicator-bars__track span,
+.pcm-bar-chart__track span { background: linear-gradient(90deg, #0875e1, #41a0f4); }
+.pcm-percentage-chart__ring { background: conic-gradient(#0b8d62 var(--pcm-percentage), #dfe9f0 0); }
+.pcm-action-grid button { border-color: #c7d9eb; background: #f8fbff; }
+.pcm-action-grid button:hover:not(:disabled) { border-color: #5ca5e8; background: #edf6ff; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

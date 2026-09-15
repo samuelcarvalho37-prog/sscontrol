@@ -3,7 +3,11 @@ import { getApiTransport, getApiUrl, getLegacyApiUrl } from "./config";
 
 export const API_TIMEOUT_MS = {
   FAST_READ: 15_000,
-  DETAIL_READ: 30_000,
+  // Administrative workspaces can hydrate related catalogues together
+  // (structure, assets, people and permissions).  On a cold local database
+  // that is legitimately slower than a simple detail read, so avoid turning a
+  // completed request into a misleading "API exceeded 30 seconds" error.
+  DETAIL_READ: 45_000,
   SAVE: 45_000,
   CRITICAL_WRITE: 60_000,
   EVIDENCE_UPLOAD: 90_000,
@@ -121,7 +125,7 @@ async function executeAppsScriptCall<T>(
 }
 
 interface NodeActionRequest {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: Record<string, unknown>;
   token?: string;
@@ -427,6 +431,7 @@ function maintenancePlanRow(value: unknown): JsonRecord {
     ...item,
     ...current,
     versao_id: current.id ?? item.versao_id,
+    versao_status: current.status ?? item.status,
     plano_itens_count: item.plano_itens_count ?? current.plano_itens_count,
     atualizado_em: item.updated_at ?? item.atualizado_em,
   });
@@ -896,7 +901,7 @@ function mapTechnicalSummary(value: JsonRecord): JsonRecord {
     oee_qualidade_pct: null,
     producao_amostra: 0,
     metodologia:
-      "Indicadores calculados exclusivamente a partir de eventos tÃ©cnicos reais.",
+      "Indicadores calculados exclusivamente a partir de eventos técnicos reais.",
     ranking_ativos: records(value.ranking_ativos),
   };
 }
@@ -1042,7 +1047,7 @@ function nodeActionRequest(
         path: `/v1/workflow/technical-demands/${encodeURIComponent(String(payload.demanda_id))}/sign`,
         body: {
           declaracao: payload.declaracao ?? payload.parecer,
-          significado: "AprovaÃ§Ã£o tÃ©cnica rastreÃ¡vel",
+          significado: "Aprovação técnica rastreável",
         },
         token,
         transform: (data) => {
@@ -1095,7 +1100,7 @@ function nodeActionRequest(
         path: `/v1/workflow/technical-demands/${encodeURIComponent(String(payload.demanda_id))}/sign`,
         body: {
           declaracao: payload.parecer,
-          significado: "AprovaÃ§Ã£o tÃ©cnica rastreÃ¡vel",
+          significado: "Aprovação técnica rastreável",
         },
         token,
         transform: (data) => ({
@@ -1125,6 +1130,21 @@ function nodeActionRequest(
           total: Number(data.total ?? 0),
           acoes: records(data.acoes).map(mapAction),
         }),
+      };
+    case "maintenance.technicians.list":
+      return { method: "GET", path: "/v1/maintenance/technicians", token };
+    case "maintenance.actions.assign":
+      return {
+        method: "PUT",
+        path: `/v1/maintenance/actions/${encodeURIComponent(String(payload.acao_id))}/assignment`,
+        body: { responsavel_id: payload.responsavel_id, tecnicos_apoio_ids: payload.tecnicos_apoio_ids },
+        token,
+      };
+    case "maintenance.work-orders.release":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/release`,
+        token,
       };
     case "gestor.detalhe_acao":
       return {
@@ -1169,6 +1189,63 @@ function nodeActionRequest(
             actionStatusFromNode[String(data.status ?? "").toUpperCase()] ??
             data.status,
         }),
+      };
+    case "operator-actions.list":
+      return {
+        method: "GET",
+        path: queryPath("/v1/maintenance/operator-actions", { limite: payload.limite }),
+        token,
+      };
+    case "operator-actions.get":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}`,
+        token,
+      };
+    case "operator-actions.start":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/start`,
+        body: { modo_parada: payload.modo_parada },
+        token,
+      };
+    case "maintenance.executions.pause":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/pause`,
+        body: { motivo: payload.motivo },
+        token,
+      };
+    case "maintenance.executions.resume":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/resume`,
+        token,
+      };
+    case "operator-actions.responses":
+      return {
+        method: "PUT",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/responses`,
+        body: { itens: payload.itens },
+        token,
+      };
+    case "operator-actions.validation":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/validation`,
+        token,
+      };
+    case "operator-actions.complete":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/complete`,
+        body: {
+          relatorio_tecnico: payload.relatorio_tecnico,
+          resultado: payload.resultado,
+          observacao: payload.observacao,
+          modo_parada: payload.modo_parada,
+        },
+        token,
       };
     case "gestor.listar_paradas":
       return {
@@ -1272,7 +1349,7 @@ function nodeActionRequest(
           inicio: period.inicio, fim: period.fim, limite_ranking: 10,
         }),
         token,
-        transform: (data) => record(data.pcm),
+        transform: (data) => ({ ...record(data.pcm), relatorios: record(data.relatorios) }),
       };
     }
     case "cmms.kpis_base": {
@@ -2053,7 +2130,7 @@ function nodeActionRequest(
           method: "GET",
           path: queryPath("/v1/maintenance/plans", {
             busca: payload.busca,
-            limite: Math.min(Number(payload.limite ?? 100), 100),
+            limite: Math.min(Number(payload.limite ?? 100), 2_000),
           }),
           token,
           transform: (data) => {

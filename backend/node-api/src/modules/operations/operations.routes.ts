@@ -4,6 +4,7 @@ import { successEnvelopeSchema } from '../auth/auth.schemas.js';
 import type { OperationsController } from './operations.controller.js';
 import {
   actionReviewBodySchema,
+  assignActionBodySchema,
   completeExecutionBodySchema,
   correctWorkOrderBodySchema,
   createWorkOrderBodySchema,
@@ -12,6 +13,7 @@ import {
   executionResponseBodySchema,
   maintenanceActionListQuerySchema,
   operationsIdentifierParamsSchema,
+  pauseExecutionBodySchema,
   requestChangesBodySchema,
   signatureBodySchema,
   startExecutionBodySchema,
@@ -34,7 +36,7 @@ export function createOperationsRoutes(
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
       schema: {
         ...secured,
-        summary: 'Consulta o escopo tÃ©cnico e as capacidades do Gestor.',
+        summary: 'Consulta o escopo técnico e as capacidades do Gestor.',
       },
       handler: controller.getTechnicalContext,
     });
@@ -43,7 +45,7 @@ export function createOperationsRoutes(
       schema: {
         ...secured,
         querystring: technicalDemandListQuerySchema,
-        summary: 'Consulta somente demandas visÃ­veis no escopo tÃ©cnico atual.',
+        summary: 'Consulta somente demandas visíveis no escopo técnico atual.',
       },
       handler: controller.listTechnicalDemands,
     });
@@ -52,7 +54,7 @@ export function createOperationsRoutes(
       schema: {
         ...secured,
         params: operationsIdentifierParamsSchema,
-        summary: 'Assume uma demanda elegÃ­vel sem alterar sua polÃ­tica de assinatura.',
+        summary: 'Assume uma demanda elegível sem alterar sua política de assinatura.',
       },
       handler: controller.assumeTechnicalDemand,
     });
@@ -61,16 +63,26 @@ export function createOperationsRoutes(
       schema: {
         ...secured,
         querystring: maintenanceActionListQuerySchema,
-        summary: 'Consulta aÃ§Ãµes ativas e concluÃ­das para acompanhamento tÃ©cnico.',
+        summary: 'Consulta ações ativas e concluídas para acompanhamento técnico.',
       },
       handler: controller.listMaintenanceActions,
+    });
+    app.get('/v1/maintenance/technicians', {
+      preHandler: (request) => app.authorize(request, 'maintenance.actions.assign'),
+      schema: { ...secured, summary: 'Lista técnicos ativos disponíveis para atribuição.' },
+      handler: controller.listActiveTechnicians,
+    });
+    app.put('/v1/maintenance/actions/:actionId/assignment', {
+      preHandler: (request) => app.authorize(request, 'maintenance.actions.assign'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: assignActionBodySchema, summary: 'Atribui uma ação pronta a um técnico ativo.' },
+      handler: controller.assignMaintenanceAction,
     });
     app.get('/v1/maintenance/actions/:actionId', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.read'),
       schema: {
         ...secured,
         params: operationsIdentifierParamsSchema,
-        summary: 'Consulta a aÃ§Ã£o, o checklist materializado e suas evidÃªncias.',
+        summary: 'Consulta a ação, o checklist materializado e suas evidências.',
       },
       handler: controller.getMaintenanceAction,
     });
@@ -256,6 +268,25 @@ export function createOperationsRoutes(
         summary: 'Inicia a execução atribuída.',
       },
       handler: controller.startExecution,
+    });
+    app.post('/v1/maintenance/executions/:executionId/pause', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: {
+        ...secured,
+        params: operationsIdentifierParamsSchema,
+        body: pauseExecutionBodySchema,
+        summary: 'Pausa uma execução em andamento e registra o motivo.',
+      },
+      handler: controller.pauseExecution,
+    });
+    app.post('/v1/maintenance/executions/:executionId/resume', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: {
+        ...secured,
+        params: operationsIdentifierParamsSchema,
+        summary: 'Retoma uma execução pausada sem contabilizar o tempo de pausa.',
+      },
+      handler: controller.resumeExecution,
     });
     app.put('/v1/maintenance/executions/:executionId/items/:itemId/response', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),

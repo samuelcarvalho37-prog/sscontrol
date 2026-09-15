@@ -16,9 +16,9 @@ export interface AdminIntervention {
   exige_liberacao_pos_intervencao?: boolean
   id: string
   codigo: string
-  ativo_id: string
+  ativo_id?: string
   componente_id?: string
-  plano_id: string
+  plano_id?: string
   plano_versao_id?: string
   origem: string
   tipo: string
@@ -51,6 +51,7 @@ export interface AdminIntervention {
 }
 
 export interface AdminInterventionInput {
+  origem?: string
   exige_liberacao_pos_intervencao?: boolean
   id?: string
   ativo_id: string
