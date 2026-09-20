@@ -2456,6 +2456,11 @@ p {
   background: var(--orange-soft);
 }
 
+.feedback--info {
+  color: #174c83;
+  background: #eaf3ff;
+}
+
 .first-access-summary,
 .password-rule {
   margin: 0;
@@ -17606,6 +17611,7 @@ p {
 
 /* Análise assistida e briefing de liberação. */
 .manager-analysis-dialog {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: min(920px, calc(100vw - 28px));
   max-height: min(760px, calc(100dvh - 32px));
   overflow: hidden;
@@ -17654,7 +17660,7 @@ p {
 }
 
 .manager-analysis-body {
-  min-height: 380px;
+  min-height: 0;
   padding: 16px;
   overflow: auto;
   scrollbar-width: none;

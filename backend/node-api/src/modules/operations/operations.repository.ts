@@ -425,7 +425,7 @@ export class OperationsRepository {
     );
   }
 
-  async preparePostInterventionRelease(
+  async preparePostInterventionValidation(
     client: PoolClient,
     order: OperationsRow,
     demandId: string,
@@ -434,11 +434,21 @@ export class OperationsRepository {
       `UPDATE workflow.technical_demands SET demand_type='POST_INTERVENTION_RELEASE', status='OPEN' WHERE id=$1`,
       [demandId],
     );
-    await client.query(`UPDATE maintenance.work_orders SET technical_demand_id=$2 WHERE id=$1`, [
-      order.id,
-      demandId,
-    ]);
-    await this.releaseWorkOrder(client, { ...order, technical_demand_id: demandId });
+    await client.query(
+      `UPDATE maintenance.work_orders
+       SET technical_demand_id=$2, status='APPROVED'
+       WHERE id=$1 AND status IN ('DRAFT','CHANGES_REQUESTED')`,
+      [order.id, demandId],
+    );
+  }
+
+  async approveWorkOrderWithoutPostIntervention(client: PoolClient, workOrderId: string): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.work_orders
+       SET status='APPROVED', submitted_at=COALESCE(submitted_at, clock_timestamp())
+       WHERE id=$1 AND status IN ('DRAFT','CHANGES_REQUESTED')`,
+      [workOrderId],
+    );
   }
 
   async hasActiveWorkOrderExecution(client: PoolClient, orderId: string): Promise<boolean> {
@@ -838,6 +848,7 @@ export class OperationsRepository {
     client: PoolClient,
     userId: string,
     limit: number,
+    history = false,
   ): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `
@@ -854,6 +865,8 @@ export class OperationsRepository {
                plan_version.estimated_duration_minutes AS duracao_estimada_minutos,
                checklist_template.name AS checklist_nome,
                execution.id AS execucao_id, execution.status AS execucao_status,
+               execution.operator_id AS operador_id, execution.completed_at AS concluida_em,
+               CASE WHEN action.responsible_id=$1 THEN 'LIDER' ELSE 'APOIO' END AS papel_na_equipe,
                (SELECT count(*)::integer FROM maintenance.checklist_items item
                 WHERE item.checklist_template_version_id = plan_version.checklist_template_version_id
                   AND item.status = 'ACTIVE') AS total_itens
@@ -867,18 +880,27 @@ export class OperationsRepository {
         JOIN maintenance.checklist_template_versions checklist_version ON checklist_version.id = plan_version.checklist_template_version_id
         JOIN maintenance.checklist_templates checklist_template ON checklist_template.id = checklist_version.checklist_template_id
         LEFT JOIN LATERAL (
-          SELECT current_execution.id, current_execution.status
+          SELECT current_execution.id, current_execution.status, current_execution.operator_id,
+                 current_execution.completed_at
           FROM maintenance.executions current_execution
           WHERE current_execution.work_order_action_id = action.id
           ORDER BY current_execution.created_at DESC, current_execution.id DESC
           LIMIT 1
         ) execution ON true
-        WHERE action.status IN ('READY','IN_PROGRESS','BLOCKED')
-          AND action.responsible_id = $1
+        WHERE (
+          ($3::boolean AND action.status='COMPLETED' AND execution.operator_id=$1)
+          OR (
+            NOT $3::boolean AND (
+              action.status = 'READY'
+              OR (action.status IN ('IN_PROGRESS','BLOCKED') AND action.responsible_id = $1)
+            )
+          )
+        )
         ORDER BY CASE action.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
+                 CASE WHEN $3::boolean THEN execution.completed_at END DESC NULLS LAST,
                  action.generated_at, action.id LIMIT $2
       `,
-      [userId, limit],
+      [userId, limit, history],
     );
     return result.rows;
   }
@@ -1134,6 +1156,17 @@ export class OperationsRepository {
                work_order.code AS ordem_codigo,
                work_order.title AS titulo, asset.tag AS ativo_tag, asset.name AS ativo_nome,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', usage.id, 'material_id', usage.material_id, 'sku', usage.sku_snapshot,
+                 'nome', usage.material_name_snapshot, 'nome_facil', usage.friendly_name_snapshot,
+                 'quantidade', usage.quantity, 'unidade', usage.unit,
+                 'valor_unitario', usage.unit_cost, 'custo_total', usage.total_cost,
+                 'observacao', usage.observation, 'registrado_em', usage.created_at
+               ) ORDER BY usage.created_at DESC)
+               FROM maintenance.material_usage usage
+               WHERE usage.execution_id = execution.id), '[]'::jsonb) AS materiais,
+               COALESCE((SELECT SUM(usage.total_cost) FROM maintenance.material_usage usage
+                 WHERE usage.execution_id = execution.id), 0) AS custo_materiais_total,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', item.id, 'sequencia', item.sequence, 'titulo', item.title_snapshot,
                  'instrucao', item.instruction_snapshot, 'tipo_resposta', item.response_type_code,
                  'categoria', item.category_snapshot, 'obrigatorio', item.required,
@@ -1367,6 +1400,68 @@ export class OperationsRepository {
        WHERE execution.id=$1 AND action.id=execution.work_order_action_id`,
       [executionId],
     );
+  }
+
+  async listConsumableMaterials(client: PoolClient): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(`
+      SELECT id, sku, name AS nome, friendly_name AS nome_facil, unit AS unidade,
+             unit_cost AS valor_unitario, current_stock AS estoque_atual,
+             minimum_stock AS estoque_minimo,
+             CASE WHEN current_stock <= minimum_stock THEN 'LOW' ELSE 'AVAILABLE' END AS situacao_estoque
+      FROM cmms.materials
+      WHERE deleted_at IS NULL AND status = 'ACTIVE' AND current_stock > 0
+      ORDER BY COALESCE(friendly_name, name), sku
+      LIMIT 200
+    `);
+    return result.rows;
+  }
+
+  async findConsumableMaterial(
+    client: PoolClient,
+    materialId: string,
+    lock = false,
+  ): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(`
+      SELECT id, sku, name AS nome, friendly_name AS nome_facil, unit AS unidade,
+             unit_cost AS valor_unitario, current_stock AS estoque_atual,
+             minimum_stock AS estoque_minimo, status
+      FROM cmms.materials
+      WHERE id = $1 AND deleted_at IS NULL AND status = 'ACTIVE'
+      ${lock ? 'FOR UPDATE' : ''}
+    `, [materialId]);
+    return result.rows[0] ?? null;
+  }
+
+  async consumeMaterial(
+    client: PoolClient,
+    tenantId: string,
+    execution: OperationsRow,
+    material: OperationsRow,
+    userId: string,
+    input: import('./operations.types.js').MaterialConsumptionInput,
+  ): Promise<OperationsRow> {
+    const unitCost = Number(material.valor_unitario ?? 0);
+    const totalCost = Number((unitCost * input.quantity).toFixed(4));
+    await client.query(
+      `UPDATE cmms.materials SET current_stock = current_stock - $2 WHERE id = $1`,
+      [material.id, input.quantity],
+    );
+    const result = await client.query<OperationsRow>(`
+      INSERT INTO maintenance.material_usage (
+        tenant_id, execution_id, work_order_action_id, material_id, quantity, unit,
+        observation, user_id, sku_snapshot, material_name_snapshot,
+        friendly_name_snapshot, unit_cost, total_cost
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING id, material_id, quantity, unit, observation, sku_snapshot,
+        material_name_snapshot, friendly_name_snapshot, unit_cost, total_cost, created_at
+    `, [
+      tenantId, execution.id, execution.work_order_action_id, material.id, input.quantity,
+      material.unidade, input.observation, userId, material.sku, material.nome,
+      material.nome_facil, unitCost, totalCost,
+    ]);
+    const usage = result.rows[0];
+    if (!usage) throw new Error('O consumo de material não foi registrado.');
+    return usage;
   }
 
   async pauseExecution(client: PoolClient, executionId: string, reason: string): Promise<void> {

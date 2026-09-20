@@ -542,7 +542,7 @@ export function TechnicalAnalysisDialog({
                 type="button"
                 onClick={() => goTo("plan")}
               >
-                Continuar <ChevronRightIcon />
+                Definir encaminhamento <ChevronRightIcon />
               </button>
             ) : null}
             {stage === "plan" ? (
@@ -561,7 +561,11 @@ export function TechnicalAnalysisDialog({
                 disabled={submitting}
                 onClick={() => void submit()}
               >
-                {submitting ? "Enviando…" : "Enviar ao Administrador"}
+                {submitting
+                  ? "Enviando…"
+                  : recommendOrder
+                    ? "Solicitar criação da OS"
+                    : "Enviar análise ao Administrador"}
               </button>
             ) : null}
           </div>

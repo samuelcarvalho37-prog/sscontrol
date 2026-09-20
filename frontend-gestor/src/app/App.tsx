@@ -58,6 +58,39 @@ const PROFILE_TAB_TITLES: Record<string, string> = {
   OPERADOR: 'Operação',
 }
 
+const PROFILE_EXPERIENCE: Record<string, { eyebrow: string; title: string; description: string; primary: string }> = {
+  PCM: {
+    eyebrow: 'PLANEJAMENTO E CONTROLE',
+    title: 'Central de decisões',
+    description: 'Priorize ordens, acompanhe riscos e mantenha a programação sob controle.',
+    primary: 'Abrir fila de decisões',
+  },
+  GESTOR: {
+    eyebrow: 'PLANEJAMENTO E CONTROLE',
+    title: 'Central de decisões',
+    description: 'Priorize ordens, acompanhe riscos e mantenha a programação sob controle.',
+    primary: 'Abrir fila de decisões',
+  },
+  PRODUCAO: {
+    eyebrow: 'OPERAÇÃO INDUSTRIAL',
+    title: 'Acompanhamento da produção',
+    description: 'Visualize impactos na linha, sinalize ocorrências e acompanhe a retomada operacional.',
+    primary: 'Acompanhar operação',
+  },
+  QUALIDADE: {
+    eyebrow: 'GARANTIA DA QUALIDADE',
+    title: 'Validações e conformidade',
+    description: 'Analise solicitações pendentes e registre decisões com rastreabilidade.',
+    primary: 'Abrir validações',
+  },
+  SEGURANCA: {
+    eyebrow: 'SEGURANÇA OPERACIONAL',
+    title: 'Controle de liberações',
+    description: 'Acompanhe riscos e execute as validações necessárias antes do retorno à operação.',
+    primary: 'Abrir validações',
+  },
+}
+
 function profileTabTitle(profile?: string) {
   const normalizedProfile = profile?.trim().toUpperCase() ?? ''
   return PROFILE_TAB_TITLES[normalizedProfile] ?? 'Gestão Industrial'
@@ -90,6 +123,8 @@ export function App() {
   const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
+  const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
+  const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
 
   useEffect(() => {
@@ -320,7 +355,7 @@ export function App() {
 
   return (
     <div className="manager-app-stage">
-      <div className="app-shell app-shell--manager">
+      <div className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
         <header className="topbar">
         <div className="topbar__identity topbar__identity--manager">
           <div>
@@ -372,6 +407,41 @@ export function App() {
         </header>
 
         <div className="app-content">
+          {section === 'home' && !isTechnician && profileExperience ? (
+            <section className="profile-experience-hero" aria-label={`Resumo de ${profileTabTitle(normalizedProfile)}`}>
+              <div>
+                <span>{profileExperience.eyebrow}</span>
+                <h1>{profileExperience.title}</h1>
+                <p>{profileExperience.description}</p>
+              </div>
+              <div className="profile-experience-hero__actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    const workspace = document.querySelector('.manager-decision-workspace')
+                    if (workspace) {
+                      workspace.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      return
+                    }
+                    handleNavigate(canReadAnalytics ? 'validations' : 'home')
+                  }}
+                >
+                  {profileExperience.primary}
+                </button>
+                {canReadAnalytics ? (
+                  <button className="secondary-button" type="button" onClick={() => handleNavigate('validations')}>
+                    Ver indicadores
+                  </button>
+                ) : null}
+                {compactDevice ? (
+                  <button className="profile-experience-hero__scan" type="button" onClick={() => handleNavigate('scan')}>
+                    Ler QR
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
           {section === 'home' && canReadWork && !isTechnician ? (

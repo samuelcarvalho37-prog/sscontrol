@@ -41,6 +41,48 @@
   margin: 4px 0;
 }
 
+.pcm-today-notifications {
+  padding: 18px;
+  border: 1px solid #b9d1e7;
+  border-left: 5px solid var(--pcm-blue);
+  border-radius: 16px;
+  background: linear-gradient(110deg, #f8fbff, #eef6ff);
+}
+
+.pcm-today-notifications > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pcm-today-notifications > header > span {
+  min-width: 32px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #07549c;
+  background: #dcecff;
+  text-align: center;
+  font-weight: 800;
+}
+
+.pcm-today-notifications ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pcm-today-notifications li { border: 1px solid var(--pcm-line); border-radius: 10px; background: #fff; overflow: hidden; }
+.pcm-today-notifications li > button { display: flex; width: 100%; justify-content: space-between; gap: 16px; padding: 11px 12px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.pcm-today-notifications li > button:hover { background: #f4f9ff; }
+.pcm-today-notifications li > button:focus-visible { outline: 3px solid #5ca8ec; outline-offset: -3px; }
+.pcm-today-notifications li.is-critical { border-left: 4px solid var(--pcm-red); }
+.pcm-today-notifications li.is-high { border-left: 4px solid var(--pcm-amber); }
+.pcm-today-notifications li > div { display: grid; gap: 3px; }
+.pcm-today-notifications li span { color: var(--pcm-muted); font-size: 14px; }
+.pcm-today-notifications li em { color: var(--pcm-blue); font-size: 13px; font-style: normal; font-weight: 800; }
+.pcm-today-notifications li small { align-self: start; color: var(--pcm-muted); font-weight: 700; white-space: nowrap; }
+.pcm-today-notifications__error { color: var(--pcm-red); }
+.pcm-create-order-modal__origin { display: grid; gap: 4px; padding: 13px; border: 1px solid #b9d1e7; border-radius: 10px; background: #f5faff; }
+.pcm-create-order-modal__origin span { color: var(--pcm-blue); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.pcm-create-order-modal__origin small { color: var(--pcm-muted); }
+
 .pcm-dashboard h2 {
   margin: 0;
   font-size: 18px;

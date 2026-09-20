@@ -1,4 +1,4 @@
-import { Type, type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 
 import { successEnvelopeSchema } from '../auth/auth.schemas.js';
 import type { OperationsController } from './operations.controller.js';
@@ -7,11 +7,13 @@ import {
   assignActionBodySchema,
   completeExecutionBodySchema,
   correctWorkOrderBodySchema,
+  consumeMaterialBodySchema,
   createWorkOrderBodySchema,
   evidenceBodySchema,
   executionBatchResponseBodySchema,
   executionResponseBodySchema,
   maintenanceActionListQuerySchema,
+  operatorActionListQuerySchema,
   operationsIdentifierParamsSchema,
   pauseExecutionBodySchema,
   requestChangesBodySchema,
@@ -176,10 +178,7 @@ export function createOperationsRoutes(
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
       schema: {
         ...secured,
-        querystring: Type.Object(
-          { limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })) },
-          { additionalProperties: false },
-        ),
+        querystring: operatorActionListQuerySchema,
         summary: 'Consulta somente ações executáveis e não concluídas.',
       },
       handler: controller.listOperatorActions,
@@ -212,6 +211,16 @@ export function createOperationsRoutes(
         summary: 'Salva um lote de respostas de forma transacional.',
       },
       handler: controller.saveOperatorResponses,
+    });
+    app.get('/v1/maintenance/operator-actions/:actionId/materials', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Consulta materiais ativos para consumo na execução.' },
+      handler: controller.listOperatorMaterials,
+    });
+    app.post('/v1/maintenance/operator-actions/:actionId/materials', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: consumeMaterialBodySchema, summary: 'Baixa material do estoque e registra seu custo na OS.' },
+      handler: controller.consumeOperatorMaterial,
     });
     app.get('/v1/maintenance/operator-actions/:actionId/validation', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),

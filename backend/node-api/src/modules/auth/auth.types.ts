@@ -31,6 +31,8 @@ export interface RequestMetadata {
   readonly ipAddress: string;
   readonly userAgent: string | null;
   readonly traceId: string;
+  readonly host: string | undefined;
+  readonly developmentTenantSlug: string | undefined;
 }
 
 export interface LoginInput {

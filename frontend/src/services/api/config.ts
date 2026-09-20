@@ -54,6 +54,10 @@ export function getApiUrl(): string {
   return readLocalStorage(API_URL_KEY)
 }
 
+export function getDevelopmentTenantSlug(): string {
+  return (import.meta.env.VITE_DEV_TENANT_SLUG as string | undefined)?.trim().toLowerCase() ?? ''
+}
+
 export function getLegacyApiUrl(): string {
   return (import.meta.env.VITE_APPS_SCRIPT_API_URL as string | undefined)?.trim() ?? ''
 }

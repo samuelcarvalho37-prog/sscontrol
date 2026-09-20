@@ -22,6 +22,7 @@ import type {
   ExecutionStopMode,
   ExecutionResponseInput,
   MaintenanceActionListQuery,
+  MaterialConsumptionInput,
   RequestAuditMetadata,
   ReviewSubmissionInput,
   SignatureInput,
@@ -462,14 +463,14 @@ export class OperationsService {
           );
         }
         if (!requiresPostInterventionRelease(workOrder)) {
-          await this.repository.releaseWorkOrder(client, workOrder);
+          await this.repository.approveWorkOrderWithoutPostIntervention(client, workOrderId);
           const detail = await this.requiredWorkOrderDetail(client, workOrderId);
           await this.repository.writeAudit(
             client,
             user.tenantId,
             user.id,
             audit,
-            'WORK_ORDER_RELEASED_WITHOUT_EXCEPTION',
+            'WORK_ORDER_APPROVED_WITHOUT_EXCEPTION',
             'WORK_ORDER',
             workOrderId,
             detail,
@@ -537,7 +538,7 @@ export class OperationsService {
             safetyArea.id,
           );
         }
-        await this.repository.preparePostInterventionRelease(client, workOrder, demandId);
+        await this.repository.preparePostInterventionValidation(client, workOrder, demandId);
         await this.repository.appendDemandEvent(
           client,
           user.tenantId,
@@ -808,11 +809,11 @@ export class OperationsService {
     );
   }
 
-  async listOperatorActions(user: AuthenticatedUser, limit: number) {
+  async listOperatorActions(user: AuthenticatedUser, limit: number, history = false) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => ({
-        itens: await this.repository.listOperatorActions(client, user.id, limit),
+        itens: await this.repository.listOperatorActions(client, user.id, limit, history),
         limite: limit,
       }),
     );
@@ -885,7 +886,13 @@ export class OperationsService {
         const execution = executionId
           ? await this.repository.getExecutionDetail(client, executionId)
           : null;
-        return { acao: action, execucao: execution };
+        return {
+          acao: {
+            ...action,
+            papel_na_equipe: action.responsavel_id === user.id ? 'LIDER' : 'APOIO',
+          },
+          execucao: execution,
+        };
       },
     );
   }
@@ -920,14 +927,6 @@ export class OperationsService {
         if (!action) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
-        if (action.responsible_id !== user.id) {
-          throw error(
-            'OPERATOR_ACTION_ASSIGNED_TO_ANOTHER_USER',
-            'A ação não está atribuída a este técnico.',
-            403,
-          );
-        }
-
         const actionStatus = text(action, 'status');
         let execution = await this.repository.findExecutionByAction(client, actionId, true);
         if (actionStatus === 'READY') {
@@ -1101,6 +1100,75 @@ export class OperationsService {
           quantidade_salva: saved.length,
           execucao: detail,
         };
+      },
+    );
+  }
+
+  async listOperatorMaterials(user: AuthenticatedUser, actionId: string) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => {
+        const action = await this.repository.getOperatorActionDetail(client, actionId);
+        if (!action || !this.operatorCanSeeAction(action, user.id)) {
+          throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
+        }
+        return { materiais: await this.repository.listConsumableMaterials(client) };
+      },
+    );
+  }
+
+  async consumeOperatorMaterial(
+    user: AuthenticatedUser,
+    actionId: string,
+    input: MaterialConsumptionInput,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const { action, execution } = await this.ownedActionExecution(client, actionId, user.id, true);
+        if (text(execution, 'status') !== 'IN_PROGRESS') {
+          throw error('EXECUTION_NOT_IN_PROGRESS', 'Inicie a execução antes de registrar a saída de material.', 409);
+        }
+        const material = await this.repository.findConsumableMaterial(client, input.materialId, true);
+        if (!material) throw error('MATERIAL_NOT_FOUND', 'Material não encontrado ou inativo.', 404);
+        const stock = Number(material.estoque_atual);
+        if (!Number.isFinite(stock) || stock < input.quantity) {
+          throw error('MATERIAL_INSUFFICIENT_STOCK', 'Estoque insuficiente para registrar esta saída.', 409, {
+            disponivel: Number.isFinite(stock) ? stock : 0,
+            solicitado: input.quantity,
+          });
+        }
+        const consumed = await this.repository.consumeMaterial(
+          client, user.tenantId, execution, material, user.id, input,
+        );
+        const detail = await this.requiredExecutionDetail(client, execution.id);
+        await this.repository.writeHistory(
+          client,
+          user.tenantId,
+          action,
+          execution.id,
+          user.id,
+          audit.roleSnapshot,
+          'MATERIAL_CONSUMED',
+          `Saída de material ${String(consumed.sku_snapshot)} registrada na execução.`,
+          {
+            material_usage_id: consumed.id,
+            material_id: consumed.material_id,
+            sku: consumed.sku_snapshot,
+            material: consumed.friendly_name_snapshot ?? consumed.material_name_snapshot,
+            quantidade: consumed.quantity,
+            unidade: consumed.unit,
+            valor_unitario: consumed.unit_cost,
+            valor_total: consumed.total_cost,
+            observacao: consumed.observation,
+          },
+        );
+        await this.repository.writeAudit(
+          client, user.tenantId, user.id, audit, 'MAINTENANCE_MATERIAL_CONSUMED',
+          'MATERIAL_USAGE', consumed.id, consumed,
+        );
+        return { consumo: consumed, execucao: detail };
       },
     );
   }
@@ -1283,13 +1351,6 @@ export class OperationsService {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         if (text(action, 'status') !== 'READY')
           throw error('OPERATOR_ACTION_NOT_READY', 'A ação não está disponível para assumir.', 409);
-        if (action.responsible_id !== user.id) {
-          throw error(
-            'OPERATOR_ACTION_ASSIGNED_TO_ANOTHER_USER',
-            'A ação não está atribuída a este técnico.',
-            403,
-          );
-        }
         const executionId = randomUUID();
         await this.repository.createExecution(client, user.tenantId, executionId, action, user.id);
         const detail = await this.requiredExecutionDetail(client, executionId);
@@ -1378,7 +1439,16 @@ export class OperationsService {
       if (text(execution, 'status') !== 'IN_PROGRESS') throw error('EXECUTION_NOT_IN_PROGRESS', 'Somente uma execução em andamento pode ser pausada.', 409);
       await this.repository.pauseExecution(client, executionId, reason.trim());
       const detail = await this.requiredExecutionDetail(client, executionId);
-      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'EXECUTION_PAUSED', 'EXECUTION', executionId, { motivo: reason.trim() }, detail);
+      await this.repository.writeAudit(
+        client,
+        user.tenantId,
+        user.id,
+        audit,
+        'EXECUTION_PAUSED',
+        'EXECUTION',
+        executionId,
+        { ...detail, motivo: reason.trim() },
+      );
       return detail;
     });
   }
@@ -1389,7 +1459,16 @@ export class OperationsService {
       if (text(execution, 'status') !== 'PAUSED') throw error('EXECUTION_NOT_PAUSED', 'A execução não está pausada.', 409);
       await this.repository.resumeExecution(client, executionId);
       const detail = await this.requiredExecutionDetail(client, executionId);
-      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'EXECUTION_RESUMED', 'EXECUTION', executionId, null, detail);
+      await this.repository.writeAudit(
+        client,
+        user.tenantId,
+        user.id,
+        audit,
+        'EXECUTION_RESUMED',
+        'EXECUTION',
+        executionId,
+        detail,
+      );
       return detail;
     });
   }
@@ -1809,13 +1888,10 @@ export class OperationsService {
 
   private operatorCanSeeAction(action: OperationsRow, userId: string): boolean {
     const status = typeof action.status === 'string' ? action.status : '';
-    if (!['READY', 'IN_PROGRESS', 'BLOCKED'].includes(status)) return false;
+    if (status === 'READY') return true;
+    if (!['IN_PROGRESS', 'BLOCKED'].includes(status)) return false;
     const responsibleId = typeof action.responsavel_id === 'string' ? action.responsavel_id : null;
-    const operatorId = typeof action.operador_id === 'string' ? action.operador_id : null;
-    return (
-      responsibleId === userId &&
-      (operatorId === null || operatorId === userId)
-    );
+    return responsibleId === userId;
   }
 
   private async ownedActionExecution(

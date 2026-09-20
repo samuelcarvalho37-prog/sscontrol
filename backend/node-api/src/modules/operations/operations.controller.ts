@@ -18,6 +18,7 @@ interface Params {
   readonly executionId?: string;
   readonly itemId?: string;
   readonly objectId?: string;
+  readonly materialId?: string;
 }
 interface WorkOrderQuery {
   readonly busca?: string;
@@ -97,6 +98,11 @@ interface StartBody {
 }
 interface PauseBody {
   readonly motivo: string;
+}
+interface ConsumeMaterialBody {
+  readonly material_id: string;
+  readonly quantidade: number;
+  readonly observacao?: string | null;
 }
 interface CompleteBody {
   readonly relatorio_tecnico?: import('./operations.types.js').CompletionInput['technicalReport'];
@@ -349,12 +355,12 @@ export class OperationsController {
   );
 
   listOperatorActions = async (
-    request: FastifyRequest<{ Querystring: { readonly limite?: number } }>,
+    request: FastifyRequest<{ Querystring: { readonly limite?: number; readonly historico?: boolean } }>,
   ) =>
     successEnvelope(
       request,
       'maintenance.operator-actions.list',
-      await this.service.listOperatorActions(user(request), request.query.limite ?? 50),
+      await this.service.listOperatorActions(user(request), request.query.limite ?? 50, request.query.historico === true),
     );
 
   getOperatorAction = async (request: FastifyRequest<{ Params: Params }>) =>
@@ -408,6 +414,31 @@ export class OperationsController {
           numericValue: item.valor,
           observation: item.observacao,
         })),
+        audit(request),
+      ),
+    );
+
+  listOperatorMaterials = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(
+      request,
+      'maintenance.operator-actions.materials.list',
+      await this.service.listOperatorMaterials(user(request), id(request.params, 'actionId')),
+    );
+
+  consumeOperatorMaterial = async (
+    request: FastifyRequest<{ Params: Params; Body: ConsumeMaterialBody }>,
+  ) =>
+    successEnvelope(
+      request,
+      'maintenance.operator-actions.materials.consume',
+      await this.service.consumeOperatorMaterial(
+        user(request),
+        id(request.params, 'actionId'),
+        {
+          materialId: request.body.material_id,
+          quantity: request.body.quantidade,
+          observation: request.body.observacao ?? null,
+        },
         audit(request),
       ),
     );

@@ -572,6 +572,7 @@ export class MonitoringRepository {
     notificationId: string,
     roleTypes: readonly string[],
     excludedUserId: string | null,
+    roleCodes: readonly string[] = [],
   ): Promise<void> {
     await client.query(
       `INSERT INTO workflow.notification_recipients
@@ -580,13 +581,14 @@ export class MonitoringRepository {
        FROM iam.user_roles user_role
        JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
        JOIN iam.users user_account ON user_account.tenant_id=user_role.tenant_id AND user_account.id=user_role.user_id
-       WHERE user_role.tenant_id=$1 AND role.role_type=ANY($3::text[])
+       WHERE user_role.tenant_id=$1
+         AND (role.role_type=ANY($3::text[]) OR role.code=ANY($5::text[]))
          AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
          AND ($4::uuid IS NULL OR user_account.id<>$4)
        ON CONFLICT (tenant_id,notification_id,user_id) DO UPDATE
        SET delivery_status='DELIVERED',delivered_at=COALESCE(workflow.notification_recipients.delivered_at,clock_timestamp()),
            last_notified_at=clock_timestamp(),delivery_attempts=workflow.notification_recipients.delivery_attempts+1`,
-      [tenantId, notificationId, roleTypes, excludedUserId],
+      [tenantId, notificationId, roleTypes, excludedUserId, roleCodes],
     );
   }
 

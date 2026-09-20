@@ -11,13 +11,16 @@ import { loadPcmDashboard } from '../src/modules/monitoring/pcm-dashboard.js';
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const integrationEnabled = Boolean(databaseUrl);
 const tenantId = randomUUID();
+const tenantSlug = `monitoring-${randomUUID()}`;
 
 const ids = {
   admin: randomUUID(),
   manager: randomUUID(),
+  pcm: randomUUID(),
   operator: randomUUID(),
   adminRole: randomUUID(),
   managerRole: randomUUID(),
+  pcmRole: randomUUID(),
   operatorRole: randomUUID(),
   technicalArea: randomUUID(),
   technicalRole: randomUUID(),
@@ -34,6 +37,7 @@ const ids = {
 interface Tokens {
   readonly admin: string;
   readonly manager: string;
+  readonly pcm: string;
   readonly operator: string;
 }
 
@@ -71,37 +75,42 @@ async function transaction<T>(
 async function seed(pool: Pool): Promise<Tokens> {
   const admin = sessionToken();
   const manager = sessionToken();
+  const pcm = sessionToken();
   const operator = sessionToken();
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
        VALUES ($1,'Monitoramento Testes','Monitoramento Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `monitoring-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
-       ($1,$4,'MON_ADMIN','Administrador','Administra monitoramento.','ADMIN',true),
-       ($2,$4,'MON_MANAGER','Gestor técnico','Trata eventos técnicos.','MANAGER',true),
-       ($3,$4,'MON_OPERATOR','Operador','Registra ocorrências.','OPERATOR',true)`,
-      [ids.adminRole, ids.managerRole, ids.operatorRole, tenantId],
+       ($1,$5,'MON_ADMIN','Administrador','Administra monitoramento.','ADMIN',true),
+       ($2,$5,'MON_MANAGER','Gestor técnico','Trata eventos técnicos.','MANAGER',true),
+       ($3,$5,'PCM','Planejador PCM','Planeja e libera ordens.','CUSTOM',true),
+       ($4,$5,'MON_OPERATOR','Operador','Registra ocorrências.','OPERATOR',true)`,
+      [ids.adminRole, ids.managerRole, ids.pcmRole, ids.operatorRole, tenantId],
     );
     await client.query(
       `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
-       ($1,$4,'USR-MON-ADM','Admin Monitoramento','mon.admin@fabcontrol.local',false),
-       ($2,$4,'USR-MON-GES','Gestor Monitoramento','mon.manager@fabcontrol.local',false),
-       ($3,$4,'USR-MON-OPE','Operador Monitoramento','mon.operator@fabcontrol.local',false)`,
-      [ids.admin, ids.manager, ids.operator, tenantId],
+       ($1,$5,'USR-MON-ADM','Admin Monitoramento','mon.admin@fabcontrol.local',false),
+       ($2,$5,'USR-MON-GES','Gestor Monitoramento','mon.manager@fabcontrol.local',false),
+       ($3,$5,'USR-MON-PCM','PCM Monitoramento','mon.pcm@fabcontrol.local',false),
+       ($4,$5,'USR-MON-OPE','Operador Monitoramento','mon.operator@fabcontrol.local',false)`,
+      [ids.admin, ids.manager, ids.pcm, ids.operator, tenantId],
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
-       ($1,$2,$5),($1,$3,$6),($1,$4,$7)`,
+       ($1,$2,$6),($1,$3,$7),($1,$4,$8),($1,$5,$9)`,
       [
         tenantId,
         ids.admin,
         ids.manager,
+        ids.pcm,
         ids.operator,
         ids.adminRole,
         ids.managerRole,
+        ids.pcmRole,
         ids.operatorRole,
       ],
     );
@@ -129,6 +138,13 @@ async function seed(pool: Pool): Promise<Tokens> {
           'maintenance.alerts.manage',
           'workflow.notifications.read',
           'analytics.technical.read',
+        ],
+      ],
+      [
+        ids.pcmRole,
+        [
+          'maintenance.occurrences.read',
+          'workflow.notifications.read',
         ],
       ],
       [
@@ -170,6 +186,7 @@ async function seed(pool: Pool): Promise<Tokens> {
     for (const [userId, session] of [
       [ids.admin, admin],
       [ids.manager, manager],
+      [ids.pcm, pcm],
       [ids.operator, operator],
     ] as const) {
       await client.query(
@@ -219,7 +236,7 @@ async function seed(pool: Pool): Promise<Tokens> {
       [ids.parameterReading, tenantId, ids.parameter, ids.parameterPolicy, ids.manager],
     );
   });
-  return { admin: admin.raw, manager: manager.raw, operator: operator.raw };
+  return { admin: admin.raw, manager: manager.raw, pcm: pcm.raw, operator: operator.raw };
 }
 
 test(
@@ -229,7 +246,7 @@ test(
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 4 });
     const tokens = await seed(pool);
-    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId) });
+    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId, tenantSlug) });
     context.after(async () => {
       await app.close();
       await pool.end();
@@ -283,6 +300,15 @@ test(
     assert.equal(notifications.json().data.contadores.nao_lidas, 1);
     const notificationId: string = notifications.json().data.itens[0].id;
     assert.equal(notifications.json().data.itens[0].entidade_id, occurrenceId);
+
+    const pcmNotifications = await app.inject({
+      method: 'GET',
+      url: '/v1/notifications?somente_nao_lidas=true',
+      headers: bearer(tokens.pcm),
+    });
+    assert.equal(pcmNotifications.statusCode, 200, pcmNotifications.body);
+    assert.equal(pcmNotifications.json().data.contadores.nao_lidas, 1);
+    assert.equal(pcmNotifications.json().data.itens[0].entidade_id, occurrenceId);
 
     const read = await app.inject({
       method: 'PATCH',

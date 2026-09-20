@@ -3,13 +3,15 @@ import { loadEnvironment, type Environment } from '../../src/config/environment.
 export function createTestEnvironment(
   databaseUrl = 'postgresql://test:test@127.0.0.1:55432/fab_control_test',
   defaultTenantId = '00000000-0000-4000-8000-000000000001',
+  developmentTenantSlug = 'auth-test-tenant',
+  overrides: NodeJS.ProcessEnv = {},
 ): Environment {
   return loadEnvironment({
     NODE_ENV: 'test',
     HOST: '127.0.0.1',
     PORT: '3333',
     LOG_LEVEL: 'silent',
-    TRUST_PROXY: 'false',
+    TRUST_PROXY_CIDRS: '',
     BODY_LIMIT_BYTES: '1048576',
     CORS_ALLOWED_ORIGINS: 'http://127.0.0.1:5173',
     OPENAPI_ENABLED: 'false',
@@ -22,6 +24,7 @@ export function createTestEnvironment(
     DATABASE_CONNECTION_TIMEOUT_MS: '5000',
     DATABASE_STATEMENT_TIMEOUT_MS: '15000',
     DEFAULT_TENANT_ID: defaultTenantId,
+    DEV_TENANT_SLUG: developmentTenantSlug,
     APP_ENVIRONMENT: 'DEVELOPMENT',
     APP_RELEASE_VERSION: '1.4.0',
     API_VERSION: '2.0.0',
@@ -37,5 +40,6 @@ export function createTestEnvironment(
     AUTH_PASSWORD_PEPPER: 'test-password-pepper-with-32-characters-minimum',
     AUTH_RECOVERY_HMAC_SECRET: 'test-recovery-secret-with-32-characters-minimum',
     AUTH_MAINTENANCE_HMAC_SECRET: 'test-maintenance-secret-with-32-characters-minimum',
+    ...overrides,
   });
 }

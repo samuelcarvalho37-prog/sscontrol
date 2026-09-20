@@ -13,6 +13,7 @@ import type {
 } from './auth.types.js';
 import { verifyMaintenanceCode } from './maintenance-code.js';
 import { PasswordService } from './password.service.js';
+import { TenantResolutionService, type TenantRequestContext } from './tenant-resolution.service.js';
 import { TokenService } from './token.service.js';
 
 const INVALID_CREDENTIALS = new AppError({
@@ -76,6 +77,7 @@ export class AuthService {
   private readonly repository = new AuthRepository();
   private readonly passwords: PasswordService;
   private readonly tokens: TokenService;
+  private readonly tenants: TenantResolutionService;
 
   constructor(
     private readonly environment: Environment,
@@ -83,25 +85,27 @@ export class AuthService {
   ) {
     this.passwords = new PasswordService(environment.auth.passwordPepper);
     this.tokens = new TokenService(environment.auth.recoveryHmacSecret);
+    this.tenants = new TenantResolutionService(environment, database);
   }
 
   async login(input: LoginInput, metadata: RequestMetadata) {
+    const tenant = await this.tenants.resolve(metadata);
     const employeeNumber = normalizeEmployeeNumber(input.employeeNumber);
     const employeeNumberDigest = this.tokens.digestEmployeeNumber(employeeNumber);
 
     const result = await this.database.withTransaction(
-      { tenantId: this.environment.defaultTenantId },
+      { tenantId: tenant.id },
       async (client): Promise<LoginResult> => {
         const credential = await this.repository.findCredentialForLogin(
           client,
-          this.environment.defaultTenantId,
+          tenant.id,
           employeeNumber,
         );
 
         if (!credential) {
           await this.passwords.consumeDummyVerification(input.password);
           await this.repository.recordLoginAttempt(client, {
-            tenantId: this.environment.defaultTenantId,
+            tenantId: tenant.id,
             userId: null,
             employeeNumberDigest,
             successful: false,
@@ -295,6 +299,7 @@ export class AuthService {
   }
 
   async completeFirstAccess(input: FirstAccessInput, metadata: RequestMetadata) {
+    const tenant = await this.tenants.resolve(metadata);
     this.passwords.assertPolicy(input.newPassword);
     if (input.currentPassword === input.newPassword) {
       throw new AppError({
@@ -310,11 +315,11 @@ export class AuthService {
     const expiresAt = addHours(new Date(), this.environment.auth.sessionHours);
 
     const result = await this.database.withTransaction(
-      { tenantId: this.environment.defaultTenantId },
+      { tenantId: tenant.id },
       async (client) => {
         const session = await this.repository.findSessionByHash(
           client,
-          this.environment.defaultTenantId,
+          tenant.id,
           changeTokenHash,
           true,
         );
@@ -409,17 +414,18 @@ export class AuthService {
   }
 
   async exchangeMaintenanceAccess(input: MaintenanceExchangeInput, metadata: RequestMetadata) {
+    const tenant = await this.tenants.resolve(metadata);
     const codeDigest = this.tokens.digestEmployeeNumber(`MAINTENANCE:${input.code}`);
     const result = await this.database.withTransaction(
-      { tenantId: this.environment.defaultTenantId },
+      { tenantId: tenant.id },
       async (client): Promise<MaintenanceExchangeResult> => {
         const window = await this.repository.findOpenMaintenanceWindow(
           client,
-          this.environment.defaultTenantId,
+          tenant.id,
         );
         if (!window) {
           await this.repository.recordLoginAttempt(client, {
-            tenantId: this.environment.defaultTenantId,
+            tenantId: tenant.id,
             userId: null,
             employeeNumberDigest: codeDigest,
             successful: false,
@@ -616,14 +622,15 @@ export class AuthService {
     };
   }
 
-  async authenticate(rawToken: string): Promise<AuthContext> {
+  async authenticate(rawToken: string, request: TenantRequestContext): Promise<AuthContext> {
+    const tenant = await this.tenants.resolve(request);
     const tokenHash = this.tokens.hashSessionToken(rawToken);
     const context = await this.database.withTransaction(
-      { tenantId: this.environment.defaultTenantId },
+      { tenantId: tenant.id },
       async (client) => {
         const session = await this.repository.findSessionByHash(
           client,
-          this.environment.defaultTenantId,
+          tenant.id,
           tokenHash,
           false,
         );
@@ -708,17 +715,28 @@ export class AuthService {
     // A referência sempre é gerada para não revelar se a matrícula existe.
     const recoveryMaterial = this.tokens.createRecoveryMaterial();
 
+    const tenant = await this.tenants.tryResolve(metadata);
+    if (!tenant) {
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, 250 - (performance.now() - startedAt))));
+      return {
+        accepted: true,
+        request_id: recoveryMaterial.publicReference,
+        message: 'Se a matrícula estiver ativa, a solicitação será encaminhada ao administrador.',
+        release_version: this.environment.release.app,
+      };
+    }
+
     await this.database.withTransaction(
-      { tenantId: this.environment.defaultTenantId },
+      { tenantId: tenant.id },
       async (client) => {
         const credential = await this.repository.findCredentialForLogin(
           client,
-          this.environment.defaultTenantId,
+          tenant.id,
           employeeNumber,
         );
         if (credential?.status !== 'ACTIVE') {
           await this.repository.recordLoginAttempt(client, {
-            tenantId: this.environment.defaultTenantId,
+            tenantId: tenant.id,
             userId: credential?.userId ?? null,
             employeeNumberDigest,
             successful: false,

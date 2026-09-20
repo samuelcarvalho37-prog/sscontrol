@@ -1346,7 +1346,9 @@ export class CatalogService {
       ...input,
       sku: normalizeCode(input.sku),
       name: normalizeName(input.name),
+      friendlyName: input.friendlyName?.trim() ? normalizeName(input.friendlyName) : null,
       unit: input.unit.trim().toUpperCase(),
+      unitCost: input.unitCost,
     };
   }
 
@@ -1354,7 +1356,9 @@ export class CatalogService {
     return this.normalizeMaterial({
       sku: patch.sku ?? text(current, 'sku'),
       name: patch.name ?? text(current, 'nome'),
+      friendlyName: patch.friendlyName === undefined ? nullableText(current, 'nome_facil') : patch.friendlyName,
       unit: patch.unit ?? text(current, 'unidade'),
+      unitCost: patch.unitCost ?? nullableNumber(current, 'valor_unitario') ?? 0,
       currentStock: patch.currentStock ?? nullableNumber(current, 'estoque_atual') ?? 0,
       minimumStock: patch.minimumStock ?? nullableNumber(current, 'estoque_minimo') ?? 0,
       status: patch.status ?? (text(current, 'status') as MaterialInput['status']),

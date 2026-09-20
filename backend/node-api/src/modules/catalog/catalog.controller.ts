@@ -149,7 +149,9 @@ interface ScopedReadingBody {
 interface MaterialBody {
   readonly sku: string;
   readonly nome: string;
+  readonly nome_facil?: string | null;
   readonly unidade: string;
+  readonly valor_unitario?: number;
   readonly estoque_atual: number;
   readonly estoque_minimo: number;
   readonly status: RecordStatus;
@@ -291,7 +293,9 @@ function materialInput(body: MaterialBody): MaterialInput {
   return {
     sku: body.sku,
     name: body.nome,
+    friendlyName: body.nome_facil ?? null,
     unit: body.unidade,
+    unitCost: body.valor_unitario ?? 0,
     currentStock: body.estoque_atual,
     minimumStock: body.estoque_minimo,
     status: body.status,
@@ -628,7 +632,9 @@ export class CatalogController {
         {
           ...(body.sku === undefined ? {} : { sku: body.sku }),
           ...(body.nome === undefined ? {} : { name: body.nome }),
+          ...(body.nome_facil === undefined ? {} : { friendlyName: body.nome_facil }),
           ...(body.unidade === undefined ? {} : { unit: body.unidade }),
+          ...(body.valor_unitario === undefined ? {} : { unitCost: body.valor_unitario }),
           ...(body.estoque_atual === undefined ? {} : { currentStock: body.estoque_atual }),
           ...(body.estoque_minimo === undefined ? {} : { minimumStock: body.estoque_minimo }),
           ...(body.status === undefined ? {} : { status: body.status }),

@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { z } from 'zod';
 
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true');
@@ -10,7 +12,9 @@ const environmentSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    TRUST_PROXY: booleanFromString.default(false),
+    TRUST_PROXY_CIDRS: z.string().default(''),
+    RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(300),
+    RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3_600).default(60),
     BODY_LIMIT_BYTES: z.coerce.number().int().min(16_384).max(10_485_760).default(1_048_576),
     CORS_ALLOWED_ORIGINS: z.string().default(''),
     OPENAPI_ENABLED: booleanFromString.default(false),
@@ -44,6 +48,8 @@ const environmentSchema = z
       .optional(),
 
     DEFAULT_TENANT_ID: z.uuid(),
+    TENANT_BASE_DOMAIN: z.string().trim().min(1).max(253).optional(),
+    DEV_TENANT_SLUG: z.string().trim().min(1).max(63).optional(),
     APP_ENVIRONMENT: z.enum(['DEVELOPMENT', 'HOMOLOGATION', 'PRODUCTION']),
     APP_RELEASE_VERSION: z.string().min(1),
     API_VERSION: z.string().min(1),
@@ -57,6 +63,29 @@ const environmentSchema = z
     AUTH_MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
     AUTH_LOCK_MINUTES: z.coerce.number().int().min(1).max(1_440).default(15),
     AUTH_RECOVERY_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(1_440).default(10),
+    AUTH_RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    AUTH_RATE_LIMIT_LOGIN_WINDOW_SECONDS: z.coerce.number().int().min(1).max(3_600).default(60),
+    AUTH_RATE_LIMIT_FIRST_ACCESS_MAX: z.coerce.number().int().min(1).max(100).default(5),
+    AUTH_RATE_LIMIT_FIRST_ACCESS_WINDOW_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3_600)
+      .default(300),
+    AUTH_RATE_LIMIT_RECOVERY_MAX: z.coerce.number().int().min(1).max(100).default(3),
+    AUTH_RATE_LIMIT_RECOVERY_WINDOW_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3_600)
+      .default(600),
+    AUTH_RATE_LIMIT_MAINTENANCE_MAX: z.coerce.number().int().min(1).max(100).default(5),
+    AUTH_RATE_LIMIT_MAINTENANCE_WINDOW_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3_600)
+      .default(900),
     AUTH_PASSWORD_PEPPER: z.string().min(32).max(1_024),
     AUTH_RECOVERY_HMAC_SECRET: z.string().min(32).max(1_024),
     AUTH_MAINTENANCE_HMAC_SECRET: z.string().min(32).max(1_024),
@@ -78,6 +107,30 @@ const environmentSchema = z
         path: ['CORS_ALLOWED_ORIGINS'],
       });
     }
+    if (value.APP_ENVIRONMENT === 'PRODUCTION' && !value.TENANT_BASE_DOMAIN) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Produção exige TENANT_BASE_DOMAIN para resolver a empresa pelo hostname.',
+        path: ['TENANT_BASE_DOMAIN'],
+      });
+    }
+
+    const trustedProxyRanges = parseTrustedProxyCidrs(value.TRUST_PROXY_CIDRS);
+    if (value.APP_ENVIRONMENT === 'PRODUCTION' && trustedProxyRanges.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Produção exige TRUST_PROXY_CIDRS com as redes dos proxies confiáveis.',
+        path: ['TRUST_PROXY_CIDRS'],
+      });
+    }
+
+    if (trustedProxyRanges.length !== parseCsv(value.TRUST_PROXY_CIDRS).length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'TRUST_PROXY_CIDRS deve conter apenas IPs ou CIDRs válidos.',
+        path: ['TRUST_PROXY_CIDRS'],
+      });
+    }
   });
 
 export interface Environment {
@@ -85,7 +138,11 @@ export interface Environment {
   readonly host: string;
   readonly port: number;
   readonly logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
-  readonly trustProxy: boolean;
+  readonly trustProxyCidrs: readonly string[];
+  readonly rateLimit: {
+    readonly max: number;
+    readonly windowSeconds: number;
+  };
   readonly bodyLimitBytes: number;
   readonly corsAllowedOrigins: readonly string[];
   readonly openApiEnabled: boolean;
@@ -112,6 +169,10 @@ export interface Environment {
     readonly frontend: string;
   };
   readonly defaultTenantId: string;
+  readonly tenantResolution: {
+    readonly baseDomain: string | undefined;
+    readonly developmentTenantSlug: string | undefined;
+  };
   readonly auth: {
     readonly sessionHours: number;
     readonly firstAccessMinutes: number;
@@ -119,11 +180,50 @@ export interface Environment {
     readonly maxFailedAttempts: number;
     readonly lockMinutes: number;
     readonly recoveryCooldownMinutes: number;
+    readonly rateLimit: {
+      readonly login: { readonly max: number; readonly windowSeconds: number };
+      readonly firstAccess: { readonly max: number; readonly windowSeconds: number };
+      readonly recovery: { readonly max: number; readonly windowSeconds: number };
+      readonly maintenance: { readonly max: number; readonly windowSeconds: number };
+    };
     readonly passwordPepper: string;
     readonly recoveryHmacSecret: string;
     readonly maintenanceHmacSecret: string;
   };
   readonly migrationsDirectory: string | undefined;
+}
+
+function parseCsv(value: string): readonly string[] {
+  return Object.freeze(
+    value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+  );
+}
+
+function isValidCidr(value: string): boolean {
+  const [address, prefix, ...remainder] = value.split('/');
+  if (!address || remainder.length > 0) return false;
+
+  const family = isIP(address);
+  if (family === 0) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d+$/u.test(prefix)) return false;
+
+  const parsedPrefix = Number(prefix);
+  return parsedPrefix >= 0 && parsedPrefix <= (family === 4 ? 32 : 128);
+}
+
+function isSafeTrustedProxyCidr(value: string): boolean {
+  if (!isValidCidr(value)) return false;
+  const [address, prefix] = value.split('/');
+  if (address === '0.0.0.0' || address === '::') return false;
+  return prefix === undefined || Number(prefix) > 0;
+}
+
+function parseTrustedProxyCidrs(value: string): readonly string[] {
+  return Object.freeze(parseCsv(value).filter(isSafeTrustedProxyCidr));
 }
 
 function decodeCertificate(encodedCertificate: string | undefined): string | undefined {
@@ -156,7 +256,11 @@ export function loadEnvironment(source: NodeJS.ProcessEnv = process.env): Enviro
     host: value.HOST,
     port: value.PORT,
     logLevel: value.LOG_LEVEL,
-    trustProxy: value.TRUST_PROXY,
+    trustProxyCidrs: parseTrustedProxyCidrs(value.TRUST_PROXY_CIDRS),
+    rateLimit: Object.freeze({
+      max: value.RATE_LIMIT_MAX,
+      windowSeconds: value.RATE_LIMIT_WINDOW_SECONDS,
+    }),
     bodyLimitBytes: value.BODY_LIMIT_BYTES,
     corsAllowedOrigins: Object.freeze(origins),
     openApiEnabled: value.OPENAPI_ENABLED,
@@ -183,6 +287,10 @@ export function loadEnvironment(source: NodeJS.ProcessEnv = process.env): Enviro
       frontend: value.FRONTEND_VERSION,
     }),
     defaultTenantId: value.DEFAULT_TENANT_ID,
+    tenantResolution: Object.freeze({
+      baseDomain: value.TENANT_BASE_DOMAIN?.toLowerCase().replace(/\.+$/u, ''),
+      developmentTenantSlug: value.DEV_TENANT_SLUG?.toLowerCase(),
+    }),
     auth: Object.freeze({
       sessionHours: value.AUTH_SESSION_HOURS,
       firstAccessMinutes: value.AUTH_FIRST_ACCESS_MINUTES,
@@ -190,6 +298,24 @@ export function loadEnvironment(source: NodeJS.ProcessEnv = process.env): Enviro
       maxFailedAttempts: value.AUTH_MAX_FAILED_ATTEMPTS,
       lockMinutes: value.AUTH_LOCK_MINUTES,
       recoveryCooldownMinutes: value.AUTH_RECOVERY_COOLDOWN_MINUTES,
+      rateLimit: Object.freeze({
+        login: Object.freeze({
+          max: value.AUTH_RATE_LIMIT_LOGIN_MAX,
+          windowSeconds: value.AUTH_RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+        }),
+        firstAccess: Object.freeze({
+          max: value.AUTH_RATE_LIMIT_FIRST_ACCESS_MAX,
+          windowSeconds: value.AUTH_RATE_LIMIT_FIRST_ACCESS_WINDOW_SECONDS,
+        }),
+        recovery: Object.freeze({
+          max: value.AUTH_RATE_LIMIT_RECOVERY_MAX,
+          windowSeconds: value.AUTH_RATE_LIMIT_RECOVERY_WINDOW_SECONDS,
+        }),
+        maintenance: Object.freeze({
+          max: value.AUTH_RATE_LIMIT_MAINTENANCE_MAX,
+          windowSeconds: value.AUTH_RATE_LIMIT_MAINTENANCE_WINDOW_SECONDS,
+        }),
+      }),
       passwordPepper: value.AUTH_PASSWORD_PEPPER,
       recoveryHmacSecret: value.AUTH_RECOVERY_HMAC_SECRET,
       maintenanceHmacSecret: value.AUTH_MAINTENANCE_HMAC_SECRET,

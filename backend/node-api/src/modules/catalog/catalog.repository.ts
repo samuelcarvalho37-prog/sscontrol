@@ -702,7 +702,8 @@ export class CatalogRepository {
     const result = await client.query<AssetCursorRow>(
       `
         SELECT
-          id, sku, name AS nome, unit AS unidade,
+          id, sku, name AS nome, friendly_name AS nome_facil, unit AS unidade,
+          unit_cost AS valor_unitario,
           current_stock AS estoque_atual,
           minimum_stock AS estoque_minimo,
           current_stock <= minimum_stock AS abaixo_minimo,
@@ -713,6 +714,7 @@ export class CatalogRepository {
             $1::text = ''
             OR sku ILIKE '%' || $1 || '%'
             OR name ILIKE '%' || $1 || '%'
+            OR friendly_name ILIKE '%' || $1 || '%'
           )
           AND ($2::text IS NULL OR status = $2)
           AND (
@@ -742,7 +744,8 @@ export class CatalogRepository {
     const result = await client.query<CatalogRow>(
       `
         SELECT
-          id, sku, name AS nome, unit AS unidade,
+          id, sku, name AS nome, friendly_name AS nome_facil, unit AS unidade,
+          unit_cost AS valor_unitario,
           current_stock AS estoque_atual,
           minimum_stock AS estoque_minimo,
           current_stock <= minimum_stock AS abaixo_minimo,
@@ -765,16 +768,18 @@ export class CatalogRepository {
     await client.query(
       `
         INSERT INTO cmms.materials (
-          id, tenant_id, sku, name, unit, current_stock, minimum_stock, status
+          id, tenant_id, sku, name, friendly_name, unit, unit_cost, current_stock, minimum_stock, status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         id,
         tenantId,
         input.sku,
         input.name,
+        input.friendlyName,
         input.unit,
+        input.unitCost,
         input.currentStock,
         input.minimumStock,
         input.status,
@@ -792,13 +797,15 @@ export class CatalogRepository {
         SET
           sku = $2,
           name = $3,
-          unit = $4,
-          current_stock = $5,
-          minimum_stock = $6,
-          status = $7
+          friendly_name = $4,
+          unit = $5,
+          unit_cost = $6,
+          current_stock = $7,
+          minimum_stock = $8,
+          status = $9
         WHERE id = $1 AND deleted_at IS NULL
       `,
-      [id, input.sku, input.name, input.unit, input.currentStock, input.minimumStock, input.status],
+      [id, input.sku, input.name, input.friendlyName, input.unit, input.unitCost, input.currentStock, input.minimumStock, input.status],
     );
     const updated = await this.findMaterial(client, id);
     if (!updated) throw new Error('O material alterado não foi encontrado.');

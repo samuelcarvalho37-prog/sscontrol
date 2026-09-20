@@ -84,6 +84,12 @@ export interface ExecutionBatchItemInput {
   readonly observation: string | null;
 }
 
+export interface MaterialConsumptionInput {
+  readonly materialId: string;
+  readonly quantity: number;
+  readonly observation: string | null;
+}
+
 export interface EvidenceInput {
   readonly storageObjectId: string;
   readonly evidenceType: EvidenceType;

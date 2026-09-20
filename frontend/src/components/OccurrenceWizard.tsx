@@ -10,7 +10,7 @@ const questions: [keyof Assessment, string][] = [
   ['impacto_qualidade', 'Há impacto na qualidade?'], ['existe_redundancia', 'Existe equipamento redundante disponível?'],
 ]
 const blank = (): Assessment => ({ equipamento_parado: null, risco_parada: null, risco_seguranca: null, impacto_producao: null, impacto_qualidade: null, existe_redundancia: null })
-const labels = ['Setor', 'Linha', 'Equipamento', 'Problema', 'Situação atual', 'Avaliação', 'Prioridade', 'Descrição e foto', 'Revisar e enviar']
+const labels = ['Planta', 'Setor', 'Linha', 'Equipamento', 'Problema', 'Situação atual', 'Avaliação', 'Prioridade', 'Descrição e foto', 'Revisar e enviar']
 const priorities: Record<string, string> = { CRITICAL: 'Crítica', HIGH: 'Alta', MEDIUM: 'Média', LOW: 'Baixa' }
 function displayName(value: string): string {
   return value
@@ -25,8 +25,9 @@ function priority(a: Assessment) {
 
 export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: string }) {
   const [step, setStep] = useState(0)
-  const [sectors, setSectors] = useState<Sector[]>([])
+  const [plants, setPlants] = useState<Structure['plantas']>([])
   const [assets, setAssets] = useState<Choice[]>([])
+  const [plant, setPlant] = useState('')
   const [sector, setSector] = useState('')
   const [line, setLine] = useState('')
   const [asset, setAsset] = useState('')
@@ -42,6 +43,7 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
   const [sent, setSent] = useState('')
   const [reload, setReload] = useState(0)
   const base = apiUrl.replace(/\/+$/, '').replace(/\/v1$/, '')
+  const sectors = plants.find(item => item.id === plant)?.setores ?? []
   const lines = sectors.find(item => item.id === sector)?.linhas ?? []
   async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const response = await fetch(`${base}${path}`, { method: body ? 'POST' : 'GET',
@@ -55,7 +57,7 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
     const controller = new AbortController()
     setLoading(true); setError('')
     void request<Structure>('/v1/cmms/structure?status=ACTIVE', undefined, controller.signal)
-      .then(data => setSectors(data.plantas.flatMap(plant => plant.setores.map(item => ({ ...item, nome: `${displayName(plant.nome)} · ${displayName(item.nome)}` })))))
+      .then(data => setPlants(data.plantas))
       .catch(cause => { if (!controller.signal.aborted) setError(String(cause.message ?? cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
@@ -112,24 +114,25 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível enviar. Confira a conexão antes de tentar novamente.') }
     finally { setSending(false) }
   }
-  const valid = [!!sector, !!line, !!asset, !!problem, situation.trim().length >= 3, questions.every(([key]) => answers[key] !== null), true, description.trim().length >= 3, true][step]
+  const valid = [!!plant, !!sector, !!line, !!asset, !!problem, situation.trim().length >= 3, questions.every(([key]) => answers[key] !== null), true, description.trim().length >= 3, true][step]
   const select = (label: string, value: string, choices: Choice[], change: (value: string) => void) => <label style={{ display: 'grid', gap: 8 }}>{label}<select value={value} onChange={event => change(event.target.value)} style={{ padding: 12 }}><option value="">Selecione</option>{choices.map(item => <option key={item.id} value={item.id}>{item.tag ? `${item.tag} · ` : ''}{displayName(item.nome)}</option>)}</select>{!loading && !choices.length && <span>Nenhum registro disponível.</span>}</label>
   return <section style={{ maxWidth: 760, margin: '24px auto', padding: 24, background: '#fff', color: '#102d42', borderRadius: 18, display: 'grid', gap: 20 }}>
     <header><h1>Nova ocorrência</h1><p>Informe o problema para a equipe de manutenção.</p></header>
-    {sent ? <><p role="status">Ocorrência enviada: {sent}</p><button onClick={() => { setSent(''); setStep(0); setSector(''); setLine(''); setAsset(''); setProblem(''); setSituation(''); setAnswers(blank()); setDescription('') }}>Registrar outra ocorrência</button></> : <>
+    {sent ? <><p role="status">Ocorrência enviada: {sent}</p><button onClick={() => { setSent(''); setStep(0); setPlant(''); setSector(''); setLine(''); setAsset(''); setProblem(''); setSituation(''); setAnswers(blank()); setDescription('') }}>Registrar outra ocorrência</button></> : <>
       <p aria-live="polite">Etapa {step + 1} de {labels.length} · {labels[step]}</p>
       {loading && <p role="status">Carregando opções…</p>}
-      {error && <div role="alert"><p>{error}</p>{step < 3 && <button onClick={() => setReload(value => value + 1)}>Tentar carregar novamente</button>}</div>}
-      {step === 0 && select('Setor', sector, sectors, value => { setSector(value); setLine(''); setAsset('') })}
-      {step === 1 && select('Linha', line, lines, value => { setLine(value); setAsset('') })}
-      {step === 2 && select('Equipamento', asset, assets, setAsset)}
-      {step === 3 && select('Tipo de problema', problem, ['Falha mecânica', 'Falha elétrica', 'Vazamento', 'Ruído ou vibração', 'Temperatura', 'Qualidade', 'Segurança', 'Outro'].map(nome => ({ id: nome, nome })), setProblem)}
-      {step === 4 && <label>Situação atual<textarea rows={4} maxLength={1000} value={situation} onChange={event => setSituation(event.target.value)} placeholder="Como o equipamento está funcionando agora?" style={{ display: 'block', width: '100%' }} /></label>}
-      {step === 5 && questions.map(([key, label]) => <fieldset key={key} style={{ padding: 12 }}><legend>{label}</legend>{[true, false].map(value => <label key={String(value)} style={{ marginRight: 24 }}><input type="radio" name={key} checked={answers[key] === value} onChange={() => setAnswers(current => ({ ...current, [key]: value }))} /> {value ? 'Sim' : 'Não'}</label>)}</fieldset>)}
-      {step === 6 && <><h2>Prioridade sugerida: {priorities[priority(answers)]}</h2><p>Risco de segurança e parada com impacto sem redundância são críticos. Parada, impacto na qualidade e risco de parada sem redundância recebem prioridade alta.</p><p>A equipe de manutenção fará a análise técnica.</p></>}
-      {step === 7 && <><label>Descrição do problema<textarea rows={5} maxLength={8000} value={description} onChange={event => setDescription(event.target.value)} style={{ display: 'block', width: '100%' }} /></label><label>Foto opcional<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={preparingPhoto} onChange={event => void preparePhoto(event.target.files?.[0])} /></label>{preparingPhoto && <p>Preparando foto…</p>}{photo && <><img src={photo} alt="Foto que será anexada à ocorrência" style={{ width: '100%', maxHeight: 300, objectFit: 'contain' }} /><button onClick={() => setPhoto('')}>Remover foto</button></>}</>}
-      {step === 8 && <><h2>Confira o relato</h2><p>{sectors.find(item => item.id === sector)?.nome} → {lines.find(item => item.id === line)?.nome} → {assets.find(item => item.id === asset)?.nome}</p><p>{problem} · Prioridade {priorities[priority(answers)]}</p><p>{situation}</p><ul>{questions.map(([key, label]) => <li key={key}>{label} {answers[key] ? 'Sim' : 'Não'}</li>)}</ul><p style={{ whiteSpace: 'pre-wrap' }}>{description}</p><p>{photo ? 'Foto anexada.' : 'Sem foto.'}</p></>}
-      <footer style={{ display: 'flex', gap: 16, justifyContent: 'space-between' }}><button disabled={step === 0 || sending} onClick={() => setStep(value => value - 1)}>Voltar</button>{step < 8 ? <button disabled={!valid || loading || preparingPhoto} onClick={() => { setError(''); setStep(value => value + 1) }}>Continuar</button> : <button disabled={sending} onClick={() => void send()}>{sending ? 'Enviando…' : 'Enviar ocorrência'}</button>}</footer>
+      {error && <div role="alert"><p>{error}</p>{step < 4 && <button onClick={() => setReload(value => value + 1)}>Tentar carregar novamente</button>}</div>}
+      {step === 0 && select('Planta', plant, plants, value => { setPlant(value); setSector(''); setLine(''); setAsset('') })}
+      {step === 1 && select('Setor', sector, sectors, value => { setSector(value); setLine(''); setAsset('') })}
+      {step === 2 && select('Linha', line, lines, value => { setLine(value); setAsset('') })}
+      {step === 3 && select('Equipamento', asset, assets, setAsset)}
+      {step === 4 && select('Tipo de problema', problem, ['Falha mecânica', 'Falha elétrica', 'Vazamento', 'Ruído ou vibração', 'Temperatura', 'Qualidade', 'Segurança', 'Outro'].map(nome => ({ id: nome, nome })), setProblem)}
+      {step === 5 && <label>Situação atual<textarea rows={4} maxLength={1000} value={situation} onChange={event => setSituation(event.target.value)} placeholder="Como o equipamento está funcionando agora?" style={{ display: 'block', width: '100%' }} /></label>}
+      {step === 6 && questions.map(([key, label]) => <fieldset key={key} style={{ padding: 12 }}><legend>{label}</legend>{[true, false].map(value => <label key={String(value)} style={{ marginRight: 24 }}><input type="radio" name={key} checked={answers[key] === value} onChange={() => setAnswers(current => ({ ...current, [key]: value }))} /> {value ? 'Sim' : 'Não'}</label>)}</fieldset>)}
+      {step === 7 && <><h2>Prioridade sugerida: {priorities[priority(answers)]}</h2><p>Risco de segurança e parada com impacto sem redundância são críticos. Parada, impacto na qualidade e risco de parada sem redundância recebem prioridade alta.</p><p>A equipe de manutenção fará a análise técnica.</p></>}
+      {step === 8 && <><label>Descrição do problema<textarea rows={5} maxLength={8000} value={description} onChange={event => setDescription(event.target.value)} style={{ display: 'block', width: '100%' }} /></label><label>Foto opcional<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={preparingPhoto} onChange={event => void preparePhoto(event.target.files?.[0])} /></label>{preparingPhoto && <p>Preparando foto…</p>}{photo && <><img src={photo} alt="Foto que será anexada à ocorrência" style={{ width: '100%', maxHeight: 300, objectFit: 'contain' }} /><button onClick={() => setPhoto('')}>Remover foto</button></>}</>}
+      {step === 9 && <><h2>Confira o relato</h2><p>{plants.find(item => item.id === plant)?.nome} → {sectors.find(item => item.id === sector)?.nome} → {lines.find(item => item.id === line)?.nome} → {assets.find(item => item.id === asset)?.nome}</p><p>{problem} · Prioridade {priorities[priority(answers)]}</p><p>{situation}</p><ul>{questions.map(([key, label]) => <li key={key}>{label} {answers[key] ? 'Sim' : 'Não'}</li>)}</ul><p style={{ whiteSpace: 'pre-wrap' }}>{description}</p><p>{photo ? 'Foto anexada.' : 'Sem foto.'}</p></>}
+      <footer style={{ display: 'flex', gap: 16, justifyContent: 'space-between' }}><button disabled={step === 0 || sending} onClick={() => setStep(value => value - 1)}>Voltar</button>{step < 9 ? <button disabled={!valid || loading || preparingPhoto} onClick={() => { setError(''); setStep(value => value + 1) }}>Continuar</button> : <button disabled={sending} onClick={() => void send()}>{sending ? 'Enviando…' : 'Enviar ocorrência'}</button>}</footer>
     </>}
   </section>
 }

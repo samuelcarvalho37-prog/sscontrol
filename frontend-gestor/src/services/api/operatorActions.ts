@@ -4,6 +4,7 @@ import type {
   Execution,
   ExecutionItem,
   ExecutionValidation,
+  ConsumableMaterial,
   OperatorAction,
   OperatorActionDetail,
   StopMode,
@@ -22,8 +23,8 @@ function requireData<T>(data: T | undefined, action: string): T {
   return data
 }
 
-export async function listOperatorActions(signal?: AbortSignal): Promise<OperatorAction[]> {
-  const response = await callApi<{ itens?: OperatorAction[] }>('operator-actions.list', { token: token(), limite: 100 }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ, dedupe: true })
+export async function listOperatorActions(history = false, signal?: AbortSignal): Promise<OperatorAction[]> {
+  const response = await callApi<{ itens?: OperatorAction[] }>('operator-actions.list', { token: token(), limite: 100, historico: history }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ, dedupe: true })
   return requireData(response.data, 'operator-actions.list').itens ?? []
 }
 
@@ -67,6 +68,16 @@ export async function saveOperatorResponses(actionId: string, itens: Array<Pick<
 export async function validateOperatorActionCompletion(actionId: string): Promise<ExecutionValidation> {
   const response = await callApi<ExecutionValidation>('operator-actions.validation', { token: token(), acao_id: actionId }, undefined, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
   return requireData(response.data, 'operator-actions.validation')
+}
+
+export async function listOperatorMaterials(actionId: string): Promise<ConsumableMaterial[]> {
+  const response = await callApi<{ materiais?: ConsumableMaterial[] }>('operator-actions.materials.list', { token: token(), acao_id: actionId }, undefined, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
+  return requireData(response.data, 'operator-actions.materials.list').materiais ?? []
+}
+
+export async function consumeOperatorMaterial(actionId: string, materialId: string, quantity: number, observation: string | null): Promise<Execution> {
+  const response = await callApi<{ execucao: Execution }>('operator-actions.materials.consume', { token: token(), acao_id: actionId, material_id: materialId, quantidade: quantity, observacao: observation }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  return requireData(response.data, 'operator-actions.materials.consume').execucao
 }
 
 export async function completeOperatorAction(actionId: string, input: TechnicalCompletionInput): Promise<Execution> {

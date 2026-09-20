@@ -1,5 +1,5 @@
 import type { ApiEnvelope } from "../../types/api";
-import { getApiTransport, getApiUrl, getLegacyApiUrl } from "./config";
+import { getApiTransport, getApiUrl, getDevelopmentTenantSlug, getLegacyApiUrl } from "./config";
 
 export const API_TIMEOUT_MS = {
   FAST_READ: 15_000,
@@ -27,6 +27,11 @@ export class ApiRequestError extends Error {
 }
 
 const inFlightReads = new Map<string, Promise<ApiEnvelope<unknown>>>();
+
+function developmentTenantHeader(): Record<string, string> {
+  const slug = getDevelopmentTenantSlug();
+  return slug ? { "X-VORQIX-DEV-TENANT": slug } : {};
+}
 
 function stableSerialize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -1313,7 +1318,7 @@ export async function callNodeMultipart<T>(
   try {
     const response = await fetch(`${nodeBaseUrl(apiUrl)}${path}`, {
       method: "POST",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...developmentTenantHeader() },
       body,
       signal: controller.signal,
     });
@@ -1361,6 +1366,7 @@ export async function fetchNodePrivateBlob(
       headers: {
         Accept: "image/jpeg,image/png,image/webp",
         Authorization: `Bearer ${token}`,
+        ...developmentTenantHeader(),
       },
       signal: controller.signal,
     });
@@ -1412,7 +1418,7 @@ async function executeNodeCall<T>(
   signal?.addEventListener("abort", abortFromCaller, { once: true });
 
   try {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...developmentTenantHeader() };
     if (request.body) headers["Content-Type"] = "application/json";
     if (request.token) headers.Authorization = `Bearer ${request.token}`;
     const response = await fetch(`${nodeBaseUrl(apiUrl)}${request.path}`, {

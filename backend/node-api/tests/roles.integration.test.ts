@@ -29,7 +29,8 @@ test(
   },
   async (t) => {
     const tenantId = randomUUID();
-    const environment = createTestEnvironment(process.env.TEST_DATABASE_URL, tenantId);
+    const tenantSlug = `roles-${tenantId}`;
+    const environment = createTestEnvironment(process.env.TEST_DATABASE_URL, tenantId, tenantSlug);
     const pool = new Pool({ connectionString: environment.database.url });
     const password = 'Role-Test!Password2026';
     const hash = await new PasswordService(environment.auth.passwordPepper).hash(password);
@@ -65,7 +66,7 @@ test(
       await client.query(
         `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
       VALUES ($1,'Roles Test','Roles Test',$2,'DEVELOPMENT','ACTIVE')`,
-        [tenantId, `roles-${tenantId}`],
+        [tenantId, tenantSlug],
       );
       for (const code of codes) {
         const roleId = randomUUID();

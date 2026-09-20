@@ -140,7 +140,16 @@ export const importModels: readonly ImportModel[] = Object.freeze([
       field('id', 'ID', '', false, ['id_material']),
       field('sku', 'SKU', 'ROL-6205', true, ['codigo', 'codigo_material']),
       field('nome', 'Nome', 'Rolamento 6205', true, ['material', 'descricao']),
+      field('nome_facil', 'Nome para consulta', 'Rolamento do motor principal', false, [
+        'nome simples',
+        'nome_para_consulta',
+      ]),
       field('unidade', 'Unidade', 'un', false, ['un']),
+      field('valor_unitario', 'Custo unitário (R$)', 125.5, false, [
+        'custo unitario',
+        'custo_unitario',
+        'valor unitario',
+      ]),
       field('estoque_atual', 'Estoque atual', 10, false, ['saldo', 'quantidade']),
       field('estoque_minimo', 'Estoque mínimo', 3, false, ['minimo']),
       field('status', 'Status', 'ATIVO', false, ['ativo']),

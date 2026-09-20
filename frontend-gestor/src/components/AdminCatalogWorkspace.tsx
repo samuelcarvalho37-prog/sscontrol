@@ -278,16 +278,18 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
   },
   materiais: {
     entity: 'materiais', singular: 'material', label: 'Materiais e peças', description: 'Itens utilizados nas execuções de manutenção.',
-    columns: [{ key: 'sku', label: 'SKU' }, { key: 'nome', label: 'Material' }, { key: 'unidade', label: 'Unidade' }, { key: 'estoque_atual', label: 'Saldo' }, { key: 'estoque_minimo', label: 'Mínimo' }, { key: 'status', label: 'Status' }],
+    columns: [{ key: 'sku', label: 'SKU' }, { key: 'nome', label: 'Nome técnico' }, { key: 'nome_facil', label: 'Nome para consulta' }, { key: 'valor_unitario', label: 'Custo unitário' }, { key: 'unidade', label: 'Unidade' }, { key: 'estoque_atual', label: 'Saldo' }, { key: 'estoque_minimo', label: 'Mínimo' }, { key: 'status', label: 'Status' }],
     fields: [
       { key: 'sku', label: 'SKU / código', required: true },
       { key: 'nome', label: 'Nome do material', required: true },
+      { key: 'nome_facil', label: 'Nome para consulta', help: 'Descrição simples exibida para o técnico durante a execução.' },
       { key: 'unidade', label: 'Unidade', type: 'select', options: MATERIAL_UNIT_OPTIONS, required: true },
+      { key: 'valor_unitario', label: 'Custo unitário (R$)', type: 'number', required: true, help: 'Valor aplicado à OS quando esta peça sair do estoque.' },
       { key: 'estoque_atual', label: 'Estoque atual', type: 'number' },
       { key: 'estoque_minimo', label: 'Estoque mínimo', type: 'number' },
       { key: 'status', label: 'Status', type: 'select', options: STATUS_OPTIONS, required: true },
     ],
-    defaults: { id: '', sku: '', nome: '', unidade: 'un', estoque_atual: 0, estoque_minimo: 0, status: 'ATIVO' },
+    defaults: { id: '', sku: '', nome: '', nome_facil: '', unidade: 'un', valor_unitario: 0, estoque_atual: 0, estoque_minimo: 0, status: 'ATIVO' },
   },
   planos: {
     entity: 'planos', singular: 'plano', label: 'Planos programados', description: 'Programações que seguem para validação técnica antes de chegar ao Operador.',

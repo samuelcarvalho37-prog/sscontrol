@@ -104,6 +104,9 @@ export function TechnicalDemandDialog({
   const completed = Math.max(0, Number(demand.assinaturas_realizadas ?? 0))
   const pending = Math.max(0, required - completed)
   const visibleItems = showAllItems ? detail?.itens : detail?.itens.slice(0, 4)
+  const awaitingPostInterventionExecution =
+    upper(demand.tipo) === 'POST_INTERVENTION_RELEASE' &&
+    upper(demand.status) === 'ABERTA'
 
   function fail(cause: unknown, fallback: string) {
     if (isGestorAuthenticationError(cause)) {
@@ -116,6 +119,10 @@ export function TechnicalDemandDialog({
   async function approve() {
     if (!context.pode_validar) {
       setError('Seu perfil é de acompanhamento e não possui permissão para assinar.')
+      return
+    }
+    if (awaitingPostInterventionExecution) {
+      setError('A liberação pós-intervenção estará disponível após a conclusão técnica da OS.')
       return
     }
     if (opinion.trim().length < 5) {
@@ -235,6 +242,13 @@ export function TechnicalDemandDialog({
             </div>
           </section>
 
+          {awaitingPostInterventionExecution ? (
+            <div className="feedback feedback--info" role="status">
+              Aguardando a conclusão técnica da OS. Após o técnico concluir checklist,
+              evidências e relatório, Qualidade e Segurança poderão assinar esta liberação.
+            </div>
+          ) : null}
+
           {isChecklist(demand) ? (
             <section className="validation-gate-checklist">
               <header>
@@ -307,7 +321,7 @@ export function TechnicalDemandDialog({
           <button
             className="primary-button"
             type="button"
-            disabled={submitting || loadingDetail}
+            disabled={submitting || loadingDetail || awaitingPostInterventionExecution}
             onClick={() => void (returning ? requestCorrection() : approve())}
           >
             {submitting

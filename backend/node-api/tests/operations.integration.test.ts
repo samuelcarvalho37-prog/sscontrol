@@ -18,6 +18,7 @@ const ids = {
   quality: randomUUID(),
   safety: randomUUID(),
   operator: randomUUID(),
+  support: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
   operatorRole: randomUUID(),
@@ -48,6 +49,11 @@ interface Identities {
   readonly quality: string;
   readonly safety: string;
   readonly operator: string;
+  readonly support: string;
+}
+
+interface SeededIdentities extends Identities {
+  readonly tenantSlug: string;
 }
 
 function token(): { readonly raw: string; readonly hash: string } {
@@ -98,16 +104,18 @@ async function transaction<T>(
   }
 }
 
-async function seed(pool: Pool): Promise<Identities> {
+async function seed(pool: Pool): Promise<SeededIdentities> {
   const admin = token();
   const quality = token();
   const safety = token();
   const operator = token();
+  const support = token();
+  const tenantSlug = `operations-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
       VALUES ($1,'Operações Testes','Operações Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `operations-${randomUUID()}`],
+       [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
@@ -118,21 +126,23 @@ async function seed(pool: Pool): Promise<Identities> {
     );
     await client.query(
       `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
-      ($1,$5,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
-      ($2,$5,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
-      ($3,$5,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
-      ($4,$5,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false)`,
-      [ids.admin, ids.quality, ids.safety, ids.operator, tenantId],
+      ($1,$6,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
+      ($2,$6,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
+      ($3,$6,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
+      ($4,$6,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false),
+      ($5,$6,'USR-OPS-SUP','Apoio Operações','ops.support@fabcontrol.local',false)`,
+      [ids.admin, ids.quality, ids.safety, ids.operator, ids.support, tenantId],
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
-      ($1,$2,$6),($1,$3,$7),($1,$4,$7),($1,$5,$8)`,
+      ($1,$2,$7),($1,$3,$8),($1,$4,$8),($1,$5,$9),($1,$6,$9)`,
       [
         tenantId,
         ids.admin,
         ids.quality,
         ids.safety,
         ids.operator,
+        ids.support,
         ids.adminRole,
         ids.validatorRole,
         ids.operatorRole,
@@ -216,6 +226,7 @@ async function seed(pool: Pool): Promise<Identities> {
       [ids.quality, quality],
       [ids.safety, safety],
       [ids.operator, operator],
+      [ids.support, support],
     ] as const) {
       await client.query(
         `INSERT INTO iam.sessions
@@ -319,7 +330,14 @@ async function seed(pool: Pool): Promise<Identities> {
       [ids.storageObject, tenantId, 'd'.repeat(64), ids.operator],
     );
   });
-  return { admin: admin.raw, quality: quality.raw, safety: safety.raw, operator: operator.raw };
+  return {
+    admin: admin.raw,
+    quality: quality.raw,
+    safety: safety.raw,
+    operator: operator.raw,
+    support: support.raw,
+    tenantSlug,
+  };
 }
 
 test(
@@ -329,7 +347,7 @@ test(
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 4 });
     const identities = await seed(pool);
-    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId) });
+    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId, identities.tenantSlug) });
     context.after(async () => {
       await app.close();
       await pool.end();
@@ -470,6 +488,16 @@ test(
     });
     assert.equal(submitted.statusCode, 200, submitted.body);
     const demandId: string = submitted.json().data.validacao.id;
+    await transaction(pool, async (client) => {
+      const postIntervention = await client.query(
+        `SELECT demand_type, status FROM workflow.technical_demands WHERE id=$1`,
+        [demandId],
+      );
+      assert.deepEqual(postIntervention.rows[0], {
+        demand_type: 'POST_INTERVENTION_RELEASE',
+        status: 'OPEN',
+      });
+    });
     // O cenário completo inclui confirmação, inspeção, parâmetro e evidência.
     assert.equal(submitted.json().data.checklist_itens.length, 4);
 
@@ -509,13 +537,6 @@ test(
     });
     assert.equal(qualitySigned.statusCode, 409, qualitySigned.body);
 
-    const prematureRelease = await app.inject({
-      method: 'POST',
-      url: `/v1/maintenance/work-orders/${workOrderId}/release`,
-      headers: bearer(identities.admin),
-    });
-    assert.equal(prematureRelease.statusCode, 409, prematureRelease.body);
-
     const safetySigned = await app.inject({
       method: 'POST',
       url: `/v1/workflow/technical-demands/${demandId}/sign`,
@@ -526,9 +547,18 @@ test(
       },
     });
     assert.equal(safetySigned.statusCode, 409, safetySigned.body);
-    assert.equal(submitted.json().data.status, 'RELEASED');
+    assert.equal(submitted.json().data.status, 'APPROVED');
     assert.equal(submitted.json().data.validacao.assinaturas.length, 0);
-    assert.equal(submitted.json().data.acoes.length, 1);
+    assert.equal(submitted.json().data.acoes.length, 0);
+
+    const releasedByPcm = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${workOrderId}/release`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(releasedByPcm.statusCode, 200, releasedByPcm.body);
+    assert.equal(releasedByPcm.json().data.status, 'RELEASED');
+    assert.equal(releasedByPcm.json().data.acoes.length, 1);
 
     const workOrderList = await app.inject({
       method: 'GET',
@@ -566,6 +596,29 @@ test(
     const actionId: string = queue.json().data.itens[0].id;
     assert.equal(queue.json().data.itens[0].componente_tag, 'MOT-OPS-001');
 
+    await transaction(pool, async (client) => {
+      await client.query(
+        `UPDATE maintenance.work_order_actions
+         SET technical_analysis=jsonb_set(COALESCE(technical_analysis, '{}'::jsonb),
+             '{tecnicos_apoio_ids}', $2::jsonb, true)
+         WHERE id=$1`,
+        [actionId, JSON.stringify([ids.support])],
+      );
+    });
+    const supportQueue = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/operator-actions',
+      headers: bearer(identities.support),
+    });
+    assert.equal(supportQueue.statusCode, 200, supportQueue.body);
+    assert.equal(supportQueue.json().data.itens.length, 1);
+    assert.equal(supportQueue.json().data.itens[0].id, actionId);
+    const supportContext = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/operator-actions/${actionId}`,
+      headers: bearer(identities.support),
+    });
+    assert.equal(supportContext.statusCode, 200, supportContext.body);
     const actionContext = await app.inject({
       method: 'GET',
       url: `/v1/maintenance/operator-actions/${actionId}`,
@@ -839,6 +892,7 @@ test(
       headers: bearer(identities.admin),
     });
     assert.equal(awaitingTechnicalReview.statusCode, 200, awaitingTechnicalReview.body);
+    // IN_TECHNICAL_REVIEW é o valor canônico persistido para “aguardando validação”.
     assert.equal(awaitingTechnicalReview.json().data.status, 'IN_TECHNICAL_REVIEW');
 
     await transaction(pool, async client => {
@@ -952,7 +1006,7 @@ test(
         },
       });
       assert.equal(ordinary.statusCode, 200, ordinary.body);
-      const released = await app.inject({
+      const approved = await app.inject({
         method: 'POST',
         url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/submit-review`,
         headers: bearer(identities.admin),
@@ -963,8 +1017,15 @@ test(
           resolucao_ate: null,
         },
       });
+      assert.equal(approved.statusCode, 200, approved.body);
+      assert.equal(approved.json().data.validacao, null);
+      assert.equal(approved.json().data.status, 'APPROVED');
+      const released = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/release`,
+        headers: bearer(identities.admin),
+      });
       assert.equal(released.statusCode, 200, released.body);
-      assert.equal(released.json().data.validacao, null);
       assert.equal(released.json().data.status, 'RELEASED');
     }
     const finalPcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
@@ -983,28 +1044,63 @@ test(
         plano_versao_id: ids.planVersion, tipo_origem: 'ADMIN', entidade_origem_id: null,
         tipo_trabalho: 'PREVENTIVE', titulo: 'Preventiva normal concluída pelo técnico',
         descricao: 'Fluxo normal sem validação posterior.', prioridade: 'MEDIUM',
-        responsavel_id: ids.operator, programada_para: new Date(Date.now() + 86400000).toISOString(),
+        responsavel_id: null, programada_para: new Date(Date.now() + 86400000).toISOString(),
         analise_tecnica: { resultado_esperado: 'Equipamento liberado.' },
       },
     });
     assert.equal(normalWorkOrder.statusCode, 200, normalWorkOrder.body);
     const normalWorkOrderId: string = normalWorkOrder.json().data.id;
-    const normalReleased = await app.inject({
+    const normalApproved = await app.inject({
       method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/submit-review`, headers: bearer(identities.admin),
       payload: { politica_assinatura: 'QUALIDADE', assinaturas_exigidas: 1, primeira_resposta_ate: null, resolucao_ate: null },
     });
+    assert.equal(normalApproved.statusCode, 200, normalApproved.body);
+    assert.equal(normalApproved.json().data.status, 'APPROVED');
+    assert.equal(normalApproved.json().data.validacao, null);
+
+    const normalReleased = await app.inject({
+      method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/release`, headers: bearer(identities.admin),
+    });
     assert.equal(normalReleased.statusCode, 200, normalReleased.body);
     assert.equal(normalReleased.json().data.status, 'RELEASED');
-    assert.equal(normalReleased.json().data.validacao, null);
+
+    await transaction(pool, async (client) => {
+      const legacyDemandId = randomUUID();
+      const legacyRequirementId = randomUUID();
+      await client.query(
+        `INSERT INTO workflow.technical_demands
+         (id,tenant_id,demand_type,entity_type,entity_id,origin_type,title,description,priority,status,created_by,
+          creator_role_snapshot,signature_required,required_signature_count,segregation_required,signature_policy,payload_hash_sha256)
+         VALUES ($1,$2,'WORK_ORDER_VALIDATION','WORK_ORDER',$3,'TEST','Assinatura isolada',
+          'Não deve reter uma OS normal após a conclusão técnica.','MEDIUM','AWAITING_SIGNATURE',$4,
+          'ADMIN:ADMIN',true,1,true,'QUALIDADE',$5)`,
+        [legacyDemandId, tenantId, normalWorkOrderId, ids.admin, 'e'.repeat(64)],
+      );
+      await client.query(
+        `INSERT INTO workflow.demand_validator_requirements
+         (id,tenant_id,technical_demand_id,requirement_code,technical_area_id,required_count,status)
+         VALUES ($1,$2,$3,'QUALITY_SIGNATURE',$4,1,'PENDING')`,
+        [legacyRequirementId, tenantId, legacyDemandId, ids.qualityArea],
+      );
+      await client.query(
+        `UPDATE maintenance.work_orders SET technical_demand_id=$2 WHERE id=$1`,
+        [normalWorkOrderId, legacyDemandId],
+      );
+    });
 
     const normalQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.operator) });
     assert.equal(normalQueue.statusCode, 200, normalQueue.body);
-    const normalActionId: string = normalQueue.json().data.itens[0].id;
+    const normalAction = normalQueue.json().data.itens.find(
+      (item: { ordem_id: string }) => item.ordem_id === normalWorkOrderId,
+    );
+    assert.ok(normalAction);
+    const normalActionId: string = normalAction.id;
     const normalStarted = await app.inject({
       method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`, headers: bearer(identities.operator),
       payload: { modo_parada: 'NO_STOP' },
     });
     assert.equal(normalStarted.statusCode, 200, normalStarted.body);
+    assert.equal(normalStarted.json().data.execucao.operador_id, ids.operator);
     const normalExecutionId: string = normalStarted.json().data.execucao.id;
     const normalItems: readonly { id: string; tipo_resposta: string }[] = normalStarted.json().data.execucao.itens;
     const normalConfirmation = normalItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
@@ -1036,5 +1132,19 @@ test(
     assert.equal(normalClosed.statusCode, 200, normalClosed.body);
     assert.equal(normalClosed.json().data.status, 'COMPLETED');
     assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
+    await transaction(pool, async (client) => {
+      const isolatedSignatureRequirement = await client.query(
+        `SELECT demand.demand_type, requirement.requirement_code
+         FROM maintenance.work_orders work_order
+         JOIN workflow.technical_demands demand ON demand.id=work_order.technical_demand_id
+         JOIN workflow.demand_validator_requirements requirement ON requirement.technical_demand_id=demand.id
+         WHERE work_order.id=$1`,
+        [normalWorkOrderId],
+      );
+      assert.deepEqual(isolatedSignatureRequirement.rows[0], {
+        demand_type: 'WORK_ORDER_VALIDATION',
+        requirement_code: 'QUALITY_SIGNATURE',
+      });
+    });
   },
 );

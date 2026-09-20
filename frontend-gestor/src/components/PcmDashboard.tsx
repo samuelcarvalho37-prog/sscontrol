@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { callApi } from '../services/api/client'
 import { getGestorToken } from '../services/api/config'
-import { isGestorAuthenticationError } from '../services/api/gestor'
+import { getGestorActionDetail, getGestorNotifications, isGestorAuthenticationError } from '../services/api/gestor'
 import { getAdminIntervention, listAdminInterventions, saveAdminIntervention, sendAdminInterventionForValidation } from '../services/api/interventions'
-import { assignMaintenanceAction, listActiveTechnicians, releaseMaintenanceWorkOrder, type ActiveTechnician } from '../services/api/maintenanceAssignments'
+import { releaseMaintenanceWorkOrder } from '../services/api/maintenanceAssignments'
 import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
+import type { GestorActionDetail, GestorNotification } from '../types/gestor'
 import './PcmDashboard.css'
 
 interface PcmData {
@@ -512,19 +513,13 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [orderLoading, setOrderLoading] = useState(true)
   const [orderError, setOrderError] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<AdminIntervention | null>(null)
+  const [selectedActionDetail, setSelectedActionDetail] = useState<GestorActionDetail | null>(null)
   const [selectedOrderLoading, setSelectedOrderLoading] = useState(false)
   const [selectedOrderError, setSelectedOrderError] = useState('')
-  const [technicians, setTechnicians] = useState<ActiveTechnician[]>([])
-  const [assignedTechnicianId, setAssignedTechnicianId] = useState('')
-  const [supportTechnicianIds, setSupportTechnicianIds] = useState<string[]>([])
-  const [assignmentBusy, setAssignmentBusy] = useState(false)
-  const [assignmentError, setAssignmentError] = useState('')
   const [releaseBusy, setReleaseBusy] = useState(false)
   const [releaseError, setReleaseError] = useState('')
   const [prepareBusy, setPrepareBusy] = useState(false)
   const [prepareError, setPrepareError] = useState('')
-  const [quickAssignmentOpen, setQuickAssignmentOpen] = useState(false)
-  const [quickAssignmentActionId, setQuickAssignmentActionId] = useState('')
   const [assignmentSuccess, setAssignmentSuccess] = useState('')
   const detailRequestRef = useRef(0)
   const [orderStatus, setOrderStatus] = useState('')
@@ -551,6 +546,21 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [createDescription, setCreateDescription] = useState('')
   const [createPriority, setCreatePriority] = useState('MEDIUM')
   const [createScheduledFor, setCreateScheduledFor] = useState('')
+  const [createOriginEntityId, setCreateOriginEntityId] = useState('')
+  const [createOriginAssetTag, setCreateOriginAssetTag] = useState('')
+  const [createRequiresPostIntervention, setCreateRequiresPostIntervention] = useState(false)
+  const [todayNotifications, setTodayNotifications] = useState<GestorNotification[]>([])
+  const [notificationsError, setNotificationsError] = useState('')
+
+  const pendingTodayNotifications = useMemo(() => {
+    const completedOrigins = new Set(
+      orders
+        .filter(order => ['COMPLETED', 'CONCLUIDA', 'CONCLUÍDA'].includes(normalize(order.status)))
+        .map(order => order.entidade_origem_id)
+        .filter((originId): originId is string => Boolean(originId)),
+    )
+    return todayNotifications.filter(notification => !completedOrigins.has(notification.entidade_id ?? ''))
+  }, [orders, todayNotifications])
 
   const reload = useCallback(() => setRefresh(value => value + 1), [])
 
@@ -666,6 +676,28 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
   useEffect(() => {
     const controller = new AbortController()
+    setNotificationsError('')
+    void getGestorNotifications(controller.signal)
+      .then(notifications => {
+        const today = new Date().toDateString()
+        setTodayNotifications(notifications.filter(notification => {
+          const createdAt = notification.criado_em ? new Date(notification.criado_em) : null
+          return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt.toDateString() === today
+        }))
+      })
+      .catch(cause => {
+        if (controller.signal.aborted) return
+        if (isGestorAuthenticationError(cause)) {
+          onSessionExpired()
+          return
+        }
+        setNotificationsError('Não foi possível carregar as notificações de hoje.')
+      })
+    return () => controller.abort()
+  }, [refresh, onSessionExpired])
+
+  useEffect(() => {
+    const controller = new AbortController()
 
     void listAdminEntity('ativos', controller.signal)
       .then(result => {
@@ -726,6 +758,14 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const operationalOrders = useMemo(
     () => orders.map(toOperationalOrder),
     [orders],
+  )
+
+  const activeCriticalOrders = useMemo(
+    () => operationalOrders.filter(order =>
+      !['CONCLUIDA', 'CONCLUÍDA', 'COMPLETED', 'CANCELLED', 'CANCELADA'].includes(normalize(order.status))
+      && ['CRITICAL', 'CRITICA', 'CRÍTICA'].includes(normalize(order.priority)),
+    ).length,
+    [operationalOrders],
   )
 
   const orderFilterOptions = useMemo(() => {
@@ -839,11 +879,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
     const items: { level: 'danger' | 'warning' | 'info'; title: string; detail: string }[] = []
 
-    if (data.atual.ordens_criticas > 0) {
+    if (activeCriticalOrders > 0) {
       items.push({
         level: 'danger',
         title: 'Ordens críticas abertas',
-        detail: `${data.atual.ordens_criticas} ${data.atual.ordens_criticas === 1 ? 'ordem exige' : 'ordens exigem'} priorização imediata.`,
+        detail: `${activeCriticalOrders} ${activeCriticalOrders === 1 ? 'ordem exige' : 'ordens exigem'} priorização imediata.`,
       })
     }
 
@@ -888,7 +928,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     }
 
     return items.slice(0, 5)
-  }, [data])
+  }, [activeCriticalOrders, data])
 
   async function openOperationalOrder(order: OperationalOrder) {
     const requestId = detailRequestRef.current + 1
@@ -899,12 +939,14 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setReleaseError('')
     setPrepareError('')
     try {
-      const [detail, availableTechnicians] = await Promise.all([getAdminIntervention(order.raw.id), listActiveTechnicians()])
+      const detail = await getAdminIntervention(order.raw.id)
+      let actionDetail: GestorActionDetail | null = null
+      if (detail.acao_id) {
+        try { actionDetail = await getGestorActionDetail(detail.acao_id) } catch { /* A OS continua acessível mesmo sem histórico de execução. */ }
+      }
       if (detailRequestRef.current === requestId) {
         setSelectedOrder(detail)
-        setTechnicians(availableTechnicians)
-        setAssignedTechnicianId(detail.responsavel_id ?? '')
-        setAssignmentError('')
+        setSelectedActionDetail(actionDetail)
       }
     } catch (cause) {
       if (detailRequestRef.current !== requestId) return
@@ -921,32 +963,12 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   function closeOperationalOrder() {
     detailRequestRef.current += 1
     setSelectedOrder(null)
+    setSelectedActionDetail(null)
     setSelectedOrderError('')
     setSelectedOrderLoading(false)
-    setTechnicians([])
-    setAssignedTechnicianId('')
-    setAssignmentError('')
     setReleaseError('')
     setPrepareError('')
   }
-
-  async function assignTechnician() {
-    if (!selectedOrder?.acao_id || !assignedTechnicianId) return
-    setAssignmentBusy(true); setAssignmentError('')
-    try {
-      await assignMaintenanceAction(selectedOrder.acao_id, assignedTechnicianId, supportTechnicianIds)
-      setSelectedOrder(await getAdminIntervention(selectedOrder.id))
-      setRefresh(value => value + 1)
-    } catch (cause) {
-      setAssignmentError(cause instanceof Error ? cause.message : 'Não foi possível atribuir o técnico.')
-    } finally { setAssignmentBusy(false) }
-  }
-
-  const assignableOrders = useMemo(
-    () => operationalOrders.filter(order => Boolean(order.raw.acao_id) && normalize(order.raw.acao_status ?? '') === 'READY'),
-    [operationalOrders],
-  )
-  const selectedOrderActionReady = selectedOrder !== null && normalize(selectedOrder.acao_status ?? '') === 'READY'
   const selectedOrderReadyForRelease = selectedOrder?.status === 'AGUARDANDO_LIBERACAO'
   const selectedOrderReadyForPreparation = selectedOrder !== null && ['RASCUNHO', 'DRAFT', 'DEVOLVIDO_CORRECAO', 'CHANGES_REQUESTED'].includes(normalize(selectedOrder.status))
 
@@ -999,16 +1021,32 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateTitle('')
     setCreateDescription('')
     setCreatePriority('MEDIUM')
+    setCreateRequiresPostIntervention(false)
     setCreateScheduledFor('')
+    setCreateOriginEntityId('')
+    setCreateOriginAssetTag('')
     setCreateOrderError('')
   }
 
-  async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' = 'WORK_ORDER') {
+  async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' = 'WORK_ORDER', notification?: GestorNotification) {
     resetCreateOrderForm()
     setCreateOrderMode(mode)
     setCreateOrderOpen(true)
     setCreateOrderError('')
     setCreateOrderSuccess('')
+    if (notification) {
+      const assetTag = notification.titulo.match(/—\s*([A-Za-z]+\d+)\b/u)?.[1] ?? ''
+      const matchingPlan = assetTag
+        ? executablePlans.find(plan => plan.asset.startsWith(`${assetTag} ·`))
+        : null
+      setCreateTitle(notification.titulo)
+      setCreateDescription(notification.mensagem || `OS originada da notificação: ${notification.titulo}.`)
+      setCreatePriority(normalize(notification.prioridade || 'MEDIUM'))
+      setCreateOriginEntityId(notification.entidade_id || '')
+      setCreateOriginAssetTag(assetTag)
+      if (matchingPlan) setCreatePlanVersionId(matchingPlan.versionId)
+      else setCreateOrderError(assetTag ? `Não há plano publicado com checklist para o ativo ${assetTag}.` : 'Não foi possível identificar o ativo da ocorrência.')
+    }
     if (createPlans.length > 0) return
     setCreatePlansLoading(true)
     try {
@@ -1041,8 +1079,10 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateOrderBusy(true)
     setCreateOrderError('')
     try {
+      const releaseForMaintenance = Boolean(createOriginEntityId)
       const created = await saveAdminIntervention({
         origem: createOrderMode === 'PREVENTIVE' ? 'PCM_PREVENTIVE_SCHEDULE' : 'PCM',
+        entidade_origem_id: createOriginEntityId || undefined,
         plano_versao_id: selectedCreatePlan.versionId,
         tipo: selectedCreatePlan.workType,
         titulo: createTitle.trim(),
@@ -1050,12 +1090,26 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         prioridade: createPriority,
         modo_parada_manutencao: 'NO_STOP',
         planejada_para: createScheduledFor || undefined,
+        exige_liberacao_pos_intervencao: createRequiresPostIntervention,
       })
+      if (releaseForMaintenance) {
+        await sendAdminInterventionForValidation({
+          intervencao_id: created.id,
+          politica_assinatura: 'QUALIDADE_OU_SEGURANCA',
+          comentario: 'OS criada pelo PCM a partir de uma ocorrência operacional.',
+          exige_segregacao: 'NAO',
+        })
+        if (!createRequiresPostIntervention) await releaseMaintenanceWorkOrder(created.id)
+      }
       setCreateOrderOpen(false)
       resetCreateOrderForm()
-      setCreateOrderSuccess(createOrderMode === 'PREVENTIVE'
-        ? `Preventiva ${created.codigo} programada como rascunho. Prepare-a e libere-a antes de atribuir um técnico.`
-        : `OS ${created.codigo} criada como rascunho. Prepare-a e libere-a antes de atribuir um técnico.`)
+      setCreateOrderSuccess(releaseForMaintenance && !createRequiresPostIntervention
+        ? `OS ${created.codigo} criada e liberada para a equipe de Manutenção. O primeiro técnico a iniciá-la será registrado como executor.`
+        : releaseForMaintenance
+          ? `OS ${created.codigo} criada com a confirmação pós-execução configurada. Ela seguirá a validação adicional antes da liberação.`
+        : createOrderMode === 'PREVENTIVE'
+        ? `Preventiva ${created.codigo} programada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
+        : `OS ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`)
       reload()
     } catch (cause) {
       setCreateOrderError(cause instanceof Error ? cause.message : 'Não foi possível criar a ordem de serviço.')
@@ -1107,15 +1161,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setBatchPreparationBusy(true)
     setBatchSchedulingNotice('Preparando as OS e consultando a equipe técnica ativa…')
     try {
-      const activeTechnicians = await listActiveTechnicians()
-      if (!activeTechnicians.length) throw new Error('Não há técnico ativo para receber as OS preventivas.')
-
       let prepared = 0
-      let assigned = 0
       let awaitingValidation = 0
       const failures: string[] = []
 
-      for (const [index, order] of scheduledPreventiveBatch.entries()) {
+      for (const order of scheduledPreventiveBatch) {
         try {
           let detail = await getAdminIntervention(order.id)
           if (['RASCUNHO', 'DRAFT', 'DEVOLVIDO_CORRECAO', 'CHANGES_REQUESTED'].includes(normalize(detail.status))) {
@@ -1139,11 +1189,6 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
             continue
           }
 
-          if (!detail.responsavel_id) {
-            const leader = activeTechnicians[index % activeTechnicians.length]
-            await assignMaintenanceAction(detail.acao_id, leader.id)
-            assigned += 1
-          }
         } catch (cause) {
           failures.push(`${order.codigo}: ${cause instanceof Error ? cause.message : 'erro ao preparar'}`)
         }
@@ -1151,11 +1196,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
       const parts = [
         `${prepared} preparada${prepared === 1 ? '' : 's'}`,
-        `${assigned} atribuída${assigned === 1 ? '' : 's'} em rodízio`,
+        'liberadas para a equipe de Manutenção',
       ]
       if (awaitingValidation) parts.push(`${awaitingValidation} aguardando validação`)
       if (failures.length) parts.push(`${failures.length} com pendência`)
-      setBatchSchedulingNotice(`Calendário processado: ${parts.join(' · ')}. Cada OS recebeu somente um líder; o PCM pode incluir até 3 técnicos de apoio quando necessário.${failures.length ? ` Primeiro erro: ${failures[0]}` : ''}`)
+      setBatchSchedulingNotice(`Calendário processado: ${parts.join(' · ')}. O técnico que iniciar a OS será registrado automaticamente como executor.${failures.length ? ` Primeiro erro: ${failures[0]}` : ''}`)
       reload()
     } catch (cause) {
       setBatchSchedulingNotice(cause instanceof Error ? cause.message : 'Não foi possível preparar o calendário preventivo.')
@@ -1171,8 +1216,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
       await releaseMaintenanceWorkOrder(selectedOrder.id)
       const detail = await getAdminIntervention(selectedOrder.id)
       setSelectedOrder(detail)
-      setAssignedTechnicianId(detail.responsavel_id ?? '')
-      setAssignmentSuccess('OS liberada com sucesso. A ação está pronta para receber um técnico.')
+      setAssignmentSuccess('OS liberada com sucesso. Ela já está disponível para a equipe de Manutenção; o executor será registrado ao iniciar.')
       setRefresh(value => value + 1)
     } catch (cause) {
       setReleaseError(cause instanceof Error ? cause.message : 'Não foi possível liberar a OS.')
@@ -1206,27 +1250,6 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     }
   }
 
-  async function openQuickAssignment() {
-    setAssignmentSuccess('')
-    setAssignmentError('')
-    setQuickAssignmentActionId(assignableOrders[0]?.raw.acao_id ?? '')
-    setQuickAssignmentOpen(true)
-    try { setTechnicians(await listActiveTechnicians()) }
-    catch (cause) { setAssignmentError(cause instanceof Error ? cause.message : 'Não foi possível carregar técnicos elegíveis.') }
-  }
-
-  async function confirmQuickAssignment() {
-    if (!quickAssignmentActionId || !assignedTechnicianId) return
-    setAssignmentBusy(true); setAssignmentError('')
-    try {
-      await assignMaintenanceAction(quickAssignmentActionId, assignedTechnicianId, supportTechnicianIds)
-      setQuickAssignmentOpen(false)
-      setAssignedTechnicianId('')
-      setAssignmentSuccess('Técnico atribuído com sucesso. A fila operacional foi atualizada.')
-      reload()
-    } catch (cause) { setAssignmentError(cause instanceof Error ? cause.message : 'Não foi possível atribuir o técnico.') }
-    finally { setAssignmentBusy(false) }
-  }
 
   return (
     <section className="pcm-dashboard" aria-label="Dashboard do PCM" aria-busy={loading}>
@@ -1253,6 +1276,33 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         </div>
       </header>
 
+      <section className="pcm-today-notifications" aria-labelledby="pcm-today-notifications-title">
+        <header>
+          <div>
+            <span className="pcm-section-kicker">PRIMEIRA PRIORIDADE</span>
+            <h2 id="pcm-today-notifications-title">Notificações de hoje</h2>
+          </div>
+          <span>{pendingTodayNotifications.length}</span>
+        </header>
+        {notificationsError ? <p className="pcm-today-notifications__error" role="alert">{notificationsError}</p> : null}
+        {pendingTodayNotifications.length ? (
+          <ul>
+            {pendingTodayNotifications.slice(0, 5).map(notification => (
+              <li key={notification.id} className={`is-${normalize(notification.prioridade || 'MEDIA').toLowerCase()}`}>
+                <button type="button" onClick={() => void openCreateOrder('WORK_ORDER', notification)}>
+                  <div>
+                    <strong>{notification.titulo}</strong>
+                    <span>{notification.mensagem || 'Nova atualização operacional requer atenção do PCM.'}</span>
+                    <em>Criar OS e direcionar técnico →</em>
+                  </div>
+                  <small>{humanPriority(notification.prioridade || 'MEDIA')}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="pcm-empty">Nenhuma notificação recebida hoje.</p>}
+      </section>
+
     {error && (
         <div className="dashboard-error" role="alert">
           {error}
@@ -1271,23 +1321,21 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
       {data && current && reliability && maintenanceStatus && (
         <>
-          <button
-            className="pcm-critical-action"
-            type="button"
-            onClick={showCriticalOrders}
-            aria-label="Ver ordens de serviço críticas"
-          >
-            <span className="pcm-critical-action__icon" aria-hidden="true">!</span>
-            <span className="pcm-critical-action__content">
-              <strong>Ver manutenções críticas</strong>
-              <small>
-                {current.ordens_criticas > 0
-                  ? `${current.ordens_criticas} ${current.ordens_criticas === 1 ? 'ordem crítica aguardando' : 'ordens críticas aguardando'} atenção`
-                  : `Situação atual: ${maintenanceStatusLabel(maintenanceStatus)}`}
-              </small>
-            </span>
-            <span className="pcm-critical-action__arrow" aria-hidden="true">Ver fila →</span>
-          </button>
+          {activeCriticalOrders > 0 ? (
+            <button
+              className="pcm-critical-action"
+              type="button"
+              onClick={showCriticalOrders}
+              aria-label="Ver ordens de serviço críticas"
+            >
+              <span className="pcm-critical-action__icon" aria-hidden="true">!</span>
+              <span className="pcm-critical-action__content">
+                <strong>Ver manutenções críticas</strong>
+                <small>{activeCriticalOrders} {activeCriticalOrders === 1 ? 'ordem crítica aguardando' : 'ordens críticas aguardando'} atenção</small>
+              </span>
+              <span className="pcm-critical-action__arrow" aria-hidden="true">Ver fila →</span>
+            </button>
+          ) : null}
 
           <div className="pcm-section-heading">
             <div>
@@ -1310,11 +1358,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
               note="Todas as ordens ainda não encerradas"
               onClick={() => openInsight('Ordens abertas', 'Ordens de serviço que permanecem abertas ou em execução.', dailyInsights.open)}
             />
-            <Metric
+              <Metric
               label="Ordens críticas"
-              value={current.ordens_criticas}
+              value={activeCriticalOrders}
               note="Prioridade crítica ainda em aberto"
-              tone={current.ordens_criticas > 0 ? 'danger' : 'success'}
+              tone={activeCriticalOrders > 0 ? 'danger' : 'success'}
               onClick={() => openInsight('Ordens críticas', 'Ordens abertas com prioridade crítica.', dailyInsights.critical)}
             />
             <Metric
@@ -1548,9 +1596,10 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                       <p>{selectedOrder.descricao || 'Sem descrição.'}</p>
                     </section>
                   </div>
+                  {selectedActionDetail?.materiais?.length ? <section className="pcm-order-assignment"><h3>Materiais e custo da OS</h3><p>Saídas registradas pelo técnico. Os valores são preservados como histórico da execução.</p><ul>{selectedActionDetail.materiais.map((material, index) => { const data = material as Record<string, unknown>; const quantity = Number(data.quantidade ?? 0); const unitCost = Number(data.valor_unitario ?? 0); const total = Number(data.custo_total ?? 0); const name = String(data.nome_facil ?? data.nome ?? 'Material'); return <li key={String(data.id ?? index)}><strong>{String(data.sku ?? 'Sem SKU')} · {name}</strong><span> — {quantity} {String(data.unidade ?? '')} · {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitCost)} cada · total {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span></li> })}</ul></section> : null}
                   {selectedOrderReadyForPreparation ? <section className="pcm-order-assignment">
                     <h3>Preparar para execução</h3>
-                    <p>Para uma OS normal, este passo libera a ação para atribuição. Se houver uma validação formal configurada, ela será encaminhada automaticamente à área responsável.</p>
+                    <p>Para uma OS normal, este passo libera a ação para toda a equipe de Manutenção. Se houver confirmação pós-execução configurada, ela será solicitada somente depois da conclusão técnica.</p>
                     <button type="button" onClick={() => void prepareSelectedWorkOrder()} disabled={prepareBusy}>
                       {prepareBusy ? 'Preparando…' : 'Preparar e liberar OS'}
                     </button>
@@ -1564,24 +1613,9 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                     </button>
                     {releaseError ? <p className="pcm-order-detail__error" role="alert">{releaseError}</p> : null}
                   </section> : null}
-                  {selectedOrder.acao_id ? <section className="pcm-order-assignment">
-                    <h3>Atribuir técnico</h3>
-                    {selectedOrderActionReady ? <>
-                      <p>Defina um líder e, se necessário, até três técnicos de apoio.</p>
-                      <select value={assignedTechnicianId} onChange={event => setAssignedTechnicianId(event.target.value)} disabled={assignmentBusy}>
-                        <option value="">Selecione um técnico</option>
-                        {technicians.map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}
-                      </select>
-                      <label className="pcm-team-support">Técnicos de apoio (opcional, até 3)
-                        <select multiple value={supportTechnicianIds} onChange={event => setSupportTechnicianIds([...event.currentTarget.selectedOptions].map(option => option.value).filter(id => id !== assignedTechnicianId).slice(0, 3))} disabled={assignmentBusy}>
-                          {technicians.filter(technician => technician.id !== assignedTechnicianId).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}</option>)}
-                        </select>
-                      </label>
-                      <button type="button" onClick={() => void assignTechnician()} disabled={assignmentBusy || !assignedTechnicianId}>
-                        {assignmentBusy ? 'Atribuindo…' : 'Salvar atribuição'}
-                      </button>
-                      {assignmentError ? <p className="pcm-order-detail__error" role="alert">{assignmentError}</p> : null}
-                    </> : <p>Ação em estado {selectedOrder.acao_status || 'indisponível'}. Apenas ações prontas podem receber técnico.</p>}
+                  {selectedOrder.acao_id && normalize(selectedOrder.acao_status ?? '') === 'READY' ? <section className="pcm-order-assignment">
+                    <h3>Disponível para execução</h3>
+                    <p>A OS está liberada para a equipe de Manutenção. O sistema registra automaticamente o técnico que iniciar a execução.</p>
                   </section> : null}
                 </>
               ) : null}
@@ -1597,7 +1631,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
           <div className="pcm-plans-overview__actions">
             <button type="button" onClick={() => void openCreateOrder('PREVENTIVE')} disabled={plansLoading || preventivePlans.length === 0}>Programar preventiva</button>
             <button type="button" onClick={() => void schedulePreventivesForNext30Days()} disabled={plansLoading || batchSchedulingBusy || preventivePlans.length < 20}>{batchSchedulingBusy ? 'Programando 20 OS…' : 'Programar 20 · 30 dias'}</button>
-            <button type="button" onClick={() => void prepareAndAssignScheduledPreventives()} disabled={batchPreparationBusy || scheduledPreventiveBatch.length === 0}>{batchPreparationBusy ? 'Preparando calendário…' : `Preparar e atribuir ${scheduledPreventiveBatch.length || ''}`}</button>
+            <button type="button" onClick={() => void prepareAndAssignScheduledPreventives()} disabled={batchPreparationBusy || scheduledPreventiveBatch.length === 0}>{batchPreparationBusy ? 'Preparando calendário…' : `Preparar e liberar ${scheduledPreventiveBatch.length || ''}`}</button>
           </div>
         </div>
         {plansLoading ? <p className="pcm-empty">Carregando planos preventivos…</p> : plansError ? <p className="pcm-order-detail__error" role="alert">{plansError}</p> : <>
@@ -1654,14 +1688,6 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                   <span>Programar preventiva</span>
                   <small>Agende uma preventiva usando um plano ativo</small>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void openQuickAssignment()}
-                  title="Escolher o técnico responsável por uma OS liberada"
-                >
-                  <span>Atribuir técnico</span>
-                  <small>{assignableOrders.length ? `${assignableOrders.length} OS aguardando atribuição` : 'Consulte o que falta para liberar uma OS'}</small>
-                </button>
                 <button type="button" onClick={showOperationalQueue}>
                   <span>Ver fila de OS</span>
                   <small>Consulte e filtre todas as ordens de serviço</small>
@@ -1673,44 +1699,22 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
               </div>
             </section>
           </div>
-          {quickAssignmentOpen ? <div className="pcm-assignment-modal" role="dialog" aria-modal="true" aria-labelledby="pcm-assignment-title">
-            <div className="pcm-assignment-modal__card">
-              <h2 id="pcm-assignment-title">Atribuir técnico</h2>
-              {assignableOrders.length ? <>
-                <label>Ação / OS
-                  <select value={quickAssignmentActionId} onChange={event => setQuickAssignmentActionId(event.target.value)} disabled={assignmentBusy}>
-                    <option value="">Selecione uma ação</option>
-                    {assignableOrders.map(order => <option key={order.raw.acao_id} value={order.raw.acao_id}>{order.code} · {order.equipment} · {humanPriority(order.priority)} · {order.responsible}</option>)}
-                  </select>
-                </label>
-                <label>Técnico líder
-                  <select value={assignedTechnicianId} onChange={event => setAssignedTechnicianId(event.target.value)} disabled={assignmentBusy}>
-                    <option value="">Selecione um técnico</option>
-                    {technicians.map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}
-                  </select>
-                </label>
-                <label>Técnicos de apoio (opcional, até 3)
-                  <select multiple value={supportTechnicianIds} onChange={event => setSupportTechnicianIds([...event.currentTarget.selectedOptions].map(option => option.value).filter(id => id !== assignedTechnicianId).slice(0, 3))} disabled={assignmentBusy}>
-                    {technicians.filter(technician => technician.id !== assignedTechnicianId).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}</option>)}
-                  </select>
-                </label>
-                {quickAssignmentActionId && assignedTechnicianId ? <p>Confirme a equipe: líder e {supportTechnicianIds.length} apoio(s).</p> : null}
-              </> : <p className="pcm-assignment-modal__notice">Ainda não há OS liberada para atribuição. Abra a fila de OS, selecione a ordem e conclua “Preparar e liberar OS”. Depois ela aparecerá aqui para você escolher o técnico.</p>}
-              {assignmentError ? <p className="pcm-order-detail__error" role="alert">{assignmentError}</p> : null}
-              <div><button type="button" onClick={() => setQuickAssignmentOpen(false)} disabled={assignmentBusy}>{assignableOrders.length ? 'Cancelar' : 'Entendi'}</button>{assignableOrders.length ? <button type="button" onClick={() => void confirmQuickAssignment()} disabled={assignmentBusy || !quickAssignmentActionId || !assignedTechnicianId}>{assignmentBusy ? 'Atribuindo…' : 'Confirmar atribuição'}</button> : null}</div>
-            </div>
-          </div> : null}
-
           {createOrderOpen ? <div className="pcm-assignment-modal" role="dialog" aria-modal="true" aria-labelledby="pcm-create-order-title">
             <div className="pcm-assignment-modal__card pcm-create-order-modal">
               <h2 id="pcm-create-order-title">{createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</h2>
-              <p>{createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : 'Selecione um plano publicado. O equipamento e o tipo de manutenção são definidos pelo plano.'}</p>
-              <label>Plano e equipamento
+              <p>{createOriginEntityId ? 'A demanda já definiu o ativo e o plano de execução. Revise as informações e crie a OS.' : createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : 'Selecione um plano publicado. O equipamento e o tipo de manutenção são definidos pelo plano.'}</p>
+              {createOriginEntityId ? (
+                <div className="pcm-create-order-modal__origin">
+                  <span>DEMANDA DE ORIGEM</span>
+                  <strong>{createOriginAssetTag || 'Ativo informado na ocorrência'}</strong>
+                  <small>{selectedCreatePlan ? `${selectedCreatePlan.code} · ${selectedCreatePlan.name}` : 'Plano executável não localizado.'}</small>
+                </div>
+              ) : <label>Plano e equipamento
                 <select value={createPlanVersionId} onChange={event => selectCreatePlan(event.target.value)} disabled={createOrderBusy || createPlansLoading}>
                   <option value="">{createPlansLoading ? 'Carregando planos…' : createOrderMode === 'PREVENTIVE' ? 'Selecione um plano preventivo' : 'Selecione um plano publicado'}</option>
                   {executablePlans.map(plan => <option key={plan.versionId} value={plan.versionId}>{plan.code} · {plan.name} · {plan.asset}</option>)}
                 </select>
-              </label>
+              </label>}
               {selectedCreatePlan ? <p className="pcm-create-order-modal__context">Equipamento: <strong>{selectedCreatePlan.asset}</strong> · Tipo: <strong>{humanWorkType(selectedCreatePlan.workType)}</strong>{createOrderMode === 'PREVENTIVE' && selectedCreatePlan.recurrenceDays ? <> · Recorrência: <strong>{selectedCreatePlan.recurrenceDays} dias</strong></> : null}</p> : null}
               {!createPlansLoading && createPlans.length > 0 && executablePlans.length === 0 ? <p className="pcm-order-detail__error">{createOrderMode === 'PREVENTIVE' ? 'Não há plano preventivo ativo e publicado com checklist disponível.' : 'Não há plano ativo e publicado com checklist disponível.'}</p> : null}
               <label>Título<input value={createTitle} onChange={event => setCreateTitle(event.target.value)} maxLength={240} disabled={createOrderBusy} /></label>
@@ -1719,6 +1723,9 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                 <select value={createPriority} onChange={event => setCreatePriority(event.target.value)} disabled={createOrderBusy}>
                   <option value="LOW">Baixa</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option>
                 </select>
+              </label>
+              <label className="pcm-create-order-modal__post-intervention"><input type="checkbox" checked={createRequiresPostIntervention} onChange={event => setCreateRequiresPostIntervention(event.target.checked)} disabled={createOrderBusy} />
+                <span><strong>Exige confirmação pós-execução de Qualidade ou Segurança?</strong><small>Não bloqueia a execução. Após a conclusão técnica, uma dessas áreas confirma que a OS foi executada corretamente antes do encerramento oficial.</small></span>
               </label>
               <label>Programada para{createOrderMode === 'PREVENTIVE' ? '' : ' (opcional)'}<input type="datetime-local" value={createScheduledFor} onChange={event => setCreateScheduledFor(event.target.value)} disabled={createOrderBusy} required={createOrderMode === 'PREVENTIVE'} /></label>
               {createOrderError ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}

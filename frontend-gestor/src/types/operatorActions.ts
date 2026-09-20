@@ -29,6 +29,9 @@ export interface OperatorAction {
   checklist_nome: string
   execucao_id: string | null
   execucao_status: string | null
+  operador_id?: string | null
+  concluida_em?: string | null
+  papel_na_equipe?: 'LIDER' | 'APOIO'
   total_itens: number
 }
 
@@ -80,7 +83,33 @@ export interface Execution {
   resultado: string | null
   observacao: string | null
   modo_parada: StopMode | null
+  materiais?: Array<{
+    id: string
+    material_id: string
+    sku: string
+    nome: string
+    nome_facil: string | null
+    quantidade: number
+    unidade: string
+    valor_unitario: number
+    custo_total: number
+    observacao: string | null
+    registrado_em: string
+  }>
+  custo_materiais_total?: number
   itens: ExecutionItem[]
+}
+
+export interface ConsumableMaterial {
+  id: string
+  sku: string
+  nome: string
+  nome_facil: string | null
+  unidade: string
+  valor_unitario: number
+  estoque_atual: number
+  estoque_minimo: number
+  situacao_estoque: 'AVAILABLE' | 'LOW'
 }
 
 export interface ExecutionCompletionBlocker {

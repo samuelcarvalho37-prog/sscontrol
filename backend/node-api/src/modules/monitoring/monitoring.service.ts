@@ -206,6 +206,7 @@ export class MonitoringService {
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `occurrence:${occurrenceId}:reported`,
           roles: ['ADMIN', 'MANAGER'],
+          roleCodes: ['PCM'],
         });
         return detail;
       },
@@ -1145,6 +1146,7 @@ export class MonitoringService {
       readonly actionRoute: string;
       readonly deduplicationKey: string;
       readonly roles: readonly string[];
+      readonly roleCodes?: readonly string[];
     },
   ): Promise<void> {
     const notificationId = await this.repository.createNotification(client, user.tenantId, {
@@ -1165,6 +1167,7 @@ export class MonitoringService {
       notificationId,
       input.roles,
       user.id,
+      input.roleCodes ?? [],
     );
   }
 }

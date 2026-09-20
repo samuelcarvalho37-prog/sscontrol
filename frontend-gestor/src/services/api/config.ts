@@ -19,6 +19,10 @@ export function getEnvironmentApiUrl(): string {
   );
 }
 
+export function getDevelopmentTenantSlug(): string {
+  return (import.meta.env.VITE_DEV_TENANT_SLUG as string | undefined)?.trim().toLowerCase() ?? "";
+}
+
 function readLocalStorage(key: string): string {
   try {
     return window.localStorage.getItem(key)?.trim() ?? "";

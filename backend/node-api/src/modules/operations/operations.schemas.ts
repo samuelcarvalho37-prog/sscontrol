@@ -15,6 +15,7 @@ export const operationsIdentifierParamsSchema = Type.Object(
     executionId: Type.Optional(uuid),
     itemId: Type.Optional(uuid),
     objectId: Type.Optional(uuid),
+    materialId: Type.Optional(uuid),
   },
   { additionalProperties: false },
 );
@@ -44,6 +45,14 @@ export const maintenanceActionListQuerySchema = Type.Object(
     status: Type.Optional(Type.String({ maxLength: 240 })),
     ativo_id: Type.Optional(uuid),
     limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 300 })),
+  },
+  { additionalProperties: false },
+);
+
+export const operatorActionListQuerySchema = Type.Object(
+  {
+    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    historico: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -177,6 +186,15 @@ export const startExecutionBodySchema = Type.Object(
 );
 export const pauseExecutionBodySchema = Type.Object(
   { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
+  { additionalProperties: false },
+);
+
+export const consumeMaterialBodySchema = Type.Object(
+  {
+    material_id: uuid,
+    quantidade: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+    observacao: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+  },
   { additionalProperties: false },
 );
 

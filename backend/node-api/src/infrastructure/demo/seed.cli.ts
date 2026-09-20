@@ -91,6 +91,11 @@ const ids = {
   releaseSafetyRequirement: '00000000-0000-4000-8000-000000001224',
   releaseQualitySignature: '00000000-0000-4000-8000-000000001225',
   releaseSafetySignature: '00000000-0000-4000-8000-000000001226',
+  releaseTwoWorkOrder: '00000000-0000-4000-8000-000000001227',
+  reviewTwoWorkOrder: '00000000-0000-4000-8000-000000001231',
+  reviewTwoDemand: '00000000-0000-4000-8000-000000001232',
+  reviewTwoQualityRequirement: '00000000-0000-4000-8000-000000001233',
+  reviewTwoSafetyRequirement: '00000000-0000-4000-8000-000000001234',
   reviewWorkOrder: '00000000-0000-4000-8000-000000001211',
   reviewDemand: '00000000-0000-4000-8000-000000001212',
   reviewQualityRequirement: '00000000-0000-4000-8000-000000001213',
@@ -135,9 +140,9 @@ async function seedIdentities(
     [ids.admin, 'USR-ADMIN-DEMO', 'Administrador de Homologação', 'admin.demo@fabcontrol.local'],
     [ids.quality, 'USR-QUAL-DEMO', 'Especialista de Qualidade', 'qualidade.demo@fabcontrol.local'],
     [ids.safety, 'USR-SEG-DEMO', 'Especialista de Segurança', 'seguranca.demo@fabcontrol.local'],
-    [ids.maintenance, 'USR-MAN-DEMO', 'Técnico de Manutenção', 'manutencao.demo@fabcontrol.local'],
-    [ids.mechanicalMaintenance, 'USR-MEC-SAMUEL', 'Mecânico Samuel', 'samuel.mecanica@fabcontrol.local'],
-    [ids.electricalMaintenance, 'USR-ELE-NATHAN', 'Eletricista Nathan', 'nathan.eletrica@fabcontrol.local'],
+    [ids.maintenance, 'USR-MAN-DEMO', 'Tec Lubrificador', 'manutencao.demo@fabcontrol.local'],
+    [ids.mechanicalMaintenance, 'USR-MEC-SAMUEL', 'Tec Mecânico', 'samuel.mecanica@fabcontrol.local'],
+    [ids.electricalMaintenance, 'USR-ELE-NATHAN', 'Tec Elétrica', 'nathan.eletrica@fabcontrol.local'],
     [ids.operator, 'USR-OPE-DEMO', 'Operador de Homologação', 'operador.demo@fabcontrol.local'],
     [ids.pcm, 'USR-PCM-DEMO', 'Planejador PCM de Homologação', 'pcm.demo@vorqix.local'],
     [ids.production, 'USR-PRO-DEMO', 'Produção de Homologação', 'producao.demo@vorqix.local'],
@@ -155,7 +160,7 @@ async function seedIdentities(
           id, tenant_id, code, name, description, role_type, protected
         )
         VALUES ($1, $2, $3, $4, $4 || ' de homologação.', $5, true)
-        ON CONFLICT (tenant_id, code) DO UPDATE
+        ON CONFLICT (id) DO UPDATE
         SET name = EXCLUDED.name, description = EXCLUDED.description, status = 'ACTIVE'
       `,
       [id, tenantId, code, name, roleType],
@@ -310,6 +315,27 @@ async function seedIdentities(
   }
 
   for (const capabilityCode of [
+    'maintenance.checklists.review',
+    'maintenance.work-orders.review',
+  ]) {
+    await client.query(
+      `
+        INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
+        SELECT $1, role.id, capability.id, 'ALLOW'
+        FROM iam.roles role
+        JOIN iam.capabilities capability ON capability.code = $2
+        WHERE role.tenant_id = $1
+          AND role.code IN ('QUALIDADE', 'SEGURANCA')
+          AND role.status = 'ACTIVE'
+          AND role.deleted_at IS NULL
+          AND capability.status = 'ACTIVE'
+        ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+      `,
+      [tenantId, capabilityCode],
+    );
+  }
+
+  for (const capabilityCode of [
     'maintenance.occurrences.read',
     'maintenance.occurrences.report',
     'maintenance.occurrences.triage',
@@ -446,7 +472,7 @@ async function seedTechnicalProfiles(client: PoolClient, tenantId: string): Prom
           id, tenant_id, technical_area_id, code, name, description, can_sign, created_by
         )
         VALUES ($1, $2, $3, $4, $5, $5 || ' de homologação.', $6, $7)
-        ON CONFLICT (tenant_id, technical_area_id, code) DO UPDATE
+        ON CONFLICT (id) DO UPDATE
         SET name = EXCLUDED.name, can_sign = EXCLUDED.can_sign, status = 'ACTIVE'
       `,
       [id, tenantId, areaId, code, name, canSign, ids.admin],
@@ -456,6 +482,8 @@ async function seedTechnicalProfiles(client: PoolClient, tenantId: string): Prom
   const assignments = [
     [ids.quality, ids.qualityArea, ids.qualityTechnicalRole],
     [ids.safety, ids.safetyArea, ids.safetyTechnicalRole],
+    // PCM emite análises para a área de Manutenção, mas não recebe um cargo de executor.
+    [ids.pcm, ids.maintenanceArea, null],
     [ids.maintenance, ids.maintenanceArea, ids.maintenanceTechnicalRole],
     [ids.mechanicalMaintenance, ids.maintenanceArea, ids.mechanicalTechnicalRole],
     [ids.electricalMaintenance, ids.maintenanceArea, ids.electricalTechnicalRole],
@@ -1329,6 +1357,20 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
     title: 'Preventiva aprovada aguardando liberação PCM',
     revision: 1,
   });
+  const releaseTwoHash = hashPolicy({
+    code: 'OS-HML-RELEASE-002',
+    planVersionId: ids.periodicPlanVersion,
+    checklistVersionId: ids.pumpChecklistVersion,
+    title: 'Preventiva normal aguardando liberação PCM',
+    revision: 1,
+  });
+  const reviewTwoHash = hashPolicy({
+    code: 'OS-HML-REVIEW-002',
+    planVersionId: ids.periodicPlanVersion,
+    checklistVersionId: ids.pumpChecklistVersion,
+    title: 'Preventiva com liberação pós-intervenção',
+    revision: 1,
+  });
 
   const workOrders = [
     {
@@ -1611,6 +1653,104 @@ async function seedOperationalScenarios(client: PoolClient, tenantId: string): P
     `,
     [ids.readyAction, tenantId, ids.readyWorkOrder],
   );
+
+  // Cenários limpos e independentes para a homologação final. O seed nunca
+  // reabre ou altera um ciclo que já tenha sido operado.
+  await client.query(
+    `
+      INSERT INTO maintenance.work_orders (
+        id, tenant_id, code, asset_id, component_id, maintenance_plan_version_id,
+        origin_type, work_type, title, description, priority, status, requester_id,
+        maintenance_stop_mode, technical_analysis, scheduled_for, content_hash_sha256
+      ) VALUES (
+        $1, $2, 'OS-HML-RELEASE-002', $3, $4, $5,
+        'HOMOLOGATION', 'PREVENTIVE',
+        'Preventiva normal aguardando liberação PCM',
+        'Cenário limpo: liberação PCM, atribuição técnica e conclusão direta.',
+        'HIGH', 'APPROVED', $6, 'MANDATORY_STOP',
+        '{"objetivo":"Homologar o fluxo normal sem validação posterior.","exige_liberacao_pos_intervencao":false}'::jsonb,
+        clock_timestamp() + interval '1 day', $7
+      )
+      ON CONFLICT (tenant_id, code) DO NOTHING
+    `,
+    [
+      ids.releaseTwoWorkOrder,
+      tenantId,
+      ids.pump,
+      ids.pumpBearing,
+      ids.periodicPlanVersion,
+      ids.admin,
+      releaseTwoHash,
+    ],
+  );
+  await client.query(
+    `
+      INSERT INTO maintenance.work_orders (
+        id, tenant_id, code, asset_id, component_id, maintenance_plan_version_id,
+        origin_type, work_type, title, description, priority, status, requester_id,
+        maintenance_stop_mode, technical_analysis, scheduled_for, content_hash_sha256
+      ) VALUES (
+        $1, $2, 'OS-HML-REVIEW-002', $3, $4, $5,
+        'HOMOLOGATION', 'PREVENTIVE',
+        'Preventiva com liberação pós-intervenção',
+        'Cenário limpo: após a conclusão técnica exige validação formal de Qualidade e Segurança.',
+        'HIGH', 'APPROVED', $6, 'MANDATORY_STOP',
+        '{"objetivo":"Homologar a liberação pós-intervenção.","exige_liberacao_pos_intervencao":true}'::jsonb,
+        clock_timestamp() + interval '2 days', $7
+      )
+      ON CONFLICT (tenant_id, code) DO NOTHING
+    `,
+    [
+      ids.reviewTwoWorkOrder,
+      tenantId,
+      ids.pump,
+      ids.pumpBearing,
+      ids.periodicPlanVersion,
+      ids.admin,
+      reviewTwoHash,
+    ],
+  );
+  await client.query(
+    `
+      INSERT INTO workflow.technical_demands (
+        id, tenant_id, demand_type, entity_type, entity_id, origin_type,
+        title, description, priority, status, created_by, creator_role_snapshot,
+        signature_required, required_signature_count, segregation_required,
+        signature_policy, payload_hash_sha256
+      ) VALUES (
+        $1, $2, 'POST_INTERVENTION_RELEASE', 'WORK_ORDER', $3, 'HOMOLOGATION',
+        'Liberação pós-intervenção — OS-HML-REVIEW-002',
+        'Aguardará a conclusão técnica antes de aceitar as assinaturas exigidas.',
+        'HIGH', 'OPEN', $4, 'ADMIN:ADMIN', true, 2, true,
+        'QUALIDADE_E_SEGURANCA', $5
+      )
+      ON CONFLICT (id) DO NOTHING
+    `,
+    [ids.reviewTwoDemand, tenantId, ids.reviewTwoWorkOrder, ids.admin, reviewTwoHash],
+  );
+  await client.query(
+    `
+      UPDATE maintenance.work_orders
+      SET technical_demand_id=$2
+      WHERE tenant_id=$1 AND id=$3 AND status='APPROVED' AND technical_demand_id IS NULL
+    `,
+    [tenantId, ids.reviewTwoDemand, ids.reviewTwoWorkOrder],
+  );
+  for (const [id, code, areaId] of [
+    [ids.reviewTwoQualityRequirement, 'QUALITY', ids.qualityArea],
+    [ids.reviewTwoSafetyRequirement, 'SAFETY', ids.safetyArea],
+  ] as const) {
+    await client.query(
+      `
+        INSERT INTO workflow.demand_validator_requirements (
+          id, tenant_id, technical_demand_id, requirement_code, technical_area_id,
+          required_count, status
+        ) VALUES ($1, $2, $3, $4, $5, 1, 'PENDING')
+        ON CONFLICT (tenant_id, technical_demand_id, requirement_code) DO NOTHING
+      `,
+      [id, tenantId, ids.reviewTwoDemand, code, areaId],
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -1643,14 +1783,14 @@ async function main(): Promise<void> {
         VALUES (
           $1::uuid, 'Fab Control Homologação Ltda.', 'Fab Control Homologação',
           'fab-control-homologacao-' || left(replace($1::text, '-', ''), 12),
-          'HOMOLOGATION', 'ACTIVE'
+          $2, 'ACTIVE'
         )
         ON CONFLICT (id) DO UPDATE SET
           display_name = EXCLUDED.display_name,
-          environment = 'HOMOLOGATION',
+          environment = EXCLUDED.environment,
           status = 'ACTIVE'
       `,
-      [environment.defaultTenantId],
+      [environment.defaultTenantId, environment.release.environment],
     );
     await seedIdentities(client, environment.defaultTenantId, passwords, passwordService);
     await seedTechnicalProfiles(client, environment.defaultTenantId);
@@ -1678,7 +1818,7 @@ async function main(): Promise<void> {
     await seedOperationalScenarios(client, environment.defaultTenantId);
     await client.query('COMMIT');
     process.stdout.write(
-      'Massa de homologação aplicada: 9 perfis, 12 ativos, 3 linhas de Envase, 3 linhas de Embalagem, motores simulados, 1 checklist, 2 planos, 1 validação pendente, 1 OS aguardando liberação PCM e 1 ação liberada.\n',
+      'Massa de homologação aplicada: 9 perfis, 12 ativos, 3 linhas de Envase, 3 linhas de Embalagem, motores simulados, 1 checklist, 2 planos e os cenários limpos OS-HML-RELEASE-002 e OS-HML-REVIEW-002 aguardando liberação PCM.\n',
     );
   } catch (error) {
     await client.query('ROLLBACK');

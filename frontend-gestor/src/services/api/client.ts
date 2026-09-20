@@ -1,5 +1,5 @@
 import type { ApiEnvelope } from "../../types/api";
-import { getApiTransport, getApiUrl, getLegacyApiUrl } from "./config";
+import { getApiTransport, getApiUrl, getDevelopmentTenantSlug, getLegacyApiUrl } from "./config";
 
 export const API_TIMEOUT_MS = {
   FAST_READ: 15_000,
@@ -30,6 +30,11 @@ export class ApiRequestError extends Error {
 }
 
 const inFlightReads = new Map<string, Promise<ApiEnvelope<unknown>>>();
+
+function developmentTenantHeader(): Record<string, string> {
+  const slug = getDevelopmentTenantSlug();
+  return slug ? { "X-VORQIX-DEV-TENANT": slug } : {};
+}
 
 function stableSerialize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -585,7 +590,9 @@ function catalogWriteBody(
     return {
       sku: data.sku,
       nome: data.nome,
+      nome_facil: nullableTextValue(data.nome_facil),
       unidade: data.unidade,
+      valor_unitario: nullableNumberValue(data.valor_unitario) ?? 0,
       estoque_atual: nullableNumberValue(data.estoque_atual) ?? 0,
       estoque_minimo: nullableNumberValue(data.estoque_minimo) ?? 0,
       status: recordStatusToNode[requestedStatus] ?? requestedStatus,
@@ -955,7 +962,7 @@ function mapActionDetail(value: JsonRecord): JsonRecord {
     execucoes: Object.keys(execution).length > 0 ? [execution] : [],
     checklist: items,
     evidencias: evidence,
-    materiais: [],
+    materiais: records(execution.materiais),
     locks: [],
     historico: [],
   };
@@ -1193,7 +1200,7 @@ function nodeActionRequest(
     case "operator-actions.list":
       return {
         method: "GET",
-        path: queryPath("/v1/maintenance/operator-actions", { limite: payload.limite }),
+        path: queryPath("/v1/maintenance/operator-actions", { limite: payload.limite, historico: payload.historico }),
         token,
       };
     case "operator-actions.get":
@@ -1227,6 +1234,19 @@ function nodeActionRequest(
         method: "PUT",
         path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/responses`,
         body: { itens: payload.itens },
+        token,
+      };
+    case "operator-actions.materials.list":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/materials`,
+        token,
+      };
+    case "operator-actions.materials.consume":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/materials`,
+        body: { material_id: payload.material_id, quantidade: payload.quantidade, observacao: payload.observacao },
         token,
       };
     case "operator-actions.validation":
@@ -2309,7 +2329,7 @@ async function executeNodeCall<T>(
   signal?.addEventListener("abort", abortFromCaller, { once: true });
 
   try {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...developmentTenantHeader() };
     if (request.body) headers["Content-Type"] = "application/json";
     if (request.token) headers.Authorization = `Bearer ${request.token}`;
     const response = await fetch(`${nodeBaseUrl(apiUrl)}${request.path}`, {

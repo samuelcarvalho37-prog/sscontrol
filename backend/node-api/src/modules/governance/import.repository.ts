@@ -310,8 +310,8 @@ export class ImportRepository {
         manufacturer,model,serial_number,technical_location,metadata)
         VALUES ($2,$1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING to_jsonb(cmms.components.*)-'tenant_id' AS snapshot`,
-      materiais: `INSERT INTO cmms.materials (id,tenant_id,sku,name,unit,current_stock,minimum_stock,status)
-        VALUES ($2,$1,$3,$4,$5,$6,$7,$8)
+      materiais: `INSERT INTO cmms.materials (id,tenant_id,sku,name,friendly_name,unit,unit_cost,current_stock,minimum_stock,status)
+        VALUES ($2,$1,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING to_jsonb(cmms.materials.*)-'tenant_id' AS snapshot`,
     };
     return queries[entity];
@@ -336,8 +336,8 @@ export class ImportRepository {
         manufacturer=$15,model=$16,serial_number=$17,technical_location=$18,metadata=$19,
         updated_at=clock_timestamp() WHERE id=$2
         RETURNING to_jsonb(cmms.components.*)-'tenant_id' AS snapshot`,
-      materiais: `UPDATE cmms.materials SET sku=$3,name=$4,unit=$5,current_stock=$6,
-        minimum_stock=$7,status=$8,updated_at=clock_timestamp()
+      materiais: `UPDATE cmms.materials SET sku=$3,name=$4,friendly_name=$5,unit=$6,unit_cost=$7,current_stock=$8,
+        minimum_stock=$9,status=$10,updated_at=clock_timestamp()
         WHERE id=$2 RETURNING to_jsonb(cmms.materials.*)-'tenant_id' AS snapshot`,
     };
     return queries[entity];
@@ -396,7 +396,9 @@ export class ImportRepository {
         ...prefix,
         data.sku,
         data.name,
+        data.friendly_name,
         data.unit,
+        data.unit_cost,
         data.current_stock,
         data.minimum_stock,
         data.status,
