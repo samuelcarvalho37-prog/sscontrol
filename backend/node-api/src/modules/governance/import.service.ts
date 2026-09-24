@@ -258,6 +258,7 @@ export class ImportService {
         campos: model.fields.map((field) => ({
           chave: field.key,
           rotulo: field.label,
+          aliases: field.aliases,
           obrigatorio: field.required,
           exemplo: field.example,
         })),
@@ -328,6 +329,7 @@ export class ImportService {
       async (client) => {
         const rows: StagedImportRow[] = [];
         const entityIds = new Set<string>();
+        const materialPrices = new Map<string, number>();
         for (const source of input.rows) {
           const rawData = Object.fromEntries(
             Object.entries(source).filter(([key]) => key !== '__linha'),
@@ -352,17 +354,33 @@ export class ImportService {
             }
             const normalized = await this.normalizeEntity(
               client,
-              model.entity,
+              model,
               canonicalRow(model, source),
             );
-            if (entityIds.has(String(normalized.data.id))) {
+            const entityId = String(normalized.data.id);
+            const repeatedMaterialPrice =
+              model.type === 'valores_componentes' && entityIds.has(entityId);
+            if (repeatedMaterialPrice) {
+              const previous = materialPrices.get(entityId);
+              const current = Number(normalized.data.unit_cost);
+              if (previous !== current) {
+                throw error(
+                  'IMPORT_MATERIAL_PRICE_CONFLICT',
+                  `O SKU ${String(normalized.data.sku)} possui valores unitários diferentes na mesma aba.`,
+                  422,
+                );
+              }
+            } else if (entityIds.has(entityId)) {
               throw error(
                 'IMPORT_DUPLICATE_ID',
                 `O cadastro ${String(normalized.data.id)} aparece mais de uma vez no lote.`,
                 422,
               );
             }
-            entityIds.add(String(normalized.data.id));
+            entityIds.add(entityId);
+            if (model.type === 'valores_componentes') {
+              materialPrices.set(entityId, Number(normalized.data.unit_cost));
+            }
             rows.push({
               id: randomUUID(),
               sourceRowNumber: source.__linha,
@@ -448,6 +466,10 @@ export class ImportService {
         const records = await this.repository.listRecords(client, batchId);
         let created = 0;
         let updated = 0;
+        const appliedByEntity = new Map<
+          string,
+          { readonly normalized: JsonObject; readonly after: JsonObject }
+        >();
         for (const record of records) {
           if (text(record, 'status') !== 'VALID') {
             throw error('IMPORT_BATCH_NOT_READY', 'O lote contém uma linha não validada.', 409);
@@ -457,6 +479,18 @@ export class ImportService {
           const operation = text(record, 'operation');
           const normalized = json(record, 'normalized_data');
           if (!normalized) throw new Error('Registro validado sem conteúdo normalizado.');
+          const previouslyApplied = appliedByEntity.get(entityId);
+          if (previouslyApplied) {
+            if (stableSerialize(previouslyApplied.normalized) !== stableSerialize(normalized)) {
+              throw error(
+                'IMPORT_DUPLICATE_ID',
+                `O cadastro da linha ${integer(record, 'source_row_number')} diverge de outra linha do lote.`,
+                409,
+              );
+            }
+            await this.repository.markRecordApplied(client, record.id, previouslyApplied.after);
+            continue;
+          }
           const current = await this.repository.currentEntity(client, entity, entityId, true);
           const before = json(record, 'before_data');
           if (stableSerialize(current) !== stableSerialize(before)) {
@@ -474,6 +508,7 @@ export class ImportService {
             normalized,
           );
           await this.repository.markRecordApplied(client, record.id, after);
+          appliedByEntity.set(entityId, { normalized, after });
           if (operation === 'CRIAR') created += 1;
           else updated += 1;
         }
@@ -566,15 +601,19 @@ export class ImportService {
 
   private async normalizeEntity(
     client: PoolClient,
-    entity: ImportEntity,
+    model: ImportModel,
     source: Readonly<Record<string, unknown>>,
   ): Promise<{
     readonly operation: 'CRIAR' | 'ATUALIZAR';
     readonly data: JsonObject;
     readonly before: JsonObject | null;
   }> {
+    const { entity } = model;
     const requestedId = nullableText(source.id);
-    const naturalKey = requiredText(entity === 'materiais' ? source.sku : source.tag, 'código');
+    const naturalKey = requiredText(
+      entity === 'materiais' ? source.sku : entity === 'fontes_valores' ? source.url : source.tag,
+      entity === 'fontes_valores' ? 'URL' : 'código',
+    );
     const existing = await this.repository.findExisting(client, entity, requestedId, naturalKey);
     if (existing.length > 1) {
       throw error(
@@ -654,6 +693,46 @@ export class ImportService {
         serial_number: nullableText(source.numero_serie),
         technical_location: nullableText(source.localizacao_tecnica),
         metadata: {},
+      };
+    } else if (model.type === 'valores_componentes') {
+      if (!found || !before) {
+        throw error(
+          'IMPORT_MATERIAL_NOT_FOUND',
+          `O SKU ${naturalKey} não está cadastrado. Importe a aba Materiais antes de Valores_Componentes.`,
+          422,
+        );
+      }
+      const unitCost = numberValue(source.valor_unitario, 'Valor unitário estimado', null);
+      if (unitCost === null) {
+        throw error('IMPORT_REQUIRED_VALUE', 'Preencha o campo Valor unitário estimado.', 422);
+      }
+      data = {
+        ...shared,
+        sku: requiredText(before.sku, 'SKU'),
+        name: requiredText(before.name, 'nome do material'),
+        friendly_name: nullableText(before.friendly_name),
+        unit: nullableText(before.unit) ?? 'un',
+        unit_cost: unitCost,
+        current_stock: numberValue(before.current_stock, 'Estoque atual', 0),
+        minimum_stock: numberValue(before.minimum_stock, 'Estoque mínimo', 0),
+        status: statusValue(before.status),
+      };
+    } else if (entity === 'fontes_valores') {
+      let sourceUrl: URL;
+      try {
+        sourceUrl = new URL(naturalKey);
+      } catch {
+        throw error('IMPORT_URL_INVALID', `URL inválida: ${naturalKey}.`, 422);
+      }
+      if (!['http:', 'https:'].includes(sourceUrl.protocol)) {
+        throw error('IMPORT_URL_INVALID', 'A URL precisa começar com http:// ou https://.', 422);
+      }
+      data = {
+        ...shared,
+        category: requiredText(source.categoria, 'categoria'),
+        reference_used: requiredText(source.referencia_usada, 'referência usada'),
+        source_url: sourceUrl.toString(),
+        observation: nullableText(source.observacao),
       };
     } else {
       data = {

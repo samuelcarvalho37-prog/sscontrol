@@ -1,5 +1,5 @@
 import type { PoolClient, QueryResultRow } from 'pg';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { StoredObject } from '../../infrastructure/storage/object-storage.js';
 
@@ -328,6 +328,29 @@ export class OperationsRepository {
                    AND NOT EXISTS (SELECT 1 FROM workflow.technical_signature_revocations revocation
                                    WHERE revocation.technical_signature_id = signature.id)), '[]'::jsonb)
                ) END AS validacao,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'acao', audit_event.action,
+                 'entidade', audit_event.entity_type,
+                 'entidade_id', audit_event.entity_id,
+                 'usuario', audit_user.name,
+                 'perfil', audit_event.role_snapshot,
+                 'ocorreu_em', audit_event.occurred_at
+               ) ORDER BY audit_event.occurred_at)
+               FROM audit.events audit_event
+               LEFT JOIN iam.users audit_user ON audit_user.id = audit_event.user_id
+               WHERE audit_event.tenant_id = work_order.tenant_id
+                 AND (
+                   audit_event.entity_id = work_order.id::text
+                   OR audit_event.entity_id = demand.id::text
+                   OR EXISTS (
+                     SELECT 1
+                     FROM maintenance.work_order_actions audit_action
+                     LEFT JOIN maintenance.executions audit_execution
+                       ON audit_execution.work_order_action_id = audit_action.id
+                     WHERE audit_action.work_order_id = work_order.id
+                       AND audit_event.entity_id IN (audit_action.id::text, audit_execution.id::text)
+                   )
+                 )), '[]'::jsonb) AS auditoria,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', action.id, 'status', action.status, 'responsavel_id', action.responsible_id,
                  'gerada_em', action.generated_at, 'iniciada_em', action.started_at,
@@ -1402,6 +1425,72 @@ export class OperationsRepository {
     );
   }
 
+  async openEquipmentStopForExecution(
+    client: PoolClient,
+    tenantId: string,
+    userId: string,
+    executionId: string,
+  ): Promise<void> {
+    const stopId = randomUUID();
+    const linkedStop = await client.query<OperationsRow>(
+      `UPDATE maintenance.equipment_stops stop
+          SET work_order_id=action.work_order_id,
+              work_order_action_id=action.id,
+              execution_id=execution.id,
+              status=CASE WHEN stop.status IN ('OPEN', 'WAITING_MAINTENANCE')
+                THEN 'IN_MAINTENANCE' ELSE stop.status END
+         FROM maintenance.executions execution
+         JOIN maintenance.work_order_actions action ON action.id=execution.work_order_action_id
+        WHERE execution.id=$1
+          AND stop.asset_id=action.asset_id
+          AND stop.status NOT IN ('COMPLETED', 'CANCELLED')
+        RETURNING stop.id`,
+      [executionId],
+    );
+    if (linkedStop.rows.length > 0) return;
+
+    await client.query(
+      `INSERT INTO maintenance.equipment_stops (
+         id, tenant_id, asset_id, component_id, work_order_id, work_order_action_id,
+         execution_id, origin, stop_type, started_at, started_by, reason
+       )
+       SELECT $1, $2, action.asset_id, action.component_id, action.work_order_id, action.id,
+              execution.id, 'WORK_ORDER_EXECUTION', 'UNPLANNED',
+              COALESCE(execution.started_at, clock_timestamp()), $3,
+              'Parada registrada pelo técnico durante a execução da OS.'
+       FROM maintenance.executions execution
+       JOIN maintenance.work_order_actions action ON action.id=execution.work_order_action_id
+       WHERE execution.id=$4
+      `,
+      [stopId, tenantId, userId, executionId],
+    );
+    await client.query(
+      `UPDATE maintenance.equipment_stops
+          SET status='IN_MAINTENANCE'
+        WHERE execution_id=$1 AND status='OPEN'`,
+      [executionId],
+    );
+  }
+
+  async completeEquipmentStopForExecution(
+    client: PoolClient,
+    executionId: string,
+    userId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.equipment_stops
+          SET status='WAITING_OPERATIONAL_RETURN'
+        WHERE execution_id=$1 AND status='IN_MAINTENANCE'`,
+      [executionId],
+    );
+    await client.query(
+      `UPDATE maintenance.equipment_stops
+          SET status='COMPLETED', completed_by=$2
+        WHERE execution_id=$1 AND status='WAITING_OPERATIONAL_RETURN'`,
+      [executionId, userId],
+    );
+  }
+
   async listConsumableMaterials(client: PoolClient): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(`
       SELECT id, sku, name AS nome, friendly_name AS nome_facil, unit AS unidade,
@@ -1430,6 +1519,168 @@ export class OperationsRepository {
       ${lock ? 'FOR UPDATE' : ''}
     `, [materialId]);
     return result.rows[0] ?? null;
+  }
+
+  async findPublishedCorrectivePlanContext(
+    client: PoolClient,
+    assetId: string,
+  ): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `
+        SELECT version.id, version.status, version.maintenance_stop_mode,
+               version.technical_analysis, version.checklist_template_version_id,
+               version.estimated_duration_minutes, plan.asset_id, plan.component_id,
+               plan.plan_type, plan.lifecycle_status, asset.lifecycle_status AS asset_status,
+               checklist.status AS checklist_status,
+               (SELECT count(*)::integer FROM maintenance.checklist_items item
+                WHERE item.checklist_template_version_id = checklist.id AND item.status = 'ACTIVE') AS total_items
+        FROM maintenance.maintenance_plan_versions version
+        JOIN maintenance.maintenance_plans plan ON plan.id = version.maintenance_plan_id
+        JOIN cmms.assets asset ON asset.id = plan.asset_id
+        JOIN maintenance.checklist_template_versions checklist
+          ON checklist.id = version.checklist_template_version_id
+        WHERE plan.asset_id=$1
+          AND plan.plan_type='CORRECTIVE'
+          AND version.status='PUBLISHED'
+          AND plan.lifecycle_status='ACTIVE'
+          AND asset.lifecycle_status='ACTIVE'
+          AND checklist.status='PUBLISHED'
+          AND plan.deleted_at IS NULL
+        ORDER BY version.published_at DESC NULLS LAST, version.created_at DESC
+        LIMIT 1
+      `,
+      [assetId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findActiveAssetIdByTag(client: PoolClient, assetTag: string): Promise<string | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT id
+         FROM cmms.assets
+        WHERE upper(tag) = upper($1)
+          AND deleted_at IS NULL
+          AND lifecycle_status = 'ACTIVE'
+        ORDER BY created_at
+        LIMIT 1`,
+      [assetTag],
+    );
+    return result.rows[0]?.id ? String(result.rows[0].id) : null;
+  }
+
+  async ensurePublishedCorrectivePlanContext(
+    client: PoolClient,
+    tenantId: string,
+    assetId: string,
+    userId: string,
+  ): Promise<{ readonly context: OperationsRow; readonly created: boolean }> {
+    const existing = await this.findPublishedCorrectivePlanContext(client, assetId);
+    if (existing) return { context: existing, created: false };
+
+    const asset = await client.query<OperationsRow>(
+      `SELECT id, tag, name, criticality, lifecycle_status
+       FROM cmms.assets WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,
+      [assetId],
+    );
+    const row = required(asset.rows, 'Ativo não encontrado para a OS corretiva.');
+    if (row.lifecycle_status !== 'ACTIVE') {
+      throw new Error('O ativo da ocorrência não está disponível para uma OS corretiva.');
+    }
+
+    const checklistId = randomUUID();
+    const checklistVersionId = randomUUID();
+    const planId = randomUUID();
+    const planVersionId = randomUUID();
+    const suffix = randomUUID().slice(0, 8).toUpperCase();
+    const assetTag = String(row.tag ?? assetId.slice(0, 8)).toUpperCase();
+    const hash = createHash('sha256')
+      .update(`auto-corrective:${tenantId}:${assetId}:${planVersionId}`, 'utf8')
+      .digest('hex');
+
+    await client.query(
+      `INSERT INTO maintenance.checklist_templates (
+         id,tenant_id,code,name,asset_id,checklist_type,criticality,lifecycle_status,created_by
+       ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','MEDIUM','ACTIVE',$6)`,
+      [checklistId, tenantId, `CHK-COR-${assetTag}-${suffix}`, `Checklist corretivo · ${row.name}`, assetId, userId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.checklist_template_versions (
+         id,tenant_id,checklist_template_id,revision,status,signature_policy,required_signatures,
+         segregation_required,manager_guidance,safety_requirements,content_hash_sha256,created_by,published_at
+       ) VALUES ($1,$2,$3,1,'DRAFT','QUALIDADE_OU_SEGURANCA',1,false,$4,'[]'::jsonb,$5,$6,NULL)`,
+      [
+        checklistVersionId,
+        tenantId,
+        checklistId,
+        'Modelo corretivo automático criado pelo PCM para registrar a intervenção da ocorrência.',
+        hash,
+        userId,
+      ],
+    );
+    await client.query(
+      `INSERT INTO maintenance.checklist_items (
+         id,tenant_id,checklist_template_version_id,sequence,title,instruction,response_type_code,
+         category,required,evidence_required,blocks_completion,status
+       ) VALUES ($1,$2,$3,1,$4,$5,'CONFIRMACAO','OPERACIONAL',true,false,true,'ACTIVE')`,
+      [
+        randomUUID(),
+        tenantId,
+        checklistVersionId,
+        'Executar e registrar a correção',
+        'Registre a intervenção executada, os materiais utilizados e a condição final do equipamento.',
+      ],
+    );
+    await client.query(
+      `UPDATE maintenance.checklist_template_versions
+       SET status='APPROVED', submitted_at=clock_timestamp()
+       WHERE id=$1`,
+      [checklistVersionId],
+    );
+    await client.query(
+      `UPDATE maintenance.checklist_template_versions
+       SET status='PUBLISHED', published_at=clock_timestamp()
+       WHERE id=$1`,
+      [checklistVersionId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.maintenance_plans (
+         id,tenant_id,code,name,asset_id,plan_type,lifecycle_status,created_by
+       ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','ACTIVE',$6)`,
+      [planId, tenantId, `PLN-COR-${assetTag}-${suffix}`, `Corretiva sob demanda · ${row.name}`, assetId, userId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.maintenance_plan_versions (
+         id,tenant_id,maintenance_plan_id,checklist_template_version_id,revision,status,criticality,
+         trigger_type,estimated_duration_minutes,lockout_required,evidence_required,maximum_sessions,
+         maintenance_stop_mode,technical_analysis,content_hash_sha256,created_by,published_at
+       ) VALUES ($1,$2,$3,$4,1,'DRAFT',$5,'OCCURRENCE',60,false,false,1,
+                 'EXECUTOR_DECISION',$6::jsonb,$7,$8,NULL)`,
+      [
+        planVersionId,
+        tenantId,
+        planId,
+        checklistVersionId,
+        row.criticality ?? 'MEDIUM',
+        JSON.stringify({ auto_generated: true, purpose: 'CORRECTIVE_OCCURRENCE' }),
+        hash,
+        userId,
+      ],
+    );
+    await client.query(
+      `UPDATE maintenance.maintenance_plan_versions
+       SET status='APPROVED', submitted_at=clock_timestamp()
+       WHERE id=$1`,
+      [planVersionId],
+    );
+    await client.query(
+      `UPDATE maintenance.maintenance_plan_versions
+       SET status='PUBLISHED', published_at=clock_timestamp()
+       WHERE id=$1`,
+      [planVersionId],
+    );
+    const context = await this.findPublishedPlanContext(client, planVersionId);
+    if (!context) throw new Error('O plano corretivo automático não ficou disponível para execução.');
+    return { context, created: true };
   }
 
   async consumeMaterial(

@@ -1,6 +1,7 @@
 export interface AdminImportModelField {
   chave: string
   rotulo: string
+  aliases: string[]
   obrigatorio: boolean
   exemplo: string | number | boolean
 }

@@ -64,7 +64,9 @@ export const assignActionBodySchema = Type.Object(
 
 export const createWorkOrderBodySchema = Type.Object(
   {
-    plano_versao_id: uuid,
+    plano_versao_id: Type.Optional(uuid),
+    ativo_id: Type.Optional(uuid),
+    ativo_tag: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     tipo_origem: Type.String({ minLength: 1, maxLength: 80 }),
     entidade_origem_id: nullableUuid,
     tipo_trabalho: Type.String({ minLength: 1, maxLength: 80 }),

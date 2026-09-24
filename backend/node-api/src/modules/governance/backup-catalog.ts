@@ -13,6 +13,7 @@ export const backupTables: readonly BackupTable[] = Object.freeze(
     'cmms.assets',
     'cmms.components',
     'cmms.materials',
+    'cmms.material_value_sources',
     'cmms.parameter_definitions',
     'cmms.parameter_policies',
     'cmms.parameter_readings',

@@ -1479,3 +1479,52 @@
   .pcm-reports { margin: 0; border: 0; box-shadow: none; }
   .pcm-reports__actions { display: none; }
 }
+.pcm-order-audit {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #d6e2f2;
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.pcm-order-audit h3 {
+  margin: 4px 0;
+  color: #102a43;
+}
+
+.pcm-order-audit p {
+  margin: 0;
+  color: #526b85;
+}
+
+.pcm-order-audit ol {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pcm-order-audit li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.pcm-order-audit li > i {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #1479df;
+  box-shadow: 0 0 0 4px #dcecff;
+}
+
+.pcm-order-audit li > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pcm-order-audit li strong { color: #102a43; }
+.pcm-order-audit li span { color: #526b85; font-size: 0.88rem; }

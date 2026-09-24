@@ -91,8 +91,20 @@ export async function loadPcmDashboard(client: PoolClient, query: AnalyticsQuery
        'falhas_por_setor',COALESCE((SELECT jsonb_agg(row) FROM
          (SELECT * FROM failures_by_sector ORDER BY falhas DESC,setor_nome,setor_id LIMIT $4) row),'[]'::jsonb),
        'ativos_parados_lista',COALESCE((SELECT jsonb_agg(row) FROM
-         (SELECT asset.id,asset.tag AS ativo_tag,asset.name AS ativo_nome,asset.sector_name AS setor_nome
-          FROM assets asset WHERE asset.operational_status='STOPPED'
+         (SELECT asset.id,asset.tag AS ativo_tag,asset.name AS ativo_nome,asset.sector_name AS setor_nome,
+            COALESCE(current_stop.reason, CASE WHEN asset.operational_status='STOPPED'
+              THEN 'Parada operacional sinalizada.' ELSE 'Parada aberta aguardando tratamento.' END) AS motivo_parada,
+            current_stop.started_at AS parada_iniciada_em,
+            current_stop.status AS parada_status
+          FROM assets asset
+          LEFT JOIN LATERAL (
+            SELECT stop.reason,stop.started_at,stop.status
+            FROM maintenance.equipment_stops stop
+            WHERE stop.asset_id=asset.id AND stop.tenant_id=asset.tenant_id
+              AND stop.status NOT IN ('COMPLETED','CANCELLED')
+            ORDER BY stop.started_at DESC,stop.id DESC LIMIT 1
+          ) current_stop ON true
+          WHERE asset.operational_status='STOPPED'
             OR EXISTS (SELECT 1 FROM maintenance.equipment_stops stop WHERE stop.asset_id=asset.id
               AND stop.tenant_id=asset.tenant_id AND stop.status NOT IN ('COMPLETED','CANCELLED'))
           ORDER BY asset.tag,asset.id LIMIT 50) row),'[]'::jsonb),

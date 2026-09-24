@@ -362,7 +362,11 @@ function workOrderBody(data: JsonRecord, creating: boolean): JsonRecord {
   };
   if (!creating) return body;
   return {
-    plano_versao_id: data.plano_versao_id || data.plano_id,
+    ...(data.plano_versao_id || data.plano_id
+      ? { plano_versao_id: data.plano_versao_id || data.plano_id }
+      : {}),
+    ...(data.ativo_id ? { ativo_id: data.ativo_id } : {}),
+    ...(data.ativo_tag ? { ativo_tag: data.ativo_tag } : {}),
     tipo_origem: data.origem || "ADMIN",
     entidade_origem_id: data.entidade_origem_id || null,
     tipo_trabalho: planTypeToNode[upperText(data.tipo)] ?? upperText(data.tipo),
@@ -1062,7 +1066,9 @@ function nodeActionRequest(
           return {
             signed: true,
             validated: true,
-            completed: data.status === "APPROVED",
+            completed: ["APPROVED", "COMPLETED"].includes(
+              String(data.status ?? "").toUpperCase(),
+            ),
             assinaturas_pendentes: Math.max(
               0,
               Number(validation.assinaturas_exigidas ?? 0) -
@@ -1316,6 +1322,17 @@ function nodeActionRequest(
         },
       };
     }
+    case "gestor.obter_ocorrencia":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/occurrences/${encodeURIComponent(String(payload.ocorrencia_id))}`,
+        token,
+        transform: (data) => ({
+          ...data,
+          status: data.status === "OPEN" ? "AGUARDANDO_ANALISE" : data.status,
+          criado_em: data.criada_em,
+        }),
+      };
     case "gestor.notificacoes.listar":
       return {
         method: "GET",
@@ -1432,7 +1449,8 @@ function nodeActionRequest(
           total: records(data.itens).length,
           modelos: records(data.itens).map((item) => ({
             ...item,
-            workflow_status: item.status,
+            workflow_status:
+              checklistStatusFromNode[upperText(item.status)] ?? item.status,
             itens_count: item.total_itens,
             atualizado_em: item.updated_at,
           })),
@@ -1447,7 +1465,10 @@ function nodeActionRequest(
           plano: {
             ...data,
             ...record(data.versao_atual),
-            workflow_status: record(data.versao_atual).status,
+            workflow_status:
+              checklistStatusFromNode[
+                upperText(record(data.versao_atual).status)
+              ] ?? record(data.versao_atual).status,
             itens_count: records(data.itens).length,
           },
           ativo: data.ativo_id
@@ -1482,8 +1503,14 @@ function nodeActionRequest(
           validated: true,
           plano_id: payload.plano_id,
           decisao: payload.decisao,
-          workflow_status: record(data.versao_atual).status ?? data.status,
-          status: record(data.versao_atual).status ?? data.status,
+          workflow_status:
+            checklistStatusFromNode[
+              upperText(record(data.versao_atual).status ?? data.status)
+            ] ?? record(data.versao_atual).status ?? data.status,
+          status:
+            checklistStatusFromNode[
+              upperText(record(data.versao_atual).status ?? data.status)
+            ] ?? record(data.versao_atual).status ?? data.status,
         }),
       };
     case "admin.intervencoes.listar":

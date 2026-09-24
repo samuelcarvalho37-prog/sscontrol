@@ -17,6 +17,7 @@ export interface AdminIntervention {
   id: string
   codigo: string
   ativo_id?: string
+  ativo_tag?: string
   componente_id?: string
   plano_id?: string
   plano_versao_id?: string
@@ -47,6 +48,14 @@ export interface AdminIntervention {
   acao_id?: string
   acao_status?: string
   demanda?: AdminTechnicalDemandSummary | null
+  auditoria?: {
+    acao: string
+    entidade: string
+    entidade_id: string
+    usuario: string | null
+    perfil: string | null
+    ocorreu_em: string
+  }[]
   criado_em?: string
   atualizado_em?: string
 }

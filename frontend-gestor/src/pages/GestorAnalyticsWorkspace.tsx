@@ -13,6 +13,7 @@ import { AssetSearchSelect } from '../components/AssetSearchSelect'
 import {
   getGestorAssetCatalog,
   getGestorAssetJourney,
+  getGestorOccurrence,
   getGestorOverview,
   getGestorTechnicalKpisForPeriod,
   isGestorAuthenticationError,
@@ -318,15 +319,35 @@ export function GestorAnalyticsWorkspace({
 
   useEffect(() => {
     if (!focusOccurrenceId || !overview) return
+    setView('monitoring')
     const occurrence = overview.occurrences.find(
       (item) => item.id === focusOccurrenceId,
     )
     if (occurrence) {
       if (occurrence.ativo_id) setAssetId(occurrence.ativo_id)
       setSelectedOccurrence(occurrence)
+    } else {
+      const controller = new AbortController()
+      void getGestorOccurrence(focusOccurrenceId, controller.signal)
+        .then((detail) => {
+          if (detail.ativo_id) setAssetId(detail.ativo_id)
+          setSelectedOccurrence(detail)
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted) return
+          if (isGestorAuthenticationError(cause)) {
+            onSessionExpired()
+            return
+          }
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'Não foi possível abrir a ocorrência desta notificação.',
+          )
+        })
+      return () => controller.abort()
     }
-    setView('library')
-  }, [focusOccurrenceId, overview])
+  }, [focusOccurrenceId, onSessionExpired, overview])
 
   const selectedAsset =
     catalog.assets.find((asset) => asset.id === assetId) ?? null

@@ -217,6 +217,17 @@ export async function getGestorOccurrences(
   return Array.isArray(data.ocorrencias) ? data.ocorrencias : [];
 }
 
+export function getGestorOccurrence(
+  occurrenceId: string,
+  signal?: AbortSignal,
+): Promise<GestorOccurrence> {
+  return readGestorData<GestorOccurrence>(
+    "gestor.obter_ocorrencia",
+    { ocorrencia_id: occurrenceId },
+    signal,
+  );
+}
+
 export async function createGestorStopTreatment(stopId: string): Promise<{
   created: boolean;
   already_exists: boolean;

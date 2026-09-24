@@ -39,7 +39,9 @@ interface MaintenanceActionQuery {
 }
 interface AssignActionBody { readonly responsavel_id: string; readonly tecnicos_apoio_ids?: readonly string[]; }
 interface WorkOrderBody {
-  readonly plano_versao_id: string;
+  readonly plano_versao_id?: string;
+  readonly ativo_id?: string;
+  readonly ativo_tag?: string;
   readonly tipo_origem: string;
   readonly entidade_origem_id: string | null;
   readonly tipo_trabalho: string;
@@ -250,7 +252,9 @@ export class OperationsController {
       await this.service.createWorkOrder(
         user(request),
         {
-          planVersionId: request.body.plano_versao_id,
+          planVersionId: request.body.plano_versao_id ?? null,
+          assetId: request.body.ativo_id ?? null,
+          assetTag: request.body.ativo_tag ?? null,
           originType: request.body.tipo_origem,
           originEntityId: request.body.entidade_origem_id,
           workType: request.body.tipo_trabalho,

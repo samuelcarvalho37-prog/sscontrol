@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 type Choice = { id: string; nome: string; tag?: string }
+type AssetChoice = Choice & { linha_id?: string; setor_id?: string; planta_id?: string }
 type Sector = Choice & { linhas: Choice[] }
 type Structure = { plantas: (Choice & { setores: Sector[] })[] }
 type Assessment = Record<'equipamento_parado' | 'risco_parada' | 'risco_seguranca' | 'impacto_producao' | 'impacto_qualidade' | 'existe_redundancia', boolean | null>
@@ -26,7 +27,7 @@ function priority(a: Assessment) {
 export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: string }) {
   const [step, setStep] = useState(0)
   const [plants, setPlants] = useState<Structure['plantas']>([])
-  const [assets, setAssets] = useState<Choice[]>([])
+  const [assets, setAssets] = useState<AssetChoice[]>([])
   const [plant, setPlant] = useState('')
   const [sector, setSector] = useState('')
   const [line, setLine] = useState('')
@@ -69,16 +70,30 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
     setLoading(true); setError('')
     void (async () => {
       let cursor: string | null = null
-      const items: Choice[] = []
+      const items: AssetChoice[] = []
       do {
-        const page: { itens: Choice[]; proximo_cursor: string | null } = await request(`/v1/cmms/assets?linha_id=${line}&status_ciclo_vida=ACTIVE&limite=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, controller.signal)
+        const filters = new URLSearchParams({
+          planta_id: plant,
+          setor_id: sector,
+          linha_id: line,
+          status_ciclo_vida: 'ACTIVE',
+          limite: '100',
+        })
+        if (cursor) filters.set('cursor', cursor)
+        const page: { itens: AssetChoice[]; proximo_cursor: string | null } = await request(`/v1/cmms/assets?${filters.toString()}`, undefined, controller.signal)
         items.push(...page.itens); cursor = page.proximo_cursor
       } while (cursor)
-      if (!controller.signal.aborted) setAssets(items)
+      if (!controller.signal.aborted) {
+        setAssets(items.filter(item =>
+          item.linha_id === line &&
+          item.setor_id === sector &&
+          item.planta_id === plant,
+        ))
+      }
     })().catch(cause => { if (!controller.signal.aborted) setError(String(cause.message ?? cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [line, base, token, reload])
+  }, [plant, sector, line, base, token, reload])
   async function preparePhoto(file?: File) {
     if (!file) return
     setPreparingPhoto(true); setError('')

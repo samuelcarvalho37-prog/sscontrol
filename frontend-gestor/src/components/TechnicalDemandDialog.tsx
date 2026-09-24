@@ -75,6 +75,7 @@ export function TechnicalDemandDialog({
   const [submitting, setSubmitting] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState('')
+  const [attestationConfirmed, setAttestationConfirmed] = useState(false)
 
   useEffect(() => {
     if (!isChecklist(demand) || !demand.entidade_id) return
@@ -107,6 +108,26 @@ export function TechnicalDemandDialog({
   const awaitingPostInterventionExecution =
     upper(demand.tipo) === 'POST_INTERVENTION_RELEASE' &&
     upper(demand.status) === 'ABERTA'
+  const isPostInterventionRelease =
+    upper(demand.tipo) === 'POST_INTERVENTION_RELEASE'
+  const areaCode = upper(context.identidade.area_codigo)
+  const areaName = upper(context.identidade.area_nome)
+  const isQuality = areaCode.includes('QUAL') || areaName.includes('QUAL')
+  const isSafety =
+    areaCode.includes('SEG') ||
+    areaName.includes('SEGUR') ||
+    areaName.includes('SAUDE')
+  const requiresAreaAttestation =
+    isPostInterventionRelease && (isQuality || isSafety)
+  const areaAttestation = isQuality
+    ? 'Confirmo que todas as Boas Práticas de Fabricação aplicáveis foram verificadas e que a intervenção foi executada de maneira correta.'
+    : 'Confirmo que as possíveis causas e controles de segurança foram verificados e que não há risco residual impeditivo para a operação.'
+  const conclusionPreview =
+    awaitingPostInterventionExecution
+      ? 'A OS ainda aguarda a conclusão técnica da execução antes de receber as assinaturas finais.'
+      : pending > 1
+      ? `Após esta assinatura, ainda será necessária a validação de ${pending - 1} área(s) antes da conclusão da OS.`
+      : 'Após esta assinatura, a OS será concluída e o registro permanecerá disponível para auditoria.'
 
   function fail(cause: unknown, fallback: string) {
     if (isGestorAuthenticationError(cause)) {
@@ -129,6 +150,10 @@ export function TechnicalDemandDialog({
       setError('Registre um parecer técnico objetivo.')
       return
     }
+    if (requiresAreaAttestation && !attestationConfirmed) {
+      setError('Confirme a declaração obrigatória da sua área antes de validar a ocorrência.')
+      return
+    }
     if (detail && detail.itens.length === 0) {
       setError('Este checklist não possui etapas. Solicite a correção ao Administrador.')
       return
@@ -138,11 +163,15 @@ export function TechnicalDemandDialog({
     try {
       const result = await validateGestorTechnicalDemand(
         demand.id,
-        opinion.trim(),
+        requiresAreaAttestation
+          ? `Validação 100% — ${areaAttestation}\n\nParecer: ${opinion.trim()}`
+          : opinion.trim(),
       )
       if (result.completed) {
         await onChanged(
-          upper(demand.entidade_tipo) === 'ORDEM_SERVICO_RASCUNHO'
+          isPostInterventionRelease
+            ? 'Validação final registrada. A OS foi concluída e preservada para auditoria.'
+            : upper(demand.entidade_tipo) === 'ORDEM_SERVICO_RASCUNHO'
             ? 'Documento assinado e liberado para o Operador.'
             : 'Documento assinado e aprovado.',
         )
@@ -249,6 +278,33 @@ export function TechnicalDemandDialog({
             </div>
           ) : null}
 
+          {isPostInterventionRelease ? (
+            <section className="validation-gate-conclusion">
+              <header>
+                <span><ValidationIcon /></span>
+                <div>
+                  <small>PRÉVIA DA CONCLUSÃO</small>
+                  <strong>Liberação pós-intervenção da OS</strong>
+                </div>
+              </header>
+              <p>{conclusionPreview}</p>
+              <ul>
+                <li>
+                  {awaitingPostInterventionExecution
+                    ? 'O técnico precisa concluir checklist, evidências e relatório da execução.'
+                    : 'Execução técnica, checklist e evidências já foram registrados.'}
+                </li>
+                <li>
+                  {isQuality
+                    ? 'Qualidade valida as BPF aplicáveis.'
+                    : isSafety
+                      ? 'Segurança valida causas, controles e risco residual.'
+                      : 'As áreas exigidas precisam registrar as assinaturas pendentes.'}
+                </li>
+              </ul>
+            </section>
+          ) : null}
+
           {isChecklist(demand) ? (
             <section className="validation-gate-checklist">
               <header>
@@ -301,6 +357,24 @@ export function TechnicalDemandDialog({
             />
           </label>
 
+          {requiresAreaAttestation && !returning ? (
+            <button
+              className={`validation-gate-attestation ${attestationConfirmed ? 'is-confirmed' : ''}`}
+              type="button"
+              aria-pressed={attestationConfirmed}
+              disabled={submitting}
+              onClick={() => setAttestationConfirmed((current) => !current)}
+            >
+              <span className="validation-gate-attestation__mark" aria-hidden="true">
+                {attestationConfirmed ? <CheckIcon /> : null}
+              </span>
+              <span className="validation-gate-attestation__content">
+                <strong>{isQuality ? 'BPF verificadas' : 'Riscos de segurança verificados'}</strong>
+                {areaAttestation}
+              </span>
+            </button>
+          ) : null}
+
           {error ? <div className="feedback feedback--error" role="alert">{error}</div> : null}
         </div>
 
@@ -321,14 +395,19 @@ export function TechnicalDemandDialog({
           <button
             className="primary-button"
             type="button"
-            disabled={submitting || loadingDetail || awaitingPostInterventionExecution}
+            disabled={
+              submitting ||
+              loadingDetail
+            }
             onClick={() => void (returning ? requestCorrection() : approve())}
           >
             {submitting
               ? 'Registrando…'
               : returning
                 ? 'Devolver ao Administrador'
-                : 'Assinar e aprovar'}
+                : isPostInterventionRelease
+                  ? 'Validar 100% e assinar'
+                  : 'Assinar e aprovar'}
             {!submitting ? <ChevronRightIcon /> : null}
           </button>
         </footer>

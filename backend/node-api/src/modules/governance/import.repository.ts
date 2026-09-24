@@ -27,6 +27,7 @@ function table(entity: ImportEntity): string {
     ativos: 'cmms.assets',
     componentes: 'cmms.components',
     materiais: 'cmms.materials',
+    fontes_valores: 'cmms.material_value_sources',
   };
   return tables[entity];
 }
@@ -141,12 +142,15 @@ export class ImportRepository {
     naturalKey: string,
   ): Promise<readonly ImportRow[]> {
     const entityTable = table(entity);
-    const key = entity === 'materiais' ? 'sku' : 'tag';
+    const key = entity === 'materiais' ? 'sku' : entity === 'fontes_valores' ? 'source_url' : 'tag';
+    const idMatch = entity === 'fontes_valores'
+      ? 'item.id::text=$1'
+      : '(item.id::text=$1 OR item.legacy_id=$1)';
     const result = await client.query<ImportRow>(
       `SELECT id, to_jsonb(item.*) - 'tenant_id' AS snapshot
        FROM ${entityTable} item
        WHERE item.deleted_at IS NULL
-         AND (($1::text IS NOT NULL AND (item.id::text=$1 OR item.legacy_id=$1))
+         AND (($1::text IS NOT NULL AND ${idMatch})
               OR upper(item.${key})=upper($2))
        ORDER BY item.id LIMIT 2`,
       [requestedId, naturalKey],
@@ -313,32 +317,39 @@ export class ImportRepository {
       materiais: `INSERT INTO cmms.materials (id,tenant_id,sku,name,friendly_name,unit,unit_cost,current_stock,minimum_stock,status)
         VALUES ($2,$1,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING to_jsonb(cmms.materials.*)-'tenant_id' AS snapshot`,
+      fontes_valores: `INSERT INTO cmms.material_value_sources (
+        id,tenant_id,category,reference_used,source_url,observation)
+        VALUES ($2,$1,$3,$4,$5,$6)
+        RETURNING to_jsonb(cmms.material_value_sources.*)-'tenant_id' AS snapshot`,
     };
     return queries[entity];
   }
 
   private updateQuery(entity: ImportEntity): string {
     const queries: Readonly<Record<ImportEntity, string>> = {
-      plantas: `UPDATE cmms.plants SET tag=$3,name=$4,status=$5,updated_at=clock_timestamp()
-        WHERE id=$2 RETURNING to_jsonb(cmms.plants.*)-'tenant_id' AS snapshot`,
-      setores: `UPDATE cmms.sectors SET plant_id=$3,tag=$4,name=$5,status=$6,updated_at=clock_timestamp()
-        WHERE id=$2 RETURNING to_jsonb(cmms.sectors.*)-'tenant_id' AS snapshot`,
-      linhas: `UPDATE cmms.lines SET sector_id=$3,tag=$4,name=$5,status=$6,updated_at=clock_timestamp()
-        WHERE id=$2 RETURNING to_jsonb(cmms.lines.*)-'tenant_id' AS snapshot`,
-      ativos: `UPDATE cmms.assets SET line_id=$3,tag=$4,qr_payload=$5,name=$6,asset_type=$7,
-        criticality=$8,operational_status=$9,lifecycle_status=$10,health_percent=$11,
-        current_hour_meter=$12,manufacturer=$13,model=$14,serial_number=$15,
-        technical_location=$16,metadata=$17,updated_at=clock_timestamp()
-        WHERE id=$2 RETURNING to_jsonb(cmms.assets.*)-'tenant_id' AS snapshot`,
-      componentes: `UPDATE cmms.components SET asset_id=$3,tag=$4,qr_payload=$5,name=$6,
-        component_type=$7,criticality=$8,operational_status=$9,lifecycle_status=$10,
-        useful_life_hours=$11,useful_life_days=$12,accumulated_hours=$13,installed_at=$14,
-        manufacturer=$15,model=$16,serial_number=$17,technical_location=$18,metadata=$19,
-        updated_at=clock_timestamp() WHERE id=$2
+      plantas: `UPDATE cmms.plants SET tag=$2,name=$3,status=$4,updated_at=clock_timestamp()
+        WHERE id=$1 RETURNING to_jsonb(cmms.plants.*)-'tenant_id' AS snapshot`,
+      setores: `UPDATE cmms.sectors SET plant_id=$2,tag=$3,name=$4,status=$5,updated_at=clock_timestamp()
+        WHERE id=$1 RETURNING to_jsonb(cmms.sectors.*)-'tenant_id' AS snapshot`,
+      linhas: `UPDATE cmms.lines SET sector_id=$2,tag=$3,name=$4,status=$5,updated_at=clock_timestamp()
+        WHERE id=$1 RETURNING to_jsonb(cmms.lines.*)-'tenant_id' AS snapshot`,
+      ativos: `UPDATE cmms.assets SET line_id=$2,tag=$3,qr_payload=$4,name=$5,asset_type=$6,
+        criticality=$7,operational_status=$8,lifecycle_status=$9,health_percent=$10,
+        current_hour_meter=$11,manufacturer=$12,model=$13,serial_number=$14,
+        technical_location=$15,metadata=$16,updated_at=clock_timestamp()
+        WHERE id=$1 RETURNING to_jsonb(cmms.assets.*)-'tenant_id' AS snapshot`,
+      componentes: `UPDATE cmms.components SET asset_id=$2,tag=$3,qr_payload=$4,name=$5,
+        component_type=$6,criticality=$7,operational_status=$8,lifecycle_status=$9,
+        useful_life_hours=$10,useful_life_days=$11,accumulated_hours=$12,installed_at=$13,
+        manufacturer=$14,model=$15,serial_number=$16,technical_location=$17,metadata=$18,
+        updated_at=clock_timestamp() WHERE id=$1
         RETURNING to_jsonb(cmms.components.*)-'tenant_id' AS snapshot`,
-      materiais: `UPDATE cmms.materials SET sku=$3,name=$4,friendly_name=$5,unit=$6,unit_cost=$7,current_stock=$8,
-        minimum_stock=$9,status=$10,updated_at=clock_timestamp()
-        WHERE id=$2 RETURNING to_jsonb(cmms.materials.*)-'tenant_id' AS snapshot`,
+      materiais: `UPDATE cmms.materials SET sku=$2,name=$3,friendly_name=$4,unit=$5,unit_cost=$6,current_stock=$7,
+        minimum_stock=$8,status=$9,updated_at=clock_timestamp()
+        WHERE id=$1 RETURNING to_jsonb(cmms.materials.*)-'tenant_id' AS snapshot`,
+      fontes_valores: `UPDATE cmms.material_value_sources SET category=$2,reference_used=$3,source_url=$4,
+        observation=$5,updated_at=clock_timestamp() WHERE id=$1
+        RETURNING to_jsonb(cmms.material_value_sources.*)-'tenant_id' AS snapshot`,
     };
     return queries[entity];
   }
@@ -349,7 +360,7 @@ export class ImportRepository {
     data: Readonly<Record<string, unknown>>,
     includeTenant: boolean,
   ): readonly unknown[] {
-    const prefix = [includeTenant ? tenantId : '', data.id];
+    const prefix = includeTenant ? [tenantId, data.id] : [data.id];
     const values: Readonly<Record<ImportEntity, readonly unknown[]>> = {
       plantas: [...prefix, data.tag, data.name, data.status],
       setores: [...prefix, data.plant_id, data.tag, data.name, data.status],
@@ -402,6 +413,13 @@ export class ImportRepository {
         data.current_stock,
         data.minimum_stock,
         data.status,
+      ],
+      fontes_valores: [
+        ...prefix,
+        data.category,
+        data.reference_used,
+        data.source_url,
+        data.observation,
       ],
     };
     return values[entity];

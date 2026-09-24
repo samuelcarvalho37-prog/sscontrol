@@ -15,7 +15,9 @@ export interface RequestAuditMetadata {
 }
 
 export interface WorkOrderInput {
-  readonly planVersionId: string;
+  readonly planVersionId: string | null;
+  readonly assetId: string | null;
+  readonly assetTag: string | null;
   readonly originType: string;
   readonly originEntityId: string | null;
   readonly workType: string;

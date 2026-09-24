@@ -99,6 +99,7 @@ function normalizedWorkOrder(input: WorkOrderInput): WorkOrderInput {
     workType: input.workType.trim().toUpperCase(),
     title: input.title.trim(),
     description: input.description.trim(),
+    assetTag: input.assetTag?.trim().toUpperCase() || null,
     scheduledFor: input.scheduledFor,
   };
 }
@@ -295,13 +296,34 @@ export class OperationsService {
     rawInput: WorkOrderInput,
     audit: RequestAuditMetadata,
   ) {
-    const input = normalizedWorkOrder(rawInput);
+    let input = normalizedWorkOrder(rawInput);
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const context = await this.repository.findPublishedPlanContext(client, input.planVersionId);
+        const resolvedAssetId = input.assetId ?? (input.assetTag
+          ? await this.repository.findActiveAssetIdByTag(client, input.assetTag)
+          : null);
+        if (resolvedAssetId && resolvedAssetId !== input.assetId) {
+          input = { ...input, assetId: resolvedAssetId };
+        }
+        let context = input.planVersionId
+          ? await this.repository.findPublishedPlanContext(client, input.planVersionId)
+          : null;
+        let generatedCorrectivePlan = false;
+        if (!context && input.workType === 'CORRECTIVE' && input.assetId) {
+          const generated = await this.repository.ensurePublishedCorrectivePlanContext(
+            client,
+            user.tenantId,
+            input.assetId,
+            user.id,
+          );
+          context = generated.context;
+          generatedCorrectivePlan = generated.created;
+          input = { ...input, planVersionId: text(context, 'id') };
+        }
         if (
-          context?.status !== 'PUBLISHED' ||
+          !context ||
+          context.status !== 'PUBLISHED' ||
           context.checklist_status !== 'PUBLISHED' ||
           context.lifecycle_status !== 'ACTIVE' ||
           context.asset_status !== 'ACTIVE' ||
@@ -337,6 +359,18 @@ export class OperationsService {
           contentHash,
         );
         const detail = await this.requiredWorkOrderDetail(client, id);
+        if (generatedCorrectivePlan) {
+          await this.repository.writeAudit(
+            client,
+            user.tenantId,
+            user.id,
+            audit,
+            'CORRECTIVE_PLAN_AUTOMATIC_CREATED',
+            'MAINTENANCE_PLAN_VERSION',
+            input.planVersionId ?? text(context, 'id'),
+            { asset_id: input.assetId, work_order_id: id },
+          );
+        }
         await this.repository.writeAudit(
           client,
           user.tenantId,
@@ -395,6 +429,8 @@ export class OperationsService {
         }
         const correctedWorkOrder: WorkOrderInput = {
           planVersionId: text(workOrder, 'maintenance_plan_version_id'),
+          assetId: text(workOrder, 'asset_id'),
+          assetTag: null,
           originType: text(workOrder, 'origin_type'),
           originEntityId: workOrder.origin_entity_id as string | null,
           workType: text(workOrder, 'work_type'),
@@ -984,6 +1020,14 @@ export class OperationsService {
         const alreadyStarted = executionStatus === 'IN_PROGRESS';
         if (executionStatus === 'OPEN') {
           await this.repository.startExecution(client, execution.id, stopMode);
+          if (stopMode === 'STOPPED') {
+            await this.repository.openEquipmentStopForExecution(
+              client,
+              user.tenantId,
+              user.id,
+              String(execution.id),
+            );
+          }
         } else if (!alreadyStarted) {
           throw error(
             'EXECUTION_NOT_STARTABLE',
@@ -1221,6 +1265,9 @@ export class OperationsService {
           result: input.result.trim(),
           observation: nullableText(input.observation),
         });
+        if (text(execution, 'execution_stop_mode') === 'STOPPED') {
+          await this.repository.completeEquipmentStopForExecution(client, String(execution.id), user.id);
+        }
         const detail = await this.requiredExecutionDetail(client, execution.id);
         await this.repository.writeAudit(
           client,
@@ -1417,6 +1464,9 @@ export class OperationsService {
         if (text(execution, 'status') !== 'OPEN')
           throw error('EXECUTION_NOT_OPEN', 'A execução já foi iniciada ou encerrada.', 409);
         await this.repository.startExecution(client, executionId, stopMode);
+        if (stopMode === 'STOPPED') {
+          await this.repository.openEquipmentStopForExecution(client, user.tenantId, user.id, executionId);
+        }
         const detail = await this.requiredExecutionDetail(client, executionId);
         await this.repository.writeAudit(
           client,
@@ -1724,6 +1774,9 @@ export class OperationsService {
           result: input.result.trim(),
           observation: nullableText(input.observation),
         });
+        if (text(execution, 'execution_stop_mode') === 'STOPPED') {
+          await this.repository.completeEquipmentStopForExecution(client, executionId, user.id);
+        }
         const detail = await this.requiredExecutionDetail(client, executionId);
         await this.repository.writeAudit(
           client,

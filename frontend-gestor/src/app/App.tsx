@@ -257,7 +257,10 @@ export function App() {
     if (!entityId) {
       throw new Error('Esta notificação não possui um registro de destino válido.')
     }
-    if (entityType === 'OCORRENCIAS_OPERACIONAIS') {
+    if (
+      entityType === 'OCORRENCIAS_OPERACIONAIS' ||
+      entityType === 'OPERATIONAL_OCCURRENCE'
+    ) {
       handleOpenAnalytics('', entityId)
       return
     }

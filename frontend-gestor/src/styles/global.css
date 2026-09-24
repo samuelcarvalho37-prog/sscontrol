@@ -20352,6 +20352,17 @@ button.manager-qr-attention {
   overflow: hidden;
 }
 
+.review-info {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #b8d6ff;
+  border-radius: 12px;
+  color: #24496d;
+  background: #f3f8ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .validation-gate-dialog > header,
 .validation-gate-dialog > footer {
   display: flex;
@@ -20410,7 +20421,8 @@ button.manager-qr-attention {
 
 .validation-gate-summary,
 .validation-gate-progress,
-.validation-gate-checklist {
+.validation-gate-checklist,
+.validation-gate-conclusion {
   border: 1px solid #d3deea;
   border-radius: 14px;
   background: #fff;
@@ -20576,6 +20588,49 @@ button.manager-qr-attention {
   font-weight: 800;
 }
 
+.validation-gate-conclusion {
+  padding: 14px;
+  border-color: #b8d6ff;
+  background: linear-gradient(135deg, #f5f9ff, #ffffff);
+}
+
+.validation-gate-conclusion > header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.validation-gate-conclusion > header > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: #175bd0;
+  background: #e6efff;
+}
+
+.validation-gate-conclusion small {
+  display: block;
+  color: #5d7590;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.validation-gate-conclusion p,
+.validation-gate-conclusion ul {
+  margin: 10px 0 0;
+  color: #35516e;
+  font-size: 0.8rem;
+}
+
+.validation-gate-conclusion ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
 .validation-gate-opinion {
   display: grid;
   gap: 6px;
@@ -20590,6 +20645,61 @@ button.manager-qr-attention {
 .validation-gate-opinion textarea {
   width: 100%;
   resize: vertical;
+}
+
+.validation-gate-attestation {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #9cc8b6;
+  border-radius: 12px;
+  color: #25435e;
+  background: #f1fbf6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.validation-gate-attestation:hover,
+.validation-gate-attestation:focus-visible,
+.validation-gate-attestation.is-confirmed {
+  border-color: #13805a;
+  background: #e6f7ee;
+}
+
+.validation-gate-attestation:focus-visible {
+  outline: 3px solid #8ab9ff;
+  outline-offset: 2px;
+}
+
+.validation-gate-attestation__mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  border: 1px solid #9bb4a8;
+  border-radius: 4px;
+  color: #fff;
+  background: #fff;
+}
+
+.validation-gate-attestation.is-confirmed .validation-gate-attestation__mark {
+  border-color: #13805a;
+  background: #13805a;
+}
+
+.validation-gate-attestation__mark svg {
+  width: 14px;
+}
+
+.validation-gate-attestation__content {
+  display: grid;
+  gap: 3px;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .validation-gate-dialog > footer {
