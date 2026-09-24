@@ -46,6 +46,10 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
   const base = apiUrl.replace(/\/+$/, '').replace(/\/v1$/, '')
   const sectors = plants.find(item => item.id === plant)?.setores ?? []
   const lines = sectors.find(item => item.id === sector)?.linhas ?? []
+  const selectedPlant = plants.find(item => item.id === plant)
+  const selectedSector = sectors.find(item => item.id === sector)
+  const selectedLine = lines.find(item => item.id === line)
+  const selectedPath = [selectedPlant?.nome, selectedSector?.nome, selectedLine?.nome].filter(Boolean).join(' → ')
   async function request<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const response = await fetch(`${base}${path}`, { method: body ? 'POST' : 'GET',
       headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
@@ -140,7 +144,7 @@ export function OccurrenceWizard({ apiUrl, token }: { apiUrl: string; token: str
       {step === 0 && select('Planta', plant, plants, value => { setPlant(value); setSector(''); setLine(''); setAsset('') })}
       {step === 1 && select('Setor', sector, sectors, value => { setSector(value); setLine(''); setAsset('') })}
       {step === 2 && select('Linha', line, lines, value => { setLine(value); setAsset('') })}
-      {step === 3 && select('Equipamento', asset, assets, setAsset)}
+      {step === 3 && <><p style={{ margin: 0, padding: 12, borderRadius: 10, background: '#edf5ff' }}><strong>Local selecionado:</strong> {selectedPath || 'Selecione planta, setor e linha.'}</p>{select('Equipamento', asset, assets, setAsset)}{!loading && !assets.length && selectedPath && <p role="status" style={{ margin: 0 }}>Não há equipamento cadastrado em <strong>{selectedPath}</strong>. Volte e escolha outra linha ou cadastre o ativo neste local.</p>}</>}
       {step === 4 && select('Tipo de problema', problem, ['Falha mecânica', 'Falha elétrica', 'Vazamento', 'Ruído ou vibração', 'Temperatura', 'Qualidade', 'Segurança', 'Outro'].map(nome => ({ id: nome, nome })), setProblem)}
       {step === 5 && <label>Situação atual<textarea rows={4} maxLength={1000} value={situation} onChange={event => setSituation(event.target.value)} placeholder="Como o equipamento está funcionando agora?" style={{ display: 'block', width: '100%' }} /></label>}
       {step === 6 && questions.map(([key, label]) => <fieldset key={key} style={{ padding: 12 }}><legend>{label}</legend>{[true, false].map(value => <label key={String(value)} style={{ marginRight: 24 }}><input type="radio" name={key} checked={answers[key] === value} onChange={() => setAnswers(current => ({ ...current, [key]: value }))} /> {value ? 'Sim' : 'Não'}</label>)}</fieldset>)}
