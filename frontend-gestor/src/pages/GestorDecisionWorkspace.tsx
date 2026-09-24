@@ -32,6 +32,7 @@ export interface GestorDecisionFocus {
 }
 
 interface GestorDecisionWorkspaceProps {
+  capabilities?: string[]
   initialView?: GestorWorkView
   focus?: GestorDecisionFocus | null
   onQueueCountChange: (count: number) => void
@@ -78,13 +79,32 @@ function upper(value: unknown): string {
 }
 
 function humanize(value: unknown): string {
-  const normalized = String(value ?? '')
+  const raw = String(value ?? '').trim()
+  const knownLabels: Record<string, string> = {
+    LOW: 'Baixa',
+    MEDIUM: 'Média',
+    HIGH: 'Alta',
+    CRITICAL: 'Crítica',
+    PREVENTIVE: 'Preventiva',
+    CORRECTIVE: 'Corretiva',
+    PREDICTIVE: 'Preditiva',
+    INSPECTION: 'Inspeção',
+    INSPECAO: 'Inspeção',
+    PREVENTIVA: 'Preventiva',
+  }
+  if (knownLabels[raw.toUpperCase()]) return knownLabels[raw.toUpperCase()]
+  const normalized = raw
     .trim()
     .replaceAll('_', ' ')
     .toLocaleLowerCase('pt-BR')
   return normalized
     ? normalized.charAt(0).toLocaleUpperCase('pt-BR') + normalized.slice(1)
     : 'Não informado'
+}
+
+function displayTitle(value: unknown): string {
+  const text = String(value ?? '').trim()
+  return /^[A-Z_]+$/.test(text) ? humanize(text) : text
 }
 
 function formatDate(value?: string): string {
@@ -148,6 +168,7 @@ function includesSearch(item: DecisionItem, search: string): boolean {
 }
 
 export function GestorDecisionWorkspace({
+  capabilities,
   focus,
   onQueueCountChange,
   onOpenAnalytics,
@@ -180,8 +201,8 @@ export function GestorDecisionWorkspace({
     try {
       const [actionData, modelData, demandData, contextData] =
         await Promise.all([
-          getGestorActions(signal),
-          getGestorChecklistModels(signal),
+          capabilities === undefined || capabilities.includes('maintenance.executions.read') ? getGestorActions(signal) : Promise.resolve([]),
+          capabilities === undefined || capabilities.includes('maintenance.checklists.read') ? getGestorChecklistModels(signal) : Promise.resolve([]),
           getGestorTechnicalDemands(signal),
           getGestorTechnicalContext(signal),
         ])
@@ -227,7 +248,7 @@ export function GestorDecisionWorkspace({
         setRefreshing(false)
       }
     }
-  }, [onQueueCountChange, onSessionExpired])
+  }, [onQueueCountChange, onSessionExpired, capabilities])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -291,7 +312,7 @@ export function GestorDecisionWorkspace({
       id: model.id,
       kind: 'model',
       view: 'models',
-      title: model.nome || 'Checklist sem nome',
+      title: displayTitle(model.nome) || 'Checklist sem nome',
       category: `Checklist R${model.revisao ?? 1}`,
       context: [
         model.ativo_tag || model.ativo_nome || model.ativo_id,

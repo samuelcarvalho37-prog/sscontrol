@@ -26,10 +26,14 @@ interface MaintenanceExchangeBody {
 
 function requestMetadata(request: FastifyRequest): RequestMetadata {
   const userAgent = request.headers['user-agent'];
+  const developmentTenantSlug = request.headers['x-vorqix-dev-tenant'];
   return {
     ipAddress: request.ip,
     userAgent: typeof userAgent === 'string' ? userAgent.slice(0, 2_048) : null,
     traceId: request.id,
+    host: request.headers.host,
+    developmentTenantSlug:
+      typeof developmentTenantSlug === 'string' ? developmentTenantSlug : undefined,
   };
 }
 

@@ -5,6 +5,7 @@ import type {
   EvidenceSaveData,
   OperatorActionDetailData,
   OperatorFinalOutcome,
+  ExecutionTechnicalReport,
   OperatorStopData,
   RawChecklistItem,
 } from '../types/api'
@@ -28,6 +29,7 @@ interface ChecklistExecutionPageProps {
     observacao: string,
     resultadoOperacional: OperatorFinalOutcome,
     durationSeconds: number,
+    technicalReport: ExecutionTechnicalReport,
   ) => Promise<void>
   onReturnHome: () => void
 }
@@ -210,10 +212,20 @@ export function ChecklistExecutionPage({
   const [finalizationOpen, setFinalizationOpen] = useState(false)
   const [finalOutcome, setFinalOutcome] = useState<FinalOutcome>('')
   const [finalObservation, setFinalObservation] = useState('')
+  const [technicalReport, setTechnicalReport] = useState<ExecutionTechnicalReport>({ diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '' })
   const [finalizationError, setFinalizationError] = useState('')
   const initializedDraftKeyRef = useRef('')
   const selectedEvidenceRef = useRef<SelectedEvidence[]>([])
   const draftStorageKey = `fab-control:checklist-draft:${detail.execucao?.id || detail.acao.id}`
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(`${draftStorageKey}.technical-report`) || '{}') as Record<string, unknown>
+      setTechnicalReport({ diagnostico_tecnico: typeof stored.diagnostico_tecnico === 'string' ? stored.diagnostico_tecnico : '',
+        acao_realizada: typeof stored.acao_realizada === 'string' ? stored.acao_realizada : '',
+        pecas_materiais: typeof stored.pecas_materiais === 'string' ? stored.pecas_materiais : '',
+        medicoes: typeof stored.medicoes === 'string' ? stored.medicoes : '' })
+    } catch { setTechnicalReport({ diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '' }) }
+  }, [draftStorageKey])
 
   useEffect(() => {
     const serverDrafts: Record<string, DraftAnswer> = {}
@@ -541,6 +553,11 @@ export function ChecklistExecutionPage({
       return
     }
 
+    if (technicalReport.diagnostico_tecnico.trim().length < 3 || technicalReport.acao_realizada.trim().length < 3 ||
+        !technicalReport.pecas_materiais.trim() || !technicalReport.medicoes.trim()) {
+      setFinalizationError('Preencha o diagnóstico, a ação realizada, os materiais e as medições. Se não houver, informe "Não utilizado" ou "Não realizada".')
+      return
+    }
     const durationSeconds = Math.floor(elapsed)
     const evidenceCount = items.reduce(
       (sum, item) => sum + (item.evidencias_count ?? 0),
@@ -572,9 +589,11 @@ export function ChecklistExecutionPage({
         result.observacao,
         finalOutcome,
         durationSeconds,
+        technicalReport,
       )
       try {
         window.sessionStorage.removeItem(draftStorageKey)
+        window.sessionStorage.removeItem(`${draftStorageKey}.technical-report`)
         window.localStorage.removeItem(checklistPositionKey)
       } catch {
         // Sem impacto na conclusão.
@@ -1155,6 +1174,19 @@ export function ChecklistExecutionPage({
               </select>
             </label>
 
+            {([
+              ['diagnostico_tecnico', 'Diagnóstico técnico'], ['acao_realizada', 'Ação realizada'],
+              ['pecas_materiais', 'Peças e materiais utilizados (inclua quantidades)'],
+              ['medicoes', 'Medições (inclua parâmetro, valor e unidade)'],
+            ] as const).map(([key, label]) => <label className="finalization-review-field" key={key}>
+              <span>{label}</span>
+              <textarea rows={3} maxLength={8000} value={technicalReport[key]} required
+                onChange={event => {
+                  const next = { ...technicalReport, [key]: event.target.value }
+                  setTechnicalReport(next)
+                  try { window.sessionStorage.setItem(`${draftStorageKey}.technical-report`, JSON.stringify(next)) } catch { /* Mantém o preenchimento em memória. */ }
+                }} />
+            </label>)}
             <div className="finalization-quality">
               <span>Qualidade automática da execução</span>
               <strong>

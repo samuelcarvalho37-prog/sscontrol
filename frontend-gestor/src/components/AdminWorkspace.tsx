@@ -902,11 +902,8 @@ export function AdminWorkspace({
       </section>
 
       <header className="admin-desktop-topbar">
-        <div className="admin-desktop-brand">
-          {companyProfile.logo_data_url
-            ? <img src={companyProfile.logo_data_url} alt="" />
-            : <span aria-hidden="true">TOZ</span>}
-          <strong title={companyProfile.nome}>{companyProfile.nome}</strong>
+        <div className="admin-desktop-brand" aria-label="VORQIX — Unidade Industrial">
+          <img src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
         </div>
 
         <button className="admin-desktop-command" type="button" onClick={() => setPaletteOpen(true)}>
@@ -985,7 +982,8 @@ export function AdminWorkspace({
             <section className="admin-desktop-welcome">
               <div className="admin-welcome-card">
                 <div className="admin-welcome-copy">
-                  <span className="admin-welcome-eyebrow">FAB CONTROL · ADMINISTRAÇÃO INDUSTRIAL</span>
+                  <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+                  <span className="admin-welcome-eyebrow">VORQIX · ADMINISTRAÇÃO INDUSTRIAL</span>
                   <h1>Command Workspace</h1>
                   <p>Centralize configurações, governança, cadastros e decisões técnicas em um único ambiente operacional.</p>
                   <div className="admin-welcome-actions">

@@ -2456,6 +2456,11 @@ p {
   background: var(--orange-soft);
 }
 
+.feedback--info {
+  color: #174c83;
+  background: #eaf3ff;
+}
+
 .first-access-summary,
 .password-rule {
   margin: 0;
@@ -10793,9 +10798,8 @@ p {
 .admin-desktop-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 190px;
-  max-width: 270px;
+  min-width: 174px;
+  max-width: 210px;
   white-space: nowrap;
 }
 
@@ -10822,9 +10826,10 @@ p {
 }
 
 .admin-desktop-brand > img {
-  width: auto;
-  max-width: 76px;
-  height: 27px;
+  display: block;
+  width: 156px;
+  max-width: 100%;
+  height: 36px;
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -17606,6 +17611,7 @@ p {
 
 /* Análise assistida e briefing de liberação. */
 .manager-analysis-dialog {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: min(920px, calc(100vw - 28px));
   max-height: min(760px, calc(100dvh - 32px));
   overflow: hidden;
@@ -17654,7 +17660,7 @@ p {
 }
 
 .manager-analysis-body {
-  min-height: 380px;
+  min-height: 0;
   padding: 16px;
   overflow: auto;
   scrollbar-width: none;
@@ -20346,6 +20352,17 @@ button.manager-qr-attention {
   overflow: hidden;
 }
 
+.review-info {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #b8d6ff;
+  border-radius: 12px;
+  color: #24496d;
+  background: #f3f8ff;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .validation-gate-dialog > header,
 .validation-gate-dialog > footer {
   display: flex;
@@ -20404,7 +20421,8 @@ button.manager-qr-attention {
 
 .validation-gate-summary,
 .validation-gate-progress,
-.validation-gate-checklist {
+.validation-gate-checklist,
+.validation-gate-conclusion {
   border: 1px solid #d3deea;
   border-radius: 14px;
   background: #fff;
@@ -20570,6 +20588,49 @@ button.manager-qr-attention {
   font-weight: 800;
 }
 
+.validation-gate-conclusion {
+  padding: 14px;
+  border-color: #b8d6ff;
+  background: linear-gradient(135deg, #f5f9ff, #ffffff);
+}
+
+.validation-gate-conclusion > header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.validation-gate-conclusion > header > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  color: #175bd0;
+  background: #e6efff;
+}
+
+.validation-gate-conclusion small {
+  display: block;
+  color: #5d7590;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.validation-gate-conclusion p,
+.validation-gate-conclusion ul {
+  margin: 10px 0 0;
+  color: #35516e;
+  font-size: 0.8rem;
+}
+
+.validation-gate-conclusion ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
 .validation-gate-opinion {
   display: grid;
   gap: 6px;
@@ -20584,6 +20645,61 @@ button.manager-qr-attention {
 .validation-gate-opinion textarea {
   width: 100%;
   resize: vertical;
+}
+
+.validation-gate-attestation {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #9cc8b6;
+  border-radius: 12px;
+  color: #25435e;
+  background: #f1fbf6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.validation-gate-attestation:hover,
+.validation-gate-attestation:focus-visible,
+.validation-gate-attestation.is-confirmed {
+  border-color: #13805a;
+  background: #e6f7ee;
+}
+
+.validation-gate-attestation:focus-visible {
+  outline: 3px solid #8ab9ff;
+  outline-offset: 2px;
+}
+
+.validation-gate-attestation__mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  border: 1px solid #9bb4a8;
+  border-radius: 4px;
+  color: #fff;
+  background: #fff;
+}
+
+.validation-gate-attestation.is-confirmed .validation-gate-attestation__mark {
+  border-color: #13805a;
+  background: #13805a;
+}
+
+.validation-gate-attestation__mark svg {
+  width: 14px;
+}
+
+.validation-gate-attestation__content {
+  display: grid;
+  gap: 3px;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .validation-gate-dialog > footer {
@@ -21822,4 +21938,214 @@ body,
       minmax(150px, 0.72fr)
       minmax(240px, 1.25fr);
   }
+}
+
+/* Marca visual VORQIX; os identificadores de sessão permanecem compatíveis. */
+.vorqix-logo { display: block; width: min(100%, 280px); height: auto; object-fit: contain; background: #fff; border-radius: 10px; }
+.vorqix-logo--compact { width: 124px; }
+.auth-brand:has(.vorqix-logo) { flex-direction: column; align-items: flex-start; }
+.auth-startup > .vorqix-logo { margin-inline: auto; }
+.platform-motor-brand > .vorqix-logo { width: 150px; }
+
+/* Sistema visual VORQIX — linguagem compartilhada por todos os perfis. */
+:root {
+  --background: #f3f7fb;
+  --surface: #ffffff;
+  --surface-soft: #f7faff;
+  --text: #102a43;
+  --muted: #5f7389;
+  --line: #d5e1ec;
+  --blue: #0875e1;
+  --blue-dark: #075cb4;
+  --blue-soft: #e8f2ff;
+  --green: #087a55;
+  --green-soft: #e6f7ef;
+  --orange: #9b5d00;
+  --orange-soft: #fff4dc;
+  --red: #c53545;
+  --red-soft: #fff0f2;
+  --shadow: 0 14px 38px rgba(16, 42, 67, 0.10);
+}
+
+body {
+  color: var(--text);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 117, 225, 0.08), transparent 28rem),
+    var(--background);
+}
+
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-color: rgba(8, 117, 225, 0.34);
+}
+
+.topbar,
+.admin-desktop-topbar {
+  border-bottom-color: #cfdeeb;
+  box-shadow: 0 2px 12px rgba(16, 42, 67, 0.04);
+}
+
+.topbar .vorqix-logo,
+.admin-desktop-brand > img {
+  background: transparent;
+}
+
+.primary-button,
+.approve-button,
+.pcm-controls button {
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  border-color: #075fc4;
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.20);
+}
+
+.primary-button:hover:not(:disabled),
+.approve-button:hover:not(:disabled),
+.pcm-controls button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0869cc, #064f9f);
+  box-shadow: 0 10px 22px rgba(8, 117, 225, 0.26);
+}
+
+.secondary-button,
+.logout-button,
+.review-button {
+  border: 1px solid #c8d8e7;
+  color: #1b496d;
+  background: #ffffff;
+}
+
+.secondary-button:hover:not(:disabled),
+.logout-button:hover:not(:disabled),
+.review-button:hover:not(:disabled) {
+  border-color: #8ebee9;
+  background: #edf6ff;
+}
+
+/* Administração: interface clara, com azul reservado para ação e seleção. */
+.admin-desktop-shell {
+  --admin-brand: #0875e1;
+  --admin-brand-strong: #075cb4;
+  --admin-line: #d5e1ec;
+}
+
+.admin-desktop-command,
+.admin-desktop-top-actions > button:not(.admin-desktop-logout),
+.admin-command-sidebar nav button {
+  color: #31556f;
+}
+
+.admin-command-sidebar nav button.is-active,
+.admin-command-module-grid > button.is-active,
+.admin-catalog-summary > button.is-active {
+  color: #075cb4;
+  background: #e8f2ff;
+}
+
+.admin-app-window,
+.admin-catalog-panel,
+.admin-technical-panel,
+.admin-command-control-panel {
+  border-color: #d5e1ec;
+  box-shadow: 0 12px 30px rgba(16, 42, 67, 0.08);
+}
+
+/* Gestor, operador e técnico usam os mesmos níveis de informação. */
+.app-shell--manager .topbar,
+.app-shell--manager > .app-navigation {
+  border-color: #d5e1ec;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.app-shell--manager .app-navigation__item.is-active {
+  color: #075fc4;
+  background: #e8f2ff;
+}
+
+.app-shell--manager .primary-button,
+.app-shell--manager .approve-button,
+.app-shell--manager .manager-qr-dialog footer button,
+.app-shell--manager .manager-qr-result-footer button {
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.20);
+}
+
+.app-shell--manager .secondary-button,
+.app-shell--manager .reject-button,
+.app-shell--manager .logout-button {
+  border-color: #c8d8e7;
+  color: #1b496d;
+  background: #fff;
+}
+
+.app-shell--manager .page-heading h1,
+.app-shell--manager .manager-workspace-heading h1,
+.app-shell--manager .manager-qr-heading h1 {
+  color: #102a43;
+  letter-spacing: -0.035em;
+}
+
+.app-shell--manager .eyebrow,
+.app-shell--manager .pcm-section-kicker {
+  color: #0767bf;
+}
+
+.technician-dashboard__panel,
+.manager-dashboard__card,
+.manager-operation-strip,
+.manager-next-work,
+.simple-detail-panel {
+  border-color: #d5e1ec;
+  box-shadow: 0 10px 26px rgba(16, 42, 67, 0.07);
+}
+
+/* PCM: gráficos legíveis, sem usar cores de alerta como decoração. */
+.pcm-dashboard {
+  --pcm-ink: #102a43;
+  --pcm-muted: #5f7389;
+  --pcm-line: #d5e1ec;
+  --pcm-panel: #ffffff;
+  --pcm-bg: #f3f7fb;
+  --pcm-blue: #0875e1;
+  --pcm-cyan: #0b8bbd;
+  --pcm-green: #087a55;
+  --pcm-amber: #a66400;
+  --pcm-red: #c53545;
+  border: 1px solid #dbe6f0;
+  box-shadow: 0 16px 38px rgba(16, 42, 67, 0.07);
+}
+
+.pcm-metric,
+.pcm-indicator-chart,
+.pcm-panel,
+.pcm-tables section {
+  border-color: #d5e1ec;
+  box-shadow: 0 8px 22px rgba(16, 42, 67, 0.06);
+}
+
+.pcm-metric strong,
+.pcm-indicator-chart__heading h3,
+.pcm-indicator-bars__row strong,
+.pcm-indicator-bars__row b,
+.pcm-bar-chart__label strong,
+.pcm-bar-chart__value {
+  color: #102a43;
+}
+
+.pcm-indicator-chart__main-value { color: #075fc4; }
+.pcm-indicator-bars__track span,
+.pcm-bar-chart__track span { background: linear-gradient(90deg, #0875e1, #41a0f4); }
+.pcm-percentage-chart__ring { background: conic-gradient(#0b8d62 var(--pcm-percentage), #dfe9f0 0); }
+.pcm-action-grid button { border-color: #c7d9eb; background: #f8fbff; }
+.pcm-action-grid button:hover:not(:disabled) { border-color: #5ca5e8; background: #edf6ff; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }

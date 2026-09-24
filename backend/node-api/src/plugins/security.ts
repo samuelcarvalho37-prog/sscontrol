@@ -54,13 +54,20 @@ export async function registerSecurityPlugins(
     },
   });
   await app.register(rateLimit, {
-    allowList: ['127.0.0.1', '::1'],
-    ban: 2,
+    addHeaders: {
+      'retry-after': true,
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    // -1 desativa o banimento do plugin: exceder a janela é rate limit (429),
+    // não acesso proibido (403). Bloqueios de credencial continuam no módulo Auth.
+    ban: -1,
     cache: 20_000,
     continueExceeding: false,
     hook: 'onRequest',
-    max: 300,
-    timeWindow: '1 minute',
+    max: environment.rateLimit.max,
+    timeWindow: environment.rateLimit.windowSeconds * 1_000,
   });
 
   if (environment.openApiEnabled) {

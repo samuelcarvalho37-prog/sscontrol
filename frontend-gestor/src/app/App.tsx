@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
+import { getApiUrl, usesNodeApi } from '../services/api/config'
+import { PcmDashboard } from '../components/PcmDashboard'
+import { TechnicianDashboard } from '../components/TechnicianDashboard'
 import {
   AppNavigation,
   type GestorSection,
@@ -42,6 +46,56 @@ import type {
   GestorWorkView,
 } from '../types/gestor'
 
+const PROFILE_TAB_TITLES: Record<string, string> = {
+  ADMIN: 'Administração',
+  SISTEMA: 'Administração',
+  GESTOR: 'PCM',
+  PCM: 'PCM',
+  TECNICO: 'Técnico',
+  PRODUCAO: 'Produção',
+  QUALIDADE: 'Qualidade',
+  SEGURANCA: 'Segurança',
+  OPERADOR: 'Operação',
+}
+
+const PROFILE_EXPERIENCE: Record<string, { eyebrow: string; title: string; description: string; primary: string }> = {
+  PCM: {
+    eyebrow: 'PLANEJAMENTO E CONTROLE',
+    title: 'Central de decisões',
+    description: 'Priorize ordens, acompanhe riscos e mantenha a programação sob controle.',
+    primary: 'Abrir fila de decisões',
+  },
+  GESTOR: {
+    eyebrow: 'PLANEJAMENTO E CONTROLE',
+    title: 'Central de decisões',
+    description: 'Priorize ordens, acompanhe riscos e mantenha a programação sob controle.',
+    primary: 'Abrir fila de decisões',
+  },
+  PRODUCAO: {
+    eyebrow: 'OPERAÇÃO INDUSTRIAL',
+    title: 'Acompanhamento da produção',
+    description: 'Visualize impactos na linha, sinalize ocorrências e acompanhe a retomada operacional.',
+    primary: 'Acompanhar operação',
+  },
+  QUALIDADE: {
+    eyebrow: 'GARANTIA DA QUALIDADE',
+    title: 'Validações e conformidade',
+    description: 'Analise solicitações pendentes e registre decisões com rastreabilidade.',
+    primary: 'Abrir validações',
+  },
+  SEGURANCA: {
+    eyebrow: 'SEGURANÇA OPERACIONAL',
+    title: 'Controle de liberações',
+    description: 'Acompanhe riscos e execute as validações necessárias antes do retorno à operação.',
+    primary: 'Abrir validações',
+  },
+}
+
+function profileTabTitle(profile?: string) {
+  const normalizedProfile = profile?.trim().toUpperCase() ?? ''
+  return PROFILE_TAB_TITLES[normalizedProfile] ?? 'Gestão Industrial'
+}
+
 export function App() {
   const [session, setSession] = useState<GestorSession | null>(readGestorSession)
   const [maintenanceEntry, setMaintenanceEntry] = useState(
@@ -52,6 +106,7 @@ export function App() {
   const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(null)
   const [analyticsFocusAsset, setAnalyticsFocusAsset] = useState('')
   const [analyticsFocusOccurrence, setAnalyticsFocusOccurrence] = useState('')
+  const [detailedAnalytics, setDetailedAnalytics] = useState(false)
   const [adminModule, setAdminModule] = useState<AdminModule>('overview')
   const [validationCount, setValidationCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(0)
@@ -60,9 +115,23 @@ export function App() {
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
-  const isAdmin = session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const isAdmin = session?.user.capacidades !== undefined
+    ? session.user.capacidades.includes('admin.identity.read')
+    : session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
+  const canReportOccurrence = session?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
+  const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
+  const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
+  const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
+  const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
+
+  useEffect(() => {
+    document.title = session
+      ? `VORQIX ${profileTabTitle(session.user.perfil)}`
+      : 'VORQIX — Unidade Industrial'
+  }, [session])
 
   const expireSession = useCallback(() => {
     markExpiredGestorSession()
@@ -74,7 +143,7 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady) return
+    if (!session || isAdmin || isSystem || !workspaceReady || (session.user.capacidades !== undefined && !session.user.capacidades.includes('workflow.notifications.read'))) return
     const controller = new AbortController()
 
     async function refreshNotifications() {
@@ -105,19 +174,19 @@ export function App() {
   }, [expireSession, isAdmin, isSystem, session, workspaceReady])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady) return
+    if (!session || isAdmin || isSystem || !workspaceReady || !canReadWork) return
     const controller = new AbortController()
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
         setTechnicalContext(context)
-        if (!context.pode_validar) setSection('validations')
+        if (!context.pode_validar && !isTechnician) setSection(canReadAnalytics ? 'validations' : 'more')
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
         if (isGestorAuthenticationError(cause)) expireSession()
       })
     return () => controller.abort()
-  }, [expireSession, isAdmin, isSystem, session, workspaceReady])
+  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canReadWork, canReadAnalytics])
 
   useEffect(() => {
     if (!session) return
@@ -177,6 +246,7 @@ export function App() {
   function handleOpenAnalytics(assetId = '', occurrenceId = '') {
     setAnalyticsFocusAsset(assetId)
     setAnalyticsFocusOccurrence(occurrenceId)
+    setDetailedAnalytics(true)
     setSection('validations')
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
@@ -187,7 +257,10 @@ export function App() {
     if (!entityId) {
       throw new Error('Esta notificação não possui um registro de destino válido.')
     }
-    if (entityType === 'OCORRENCIAS_OPERACIONAIS') {
+    if (
+      entityType === 'OCORRENCIAS_OPERACIONAIS' ||
+      entityType === 'OPERATIONAL_OCCURRENCE'
+    ) {
       handleOpenAnalytics('', entityId)
       return
     }
@@ -285,11 +358,11 @@ export function App() {
 
   return (
     <div className="manager-app-stage">
-      <div className="app-shell app-shell--manager">
+      <div className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
         <header className="topbar">
         <div className="topbar__identity topbar__identity--manager">
           <div>
-            <strong>Fab Control</strong>
+            <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
             <span>
               {technicalContext?.pode_validar
                 ? `Validação técnica · ${technicalContext.identidade.area_nome || 'Qualidade e segurança'}`
@@ -298,7 +371,7 @@ export function App() {
           </div>
         </div>
 
-        <div className="topbar__actions">
+        <div className={`topbar__actions${isTechnician ? ' topbar__actions--technician' : ''}`}>
           <span className="connection-chip">
             <i aria-hidden="true" />
             Online
@@ -337,8 +410,46 @@ export function App() {
         </header>
 
         <div className="app-content">
-          {section === 'home' ? (
+          {section === 'home' && !isTechnician && profileExperience ? (
+            <section className="profile-experience-hero" aria-label={`Resumo de ${profileTabTitle(normalizedProfile)}`}>
+              <div>
+                <span>{profileExperience.eyebrow}</span>
+                <h1>{profileExperience.title}</h1>
+                <p>{profileExperience.description}</p>
+              </div>
+              <div className="profile-experience-hero__actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    const workspace = document.querySelector('.manager-decision-workspace')
+                    if (workspace) {
+                      workspace.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      return
+                    }
+                    handleNavigate(canReadAnalytics ? 'validations' : 'home')
+                  }}
+                >
+                  {profileExperience.primary}
+                </button>
+                {canReadAnalytics ? (
+                  <button className="secondary-button" type="button" onClick={() => handleNavigate('validations')}>
+                    Ver indicadores
+                  </button>
+                ) : null}
+                {compactDevice ? (
+                  <button className="profile-experience-hero__scan" type="button" onClick={() => handleNavigate('scan')}>
+                    Ler QR
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
+          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
+          {section === 'home' && canReadWork && !isTechnician ? (
             <GestorDecisionWorkspace
+              capabilities={session.user.capacidades}
               initialView={decisionView}
               focus={decisionFocus}
               onQueueCountChange={setValidationCount}
@@ -346,7 +457,13 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'validations' ? (
+          {section === 'validations' && canReadAnalytics ? (
+            <>
+            {usesNodeApi() && <div className="pcm-view-switch">
+              <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
+              <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
+            </div>}
+            {usesNodeApi() && !detailedAnalytics ? <PcmDashboard onSessionExpired={expireSession} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
@@ -367,6 +484,8 @@ export function App() {
               }}
               onSessionExpired={expireSession}
             />
+            }
+            </>
           ) : null}
           {section === 'scan' ? (
             <GestorQrWorkspace
@@ -374,7 +493,7 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'more' ? (
+          {section === 'more' || (section === 'home' && !canReadWork && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
         </div>
@@ -384,6 +503,8 @@ export function App() {
           validationCount={validationCount}
           showAdmin={false}
           canValidate={technicalContext?.pode_validar ?? false}
+          isTechnician={isTechnician}
+          canReadAnalytics={canReadAnalytics}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}
         />

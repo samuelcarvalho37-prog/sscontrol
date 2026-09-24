@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { suggestOccurrencePriority } from './occurrence-assessment.js';
+import { loadPcmDashboard } from './pcm-dashboard.js';
+import { loadPcmReports } from './pcm-reports.js';
 
 import type { PoolClient } from 'pg';
 
@@ -102,6 +105,10 @@ export class MonitoringService {
   ) {
     const input: CreateOccurrenceInput = {
       ...rawInput,
+      severity: rawInput.assessment
+        ? suggestOccurrencePriority(rawInput.assessment)
+        : rawInput.severity,
+      equipmentStopped: rawInput.assessment?.equipamento_parado ?? rawInput.equipmentStopped,
       occurrenceType: normalize(rawInput.occurrenceType).toUpperCase(),
       title: normalize(rawInput.title),
       description: rawInput.description.trim(),
@@ -109,6 +116,12 @@ export class MonitoringService {
       stopReason: nullableText(rawInput.stopReason),
       occurredAt: isoDate(rawInput.occurredAt, new Date()),
     };
+    if (input.photo) {
+      const image = Buffer.from(input.photo.split(',')[1] ?? '', 'base64');
+      if (image.length > 315000 || image[0] !== 0xff || image[1] !== 0xd8 || image[2] !== 0xff) {
+        throw appError('OCCURRENCE_PHOTO_INVALID', 'A foto deve ser JPEG com até 300 KB.', 422);
+      }
+    }
     if (input.equipmentStopped && (!input.stopType || !input.stopReason)) {
       throw appError(
         'STOP_CONTEXT_REQUIRED',
@@ -165,7 +178,13 @@ export class MonitoringService {
           roleSnapshot(user),
           'OCCURRENCE_REPORTED',
           `Ocorrência registrada: ${input.title}`,
-          { occurrenceId, stopId, severity: input.severity },
+          {
+            occurrenceId,
+            stopId,
+            severity: input.severity,
+            ...(input.assessment ? { triagem: input.assessment, regra_prioridade: 'v1' } : {}),
+            ...(input.photo ? { foto: input.photo } : {}),
+          },
         );
         await this.repository.writeAudit(
           client,
@@ -187,6 +206,7 @@ export class MonitoringService {
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `occurrence:${occurrenceId}:reported`,
           roles: ['ADMIN', 'MANAGER'],
+          roleCodes: ['PCM'],
         });
         return detail;
       },
@@ -766,6 +786,16 @@ export class MonitoringService {
             422,
           );
         }
+        if (
+          input.status === 'COMPLETED' &&
+          (await this.repository.hasPendingPostInterventionRelease(client, text(stop, 'asset_id')))
+        ) {
+          throw appError(
+            'POST_INTERVENTION_RELEASE_PENDING',
+            'O retorno do equipamento aguarda a liberação pós-intervenção.',
+            409,
+          );
+        }
         await this.repository.transitionStop(client, stopId, user.id, input);
         if (input.status === 'COMPLETED') {
           await this.repository.resolveEntitiesLinkedToStop(client, stopId, user.id);
@@ -1036,6 +1066,8 @@ export class MonitoringService {
           periodo: { inicio: normalizedQuery.startAt, fim: normalizedQuery.endAt },
           resumo: await this.repository.technicalSummary(client, normalizedQuery),
           ranking_ativos: await this.repository.assetRanking(client, normalizedQuery),
+          pcm: await loadPcmDashboard(client, normalizedQuery),
+          relatorios: await loadPcmReports(client, normalizedQuery),
         };
       },
     );
@@ -1114,6 +1146,7 @@ export class MonitoringService {
       readonly actionRoute: string;
       readonly deduplicationKey: string;
       readonly roles: readonly string[];
+      readonly roleCodes?: readonly string[];
     },
   ): Promise<void> {
     const notificationId = await this.repository.createNotification(client, user.tenantId, {
@@ -1134,6 +1167,7 @@ export class MonitoringService {
       notificationId,
       input.roles,
       user.id,
+      input.roleCodes ?? [],
     );
   }
 }

@@ -21,7 +21,8 @@ export type ImportEntity =
   | 'linhas'
   | 'ativos'
   | 'componentes'
-  | 'materiais';
+  | 'materiais'
+  | 'fontes_valores';
 
 function field(
   key: string,
@@ -140,10 +141,56 @@ export const importModels: readonly ImportModel[] = Object.freeze([
       field('id', 'ID', '', false, ['id_material']),
       field('sku', 'SKU', 'ROL-6205', true, ['codigo', 'codigo_material']),
       field('nome', 'Nome', 'Rolamento 6205', true, ['material', 'descricao']),
+      field('nome_facil', 'Nome para consulta', 'Rolamento do motor principal', false, [
+        'nome simples',
+        'nome_para_consulta',
+      ]),
       field('unidade', 'Unidade', 'un', false, ['un']),
+      field('valor_unitario', 'Custo unitário (R$)', 125.5, false, [
+        'custo unitario',
+        'custo_unitario',
+        'valor unitario',
+      ]),
       field('estoque_atual', 'Estoque atual', 10, false, ['saldo', 'quantidade']),
       field('estoque_minimo', 'Estoque mínimo', 3, false, ['minimo']),
       field('status', 'Status', 'ATIVO', false, ['ativo']),
+    ],
+  },
+  {
+    type: 'valores_componentes',
+    entity: 'materiais',
+    group: 'Almoxarifado',
+    name: 'Valores de materiais por componente',
+    description:
+      'Atualiza o custo unitário dos materiais já cadastrados usando o SKU da aba de valores.',
+    fields: [
+      field('sku', 'SKU', 'ROL-6205', true, ['codigo', 'codigo_material']),
+      field('valor_unitario', 'Valor unitário estimado (R$)', 125.5, true, [
+        'valor unitario estimado (r$)',
+        'valor unitario estimado',
+        'valor unitario',
+        'custo unitario',
+        'custo_unitario',
+      ]),
+      field('tag_componente', 'TAG Componente', 'CMP-001', false, ['tag componente']),
+      field('ativo', 'Ativo', 'EQ-001', false),
+      field('observacao', 'Observação', 'Valor de referência', false, ['observacao']),
+    ],
+  },
+  {
+    type: 'fontes_valores',
+    entity: 'fontes_valores',
+    group: 'Almoxarifado',
+    name: 'Fontes dos valores',
+    description: 'Registra a origem, URL e observações usadas na composição dos custos.',
+    fields: [
+      field('categoria', 'Categoria', 'Motor 3 CV', true, ['classe']),
+      field('referencia_usada', 'Referência usada', 'Faixa de mercado', true, [
+        'referencia usada',
+        'referencia',
+      ]),
+      field('url', 'URL', 'https://fornecedor.example/item', true, ['fonte', 'link']),
+      field('observacao', 'Observação', 'Valor de referência', false, ['observacao']),
     ],
   },
 ]);

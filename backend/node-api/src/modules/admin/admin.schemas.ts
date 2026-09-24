@@ -1,10 +1,6 @@
 import { Type } from '@fastify/type-provider-typebox';
 
-const profileSchema = Type.Union([
-  Type.Literal('ADMIN'),
-  Type.Literal('GESTOR'),
-  Type.Literal('OPERADOR'),
-]);
+const profileSchema = Type.String({ minLength: 1, maxLength: 160 });
 const statusSchema = Type.Union([Type.Literal('ATIVO'), Type.Literal('INATIVO')]);
 
 export const adminIdentifierParamsSchema = Type.Object(

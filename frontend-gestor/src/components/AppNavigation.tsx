@@ -12,6 +12,8 @@ export interface AppNavigationProps {
   validationCount: number
   showAdmin: boolean
   canValidate: boolean
+  isTechnician?: boolean
+  canReadAnalytics?: boolean
   compactDevice: boolean
   onNavigate: (section: GestorSection) => void
 }
@@ -29,12 +31,15 @@ export function AppNavigation({
   validationCount,
   showAdmin,
   canValidate,
+  isTechnician = false,
+  canReadAnalytics = true,
   compactDevice,
   onNavigate,
 }: AppNavigationProps) {
   const visibleItems = ITEMS.filter((item) => {
     if (item.id === 'admin') return showAdmin
-    if (item.id === 'home') return canValidate
+    if (item.id === 'home') return canValidate || isTechnician
+    if (item.id === 'validations') return canReadAnalytics
     if (item.id === 'scan') return compactDevice
     return true
   })
@@ -56,7 +61,7 @@ export function AppNavigation({
               </span>
             ) : null}
           </span>
-          <span>{label}</span>
+          <span>{id === 'home' && isTechnician ? 'Ordens' : label}</span>
         </button>
       ))}
     </nav>

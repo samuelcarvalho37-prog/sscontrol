@@ -15,6 +15,7 @@ export const operationsIdentifierParamsSchema = Type.Object(
     executionId: Type.Optional(uuid),
     itemId: Type.Optional(uuid),
     objectId: Type.Optional(uuid),
+    materialId: Type.Optional(uuid),
   },
   { additionalProperties: false },
 );
@@ -48,9 +49,24 @@ export const maintenanceActionListQuerySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const operatorActionListQuerySchema = Type.Object(
+  {
+    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    historico: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export const assignActionBodySchema = Type.Object(
+  { responsavel_id: uuid, tecnicos_apoio_ids: Type.Optional(Type.Array(uuid, { maxItems: 3, uniqueItems: true })) },
+  { additionalProperties: false },
+);
+
 export const createWorkOrderBodySchema = Type.Object(
   {
-    plano_versao_id: uuid,
+    plano_versao_id: Type.Optional(uuid),
+    ativo_id: Type.Optional(uuid),
+    ativo_tag: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     tipo_origem: Type.String({ minLength: 1, maxLength: 80 }),
     entidade_origem_id: nullableUuid,
     tipo_trabalho: Type.String({ minLength: 1, maxLength: 80 }),
@@ -170,9 +186,33 @@ export const startExecutionBodySchema = Type.Object(
   },
   { additionalProperties: false },
 );
+export const pauseExecutionBodySchema = Type.Object(
+  { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
+  { additionalProperties: false },
+);
+
+export const consumeMaterialBodySchema = Type.Object(
+  {
+    material_id: uuid,
+    quantidade: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }),
+    observacao: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
 
 export const completeExecutionBodySchema = Type.Object(
   {
+    relatorio_tecnico: Type.Optional(
+      Type.Object(
+        {
+          diagnostico_tecnico: Type.String({ minLength: 3, maxLength: 8000 }),
+          acao_realizada: Type.String({ minLength: 3, maxLength: 8000 }),
+          pecas_materiais: Type.String({ minLength: 1, maxLength: 8000 }),
+          medicoes: Type.String({ minLength: 1, maxLength: 8000 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     resultado: Type.String({ minLength: 3, maxLength: 2_000 }),
     observacao: nullableText,
     modo_parada: Type.Union([

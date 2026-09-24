@@ -5,6 +5,16 @@ import { AuthController } from './auth.controller.js';
 import { createAuthRoutes } from './auth.routes.js';
 import { AuthService } from './auth.service.js';
 
+function tenantRequestContext(request: import('fastify').FastifyRequest) {
+  const developmentTenantSlug = request.headers['x-vorqix-dev-tenant'];
+  return {
+    host: request.headers.host,
+    ipAddress: request.ip,
+    developmentTenantSlug:
+      typeof developmentTenantSlug === 'string' ? developmentTenantSlug : undefined,
+  };
+}
+
 export const authPlugin = fastifyPlugin(
   async (app) => {
     const service = new AuthService(app.environment, app.database);
@@ -22,7 +32,7 @@ export const authPlugin = fastifyPlugin(
         });
       }
 
-      request.auth = await service.authenticate(token);
+      request.auth = await service.authenticate(token, tenantRequestContext(request));
     });
 
     app.decorate('authorize', async (request, capability) => {

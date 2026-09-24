@@ -314,7 +314,7 @@ export class AdminController {
       'admin.permissions.save',
       await this.service.savePermissions(
         user(request),
-        id(request.params, 'profile') as AdminProfile,
+        id(request.params, 'profile'),
         request.body.permissoes,
         audit(request),
       ),

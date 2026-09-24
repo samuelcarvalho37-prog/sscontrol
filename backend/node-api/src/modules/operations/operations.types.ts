@@ -15,7 +15,9 @@ export interface RequestAuditMetadata {
 }
 
 export interface WorkOrderInput {
-  readonly planVersionId: string;
+  readonly planVersionId: string | null;
+  readonly assetId: string | null;
+  readonly assetTag: string | null;
   readonly originType: string;
   readonly originEntityId: string | null;
   readonly workType: string;
@@ -84,6 +86,12 @@ export interface ExecutionBatchItemInput {
   readonly observation: string | null;
 }
 
+export interface MaterialConsumptionInput {
+  readonly materialId: string;
+  readonly quantity: number;
+  readonly observation: string | null;
+}
+
 export interface EvidenceInput {
   readonly storageObjectId: string;
   readonly evidenceType: EvidenceType;
@@ -100,6 +108,12 @@ export interface EvidenceUploadInput {
 }
 
 export interface CompletionInput {
+  readonly technicalReport?: Readonly<{
+    diagnostico_tecnico: string;
+    acao_realizada: string;
+    pecas_materiais: string;
+    medicoes: string;
+  }>;
   readonly result: string;
   readonly observation: string | null;
   readonly stopMode: ExecutionStopMode;

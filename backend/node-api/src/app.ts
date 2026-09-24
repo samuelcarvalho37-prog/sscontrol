@@ -64,7 +64,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       requestIdLogLabel: 'traceId',
     }),
     requestIdHeader: 'x-request-id',
-    trustProxy: environment.trustProxy,
+    trustProxy:
+      environment.trustProxyCidrs.length > 0 ? [...environment.trustProxyCidrs] : false,
   });
   const ownsDatabase = options.database === undefined;
   const database = options.database ?? createDatabase(environment, app.log);

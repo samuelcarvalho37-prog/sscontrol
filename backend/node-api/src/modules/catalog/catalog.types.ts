@@ -79,7 +79,9 @@ export interface ComponentInput {
 export interface MaterialInput {
   readonly sku: string;
   readonly name: string;
+  readonly friendlyName: string | null;
   readonly unit: string;
+  readonly unitCost: number;
   readonly currentStock: number;
   readonly minimumStock: number;
   readonly status: RecordStatus;

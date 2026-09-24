@@ -44,6 +44,23 @@ export const occurrenceListQuerySchema = Type.Object(
 
 export const createOccurrenceBodySchema = Type.Object(
   {
+    triagem: Type.Optional(
+      Type.Object(
+        {
+          situacao_atual: Type.String({ minLength: 3, maxLength: 1000 }),
+          equipamento_parado: Type.Boolean(),
+          risco_parada: Type.Boolean(),
+          risco_seguranca: Type.Boolean(),
+          impacto_producao: Type.Boolean(),
+          impacto_qualidade: Type.Boolean(),
+          existe_redundancia: Type.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    foto: Type.Optional(
+      Type.String({ maxLength: 420000, pattern: '^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$' }),
+    ),
     ativo_id: uuid,
     componente_id: nullableUuid,
     tipo: Type.String({ minLength: 2, maxLength: 80 }),

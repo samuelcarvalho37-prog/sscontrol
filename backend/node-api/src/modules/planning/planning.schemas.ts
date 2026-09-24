@@ -80,7 +80,7 @@ export const checklistListQuerySchema = Type.Object(
     busca: Type.Optional(Type.String({ maxLength: 160 })),
     status: Type.Optional(versionStatus),
     ativo_id: Type.Optional(uuid),
-    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 2_000 })),
   },
   { additionalProperties: false },
 );
@@ -200,7 +200,9 @@ export const planListQuerySchema = Type.Object(
     status: Type.Optional(versionStatus),
     ativo_id: Type.Optional(uuid),
     tipo: Type.Optional(planType),
-    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    // PCM needs to show the complete maintenance-plan catalogue after an
+    // import; the former 100-row ceiling made most plans invisible.
+    limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 2_000 })),
   },
   { additionalProperties: false },
 );

@@ -18,6 +18,7 @@ interface Params {
   readonly executionId?: string;
   readonly itemId?: string;
   readonly objectId?: string;
+  readonly materialId?: string;
 }
 interface WorkOrderQuery {
   readonly busca?: string;
@@ -36,8 +37,11 @@ interface MaintenanceActionQuery {
   readonly ativo_id?: string;
   readonly limite?: number;
 }
+interface AssignActionBody { readonly responsavel_id: string; readonly tecnicos_apoio_ids?: readonly string[]; }
 interface WorkOrderBody {
-  readonly plano_versao_id: string;
+  readonly plano_versao_id?: string;
+  readonly ativo_id?: string;
+  readonly ativo_tag?: string;
   readonly tipo_origem: string;
   readonly entidade_origem_id: string | null;
   readonly tipo_trabalho: string;
@@ -94,7 +98,16 @@ interface EvidenceBody {
 interface StartBody {
   readonly modo_parada: ExecutionStopMode;
 }
+interface PauseBody {
+  readonly motivo: string;
+}
+interface ConsumeMaterialBody {
+  readonly material_id: string;
+  readonly quantidade: number;
+  readonly observacao?: string | null;
+}
 interface CompleteBody {
+  readonly relatorio_tecnico?: import('./operations.types.js').CompletionInput['technicalReport'];
   readonly resultado: string;
   readonly observacao: string | null;
   readonly modo_parada: ExecutionStopMode;
@@ -239,7 +252,9 @@ export class OperationsController {
       await this.service.createWorkOrder(
         user(request),
         {
-          planVersionId: request.body.plano_versao_id,
+          planVersionId: request.body.plano_versao_id ?? null,
+          assetId: request.body.ativo_id ?? null,
+          assetTag: request.body.ativo_tag ?? null,
           originType: request.body.tipo_origem,
           originEntityId: request.body.entidade_origem_id,
           workType: request.body.tipo_trabalho,
@@ -330,13 +345,26 @@ export class OperationsController {
       ),
     );
 
+  listActiveTechnicians = async (request: FastifyRequest) =>
+    successEnvelope(request, 'maintenance.technicians.list', await this.service.listActiveTechnicians(user(request)));
+
+  assignMaintenanceAction = async (
+    request: FastifyRequest<{ Params: Params; Body: AssignActionBody }>,
+  ) => successEnvelope(
+    request,
+    'maintenance.actions.assign',
+    await this.service.assignMaintenanceAction(
+      user(request), id(request.params, 'actionId'), request.body.responsavel_id, request.body.tecnicos_apoio_ids ?? [], audit(request),
+    ),
+  );
+
   listOperatorActions = async (
-    request: FastifyRequest<{ Querystring: { readonly limite?: number } }>,
+    request: FastifyRequest<{ Querystring: { readonly limite?: number; readonly historico?: boolean } }>,
   ) =>
     successEnvelope(
       request,
       'maintenance.operator-actions.list',
-      await this.service.listOperatorActions(user(request), request.query.limite ?? 50),
+      await this.service.listOperatorActions(user(request), request.query.limite ?? 50, request.query.historico === true),
     );
 
   getOperatorAction = async (request: FastifyRequest<{ Params: Params }>) =>
@@ -394,6 +422,31 @@ export class OperationsController {
       ),
     );
 
+  listOperatorMaterials = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(
+      request,
+      'maintenance.operator-actions.materials.list',
+      await this.service.listOperatorMaterials(user(request), id(request.params, 'actionId')),
+    );
+
+  consumeOperatorMaterial = async (
+    request: FastifyRequest<{ Params: Params; Body: ConsumeMaterialBody }>,
+  ) =>
+    successEnvelope(
+      request,
+      'maintenance.operator-actions.materials.consume',
+      await this.service.consumeOperatorMaterial(
+        user(request),
+        id(request.params, 'actionId'),
+        {
+          materialId: request.body.material_id,
+          quantity: request.body.quantidade,
+          observation: request.body.observacao ?? null,
+        },
+        audit(request),
+      ),
+    );
+
   validateOperatorAction = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(
       request,
@@ -417,6 +470,9 @@ export class OperationsController {
           result: request.body.resultado,
           observation: request.body.observacao,
           stopMode: request.body.modo_parada,
+          ...(request.body.relatorio_tecnico
+            ? { technicalReport: request.body.relatorio_tecnico }
+            : {}),
         },
         audit(request),
       ),
@@ -458,6 +514,29 @@ export class OperationsController {
         user(request),
         id(request.params, 'executionId'),
         request.body.modo_parada,
+        audit(request),
+      ),
+    );
+
+  pauseExecution = async (request: FastifyRequest<{ Params: Params; Body: PauseBody }>) =>
+    successEnvelope(
+      request,
+      'maintenance.executions.pause',
+      await this.service.pauseExecution(
+        user(request),
+        id(request.params, 'executionId'),
+        request.body.motivo,
+        audit(request),
+      ),
+    );
+
+  resumeExecution = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(
+      request,
+      'maintenance.executions.resume',
+      await this.service.resumeExecution(
+        user(request),
+        id(request.params, 'executionId'),
         audit(request),
       ),
     );
@@ -551,6 +630,9 @@ export class OperationsController {
           result: request.body.resultado,
           observation: request.body.observacao,
           stopMode: request.body.modo_parada,
+          ...(request.body.relatorio_tecnico
+            ? { technicalReport: request.body.relatorio_tecnico }
+            : {}),
         },
         audit(request),
       ),

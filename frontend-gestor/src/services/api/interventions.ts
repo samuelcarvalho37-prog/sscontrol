@@ -7,7 +7,6 @@ function adminToken(): string {
   if (token) return token
   throw new ApiRequestError('Sessão administrativa não encontrada. Entre novamente.', 'GESTOR_SESSION_MISSING')
 }
-
 export async function listAdminInterventions(signal?: AbortSignal): Promise<AdminIntervention[]> {
   const response = await callApi<{ total: number; intervencoes: AdminIntervention[] }>(
     'admin.intervencoes.listar',
@@ -17,6 +16,17 @@ export async function listAdminInterventions(signal?: AbortSignal): Promise<Admi
   )
   if (!response.data) throw new ApiRequestError('A API não retornou as intervenções.', 'ADMIN_INTERVENTIONS_EMPTY')
   return Array.isArray(response.data.intervencoes) ? response.data.intervencoes : []
+}
+
+export async function getAdminIntervention(id: string, signal?: AbortSignal): Promise<AdminIntervention> {
+  const response = await callApi<AdminIntervention>(
+    'admin.intervencoes.detalhe',
+    { token: adminToken(), intervencao_id: id },
+    signal,
+    { timeoutMs: API_TIMEOUT_MS.DETAIL_READ, dedupe: true },
+  )
+  if (!response.data) throw new ApiRequestError('A API não retornou a intervenção.', 'ADMIN_INTERVENTION_EMPTY')
+  return response.data
 }
 
 export async function saveAdminIntervention(input: AdminInterventionInput): Promise<AdminIntervention> {

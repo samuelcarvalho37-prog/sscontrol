@@ -187,6 +187,11 @@ export function ChecklistModelReviewDialog({
 
         {detail ? (
           <div className="review-body">
+            <div className="review-info" role="status">
+              Este é um modelo de checklist: sua aprovação libera a estrutura para uso.
+              A validação de 100% e a conclusão da OS acontecem somente depois da
+              execução, na liberação pós-intervenção por Qualidade e Segurança.
+            </div>
             <div className="review-summary-grid">
               <article>
                 <span>Revisão</span>

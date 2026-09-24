@@ -63,7 +63,7 @@ export function MaintenanceAccessPage({
     <main className="auth-shell maintenance-access-shell">
       <section className="auth-panel maintenance-access-panel" aria-labelledby="maintenance-access-title">
         <div className="auth-brand">
-          <span className="auth-brand__mark" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
             <span className="eyebrow">ACESSO INTERNO PROTEGIDO</span>
             <h1 id="maintenance-access-title">Janela de manutenção</h1>

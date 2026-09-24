@@ -117,6 +117,7 @@ async function applyMigration(client: PoolClient, migration: MigrationFile): Pro
       code: 'MIGRATION_FAILED',
       message: `Falha ao aplicar ${migration.version}.`,
       statusCode: 500,
+      details: { stage: 'apply-migration', migration: migration.version },
       expose: true,
       cause: error,
     });
@@ -134,7 +135,7 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
   const migrationFiles = await loadMigrationFiles(directory);
   const pool = new Pool({
     application_name: 'fab-control-migrator',
-    connectionString: environment.database.url,
+    connectionString: environment.database.migrationUrl ?? environment.database.url,
     connectionTimeoutMillis: environment.database.connectionTimeoutMs,
     max: 1,
     ssl:
@@ -145,13 +146,18 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
           }
         : false,
   });
-  const client = await pool.connect();
+  let client: PoolClient | undefined;
+  let stage = 'connect';
+  let migrationVersion: string | undefined;
 
   try {
+    client = await pool.connect();
+    stage = 'acquire-advisory-lock';
     await client.query(
       "SELECT pg_advisory_lock(hashtextextended('fab-control-schema-migrations', 0))",
     );
 
+    stage = 'read-applied-migrations';
     const appliedMigrations = await readAppliedMigrations(client);
     const appliedByVersion = new Map(
       appliedMigrations.map((migration) => [migration.version, migration.checksum_sha256]),
@@ -159,6 +165,7 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
     const newlyApplied: string[] = [];
 
     for (const migration of migrationFiles) {
+      migrationVersion = migration.version;
       const recordedChecksum = appliedByVersion.get(migration.version);
 
       if (recordedChecksum && recordedChecksum !== migration.checksum) {
@@ -176,6 +183,7 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
 
       if (recordedChecksum) continue;
 
+      stage = 'apply-migration';
       await applyMigration(client, migration);
       newlyApplied.push(migration.version);
     }
@@ -185,11 +193,28 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
       applied: newlyApplied,
       current: migrationFiles.map((migration) => migration.version),
     };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+
+    throw new AppError({
+      code: 'MIGRATION_RUNTIME_FAILED',
+      message: 'Falha ao executar as migrations do banco.',
+      statusCode: 500,
+      expose: true,
+      details: {
+        stage,
+        migration: migrationVersion,
+        connection: environment.database.migrationUrl ? 'MIGRATION_DATABASE_URL' : 'DATABASE_URL',
+      },
+      cause: error,
+    });
   } finally {
-    await client
-      .query("SELECT pg_advisory_unlock(hashtextextended('fab-control-schema-migrations', 0))")
-      .catch(() => undefined);
-    client.release();
+    if (client) {
+      await client
+        .query("SELECT pg_advisory_unlock(hashtextextended('fab-control-schema-migrations', 0))")
+        .catch(() => undefined);
+      client.release();
+    }
     await pool.end();
   }
 }

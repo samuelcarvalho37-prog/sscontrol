@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Assimilação visual Gestor → Operador.
  * Todo o escopo fica isolado em .app-shell--manager para preservar o Command Workspace.
  */
@@ -50,21 +50,6 @@
   min-width: 0;
 }
 
-.app-shell--manager .topbar__identity--manager::before {
-  content: "FC";
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 14px;
-  color: #fff;
-  background: #172234;
-  display: grid;
-  place-items: center;
-  font-size: 0.72rem;
-  font-weight: 950;
-  letter-spacing: 0.04em;
-}
-
 .app-shell--manager .topbar__identity--manager strong {
   overflow: hidden;
   color: var(--text);
@@ -86,6 +71,21 @@
 .app-shell--manager .topbar__actions {
   flex: 0 0 auto;
   gap: 8px;
+}
+
+/* A Central do Técnico é focada na execução; preservar a ação de sair tem
+   prioridade sobre o indicador de conexão, principalmente em telas menores. */
+.app-shell--manager .topbar__actions--technician .connection-chip {
+  display: none;
+}
+
+.app-shell--manager .topbar__actions--technician .logout-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  white-space: nowrap;
 }
 
 .app-shell--manager .connection-chip {
@@ -193,6 +193,174 @@
 .app-shell--manager .app-navigation__badge {
   top: -7px;
   right: -12px;
+}
+
+/* Experiência por perfil: a mesma linguagem de execução da Central do Técnico,
+   com contexto e atalhos adequados para PCM, Produção, Qualidade e Segurança. */
+.app-shell--manager .profile-experience-hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 22px;
+  margin: 0 auto 18px;
+  padding: clamp(20px, 3vw, 30px);
+  overflow: hidden;
+  border: 1px solid rgba(31, 102, 216, 0.14);
+  border-radius: 22px;
+  color: #f8fbff;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(85, 167, 255, 0.38), transparent 42%),
+    linear-gradient(120deg, #0d2848 0%, #123f71 100%);
+  box-shadow: 0 16px 35px rgba(15, 46, 82, 0.15);
+}
+
+.app-shell--manager .profile-experience-hero::after {
+  width: 118px;
+  height: 118px;
+  margin: -78px -55px -55px 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+.app-shell--manager .profile-experience-hero > div:first-child {
+  position: relative;
+  z-index: 1;
+  max-width: 570px;
+}
+
+.app-shell--manager .profile-experience-hero > div:first-child > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #8ec5ff;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+}
+
+.app-shell--manager .profile-experience-hero h1 {
+  margin: 0;
+  color: inherit;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.app-shell--manager .profile-experience-hero p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: rgba(239, 247, 255, 0.8);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.app-shell--manager .profile-experience-hero__actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-shell--manager .profile-experience-hero__actions .primary-button {
+  color: #072d57;
+  background: #fff;
+  box-shadow: none;
+}
+
+.app-shell--manager .profile-experience-hero__actions .primary-button:hover:not(:disabled) {
+  color: #fff;
+  background: #1d77de;
+}
+
+.app-shell--manager .profile-experience-hero__actions .secondary-button,
+.app-shell--manager .profile-experience-hero__scan {
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.app-shell--manager .profile-experience-hero__actions .secondary-button:hover,
+.app-shell--manager .profile-experience-hero__scan:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.app-shell--manager.profile-shell--producao .profile-experience-hero {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(55, 210, 174, 0.31), transparent 44%),
+    linear-gradient(120deg, #0c3240 0%, #075a69 100%);
+}
+
+.app-shell--manager.profile-shell--qualidade .profile-experience-hero {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(145, 114, 255, 0.3), transparent 42%),
+    linear-gradient(120deg, #28305f 0%, #4a387e 100%);
+}
+
+.app-shell--manager.profile-shell--seguranca .profile-experience-hero {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 186, 78, 0.3), transparent 42%),
+    linear-gradient(120deg, #493111 0%, #785619 100%);
+}
+
+.app-shell--manager .manager-workspace-heading,
+.app-shell--manager .manager-decision-empty,
+.app-shell--manager .pcm-dashboard > section,
+.app-shell--manager .manager-analytics-workspace > section {
+  border-radius: 18px;
+}
+
+.app-shell--manager .manager-workspace-heading__status button,
+.app-shell--manager .manager-decision-search button,
+.app-shell--manager .manager-decision-card,
+.app-shell--manager .manager-decision-empty {
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.app-shell--manager .manager-workspace-heading__status button:hover,
+.app-shell--manager .manager-decision-search button:hover,
+.app-shell--manager .manager-decision-card:hover {
+  transform: translateY(-1px);
+}
+
+.admin-desktop-shell .admin-desktop-topbar,
+.admin-desktop-shell .admin-desktop-statusbar {
+  border-color: rgba(19, 71, 125, 0.16);
+}
+
+.admin-desktop-shell .admin-welcome-card,
+.admin-desktop-shell .admin-app-window {
+  box-shadow: 0 18px 42px rgba(16, 43, 73, 0.12);
+}
+
+@media (max-width: 700px) {
+  .app-shell--manager .profile-experience-hero {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .app-shell--manager .profile-experience-hero::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+  }
+
+  .app-shell--manager .profile-experience-hero__actions {
+    justify-content: stretch;
+  }
+
+  .app-shell--manager .profile-experience-hero__actions button {
+    flex: 1 1 140px;
+  }
 }
 
 /* Primitivos visuais compartilhados com o Operador. */
@@ -1774,14 +1942,6 @@
     gap: 8px;
   }
 
-  .app-shell--manager .topbar__identity--manager::before {
-    width: 34px;
-    height: 34px;
-    flex-basis: 34px;
-    border-radius: 11px;
-    font-size: 0.59rem;
-  }
-
   .app-shell--manager .topbar__identity--manager strong {
     font-size: 0.78rem;
   }
@@ -1804,6 +1964,12 @@
 
   .app-shell--manager .user-badge {
     display: none;
+  }
+
+  .app-shell--manager .topbar__actions--technician {
+    display: flex;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .app-shell--manager .manager-notification-trigger,
@@ -2140,3 +2306,76 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Central operacional do Técnico */
+.technician-dashboard { display: grid; gap: 20px; max-width: 1180px; margin: 0 auto; padding: 24px; color: #e8edf6; }
+.technician-dashboard__heading, .technician-dashboard__panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.technician-dashboard h1, .technician-dashboard h2 { margin: 4px 0; color: #fff; }
+.technician-dashboard__heading p, .technician-dashboard__panel p { margin: 6px 0 0; color: #aab5c8; }
+.technician-dashboard button { border: 0; border-radius: 9px; background: #3c82f6; color: #fff; font: inherit; font-weight: 700; padding: 10px 14px; cursor: pointer; }
+.technician-dashboard button:disabled { cursor: wait; opacity: .65; }
+.technician-dashboard__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.technician-dashboard__metric, .technician-dashboard__panel { border: 1px solid #26344a; border-radius: 12px; background: #111b2d; padding: 18px; }
+.technician-dashboard__metric span { color: #aab5c8; font-size: .86rem; }.technician-dashboard__metric strong { display: block; font-size: 2rem; margin-top: 6px; }.technician-dashboard__metric.danger strong { color: #ff7181; }.technician-dashboard__metric.warning strong { color: #ffc569; }
+.technician-dashboard__metric { appearance: none; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.technician-dashboard__metric:hover { transform: translateY(-2px); border-color: #4d91ed; box-shadow: 0 8px 20px rgba(16, 68, 133, .22); }
+.technician-dashboard__metric:focus-visible { outline: 3px solid #72b2ff; outline-offset: 3px; }
+.technician-dashboard__metric.is-active { border-color: #2e8cff; box-shadow: 0 0 0 2px rgba(46, 140, 255, .28), 0 8px 20px rgba(16, 68, 133, .22); }
+.technician-dashboard__clear-filter { align-self: flex-start; margin: 0 0 12px; border: 1px solid #4d91ed; border-radius: 8px; background: transparent; color: #b9d8ff; padding: 7px 10px; font: inherit; font-weight: 700; cursor: pointer; }
+.technician-dashboard__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; margin-top: 16px; }.technician-action { text-align: left; display: grid; gap: 7px; background: #18263d !important; }.technician-action small, .technician-action > span:not(.technician-action__top) { color: #b8c4d7; }.technician-action__top { display: flex; justify-content: space-between; gap: 8px; }.technician-action em { color: #ffca6e; font-style: normal; font-size: .75rem; }
+.technician-schedule-indicator { justify-self: start; padding: 4px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; line-height: 1; }.technician-schedule-indicator--early { background: #e1efff; color: #155cab !important; }.technician-schedule-indicator--on-time { background: #dcf7e8; color: #12633d !important; }.technician-schedule-indicator--late { background: #ffe4e6; color: #ad2441 !important; }.technician-schedule-indicator--scheduled { background: #fff2cc; color: #7b5800 !important; }.technician-schedule-indicator--unscheduled { background: #e8edf3; color: #58677a !important; }
+.technician-schedule-summary { display: grid; gap: 3px; margin: 14px 0; padding: 11px 13px; border-left: 4px solid #91a3b8; border-radius: 8px; background: #f5f8fc; }.technician-schedule-summary strong { font-size: .86rem; }.technician-schedule-summary span { color: #55667c; font-size: .82rem; }.technician-schedule-summary--early { border-left-color: #2176d2; background: #edf6ff; }.technician-schedule-summary--on-time { border-left-color: #189760; background: #ecfbf3; }.technician-schedule-summary--late { border-left-color: #d83b50; background: #fff0f2; }.technician-schedule-summary--scheduled { border-left-color: #c58c00; background: #fff9e8; }
+.technician-dashboard__plans-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 16px; }.technician-dashboard__plans-list article { display: grid; gap: 4px; padding: 13px; border: 1px solid #345473; border-left: 3px solid #4ba1f4; border-radius: 9px; background: #142640; }.technician-dashboard__plans-list strong { color: #93c8ff; font-size: .78rem; }.technician-dashboard__plans-list span { color: #fff; font-weight: 700; }.technician-dashboard__plans-list small, .technician-dashboard__plans-more { color: #bdcce0; line-height: 1.4; }.technician-dashboard__plans-more { display: block; margin-top: 14px; }
+.technician-dashboard__detail { display: grid; gap: 16px; }.technician-dashboard__back { justify-self: start; background: transparent !important; padding: 0 !important; color: #9ec1ff !important; }.technician-dashboard__facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }.technician-dashboard__facts dt { color: #8ea0bb; font-size: .78rem; text-transform: uppercase; }.technician-dashboard__facts dd { margin: 4px 0 0; }
+.technician-dashboard__modes { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0; }.technician-dashboard__modes label, .technician-dashboard__report label, .technician-checklist-item label { display: grid; gap: 6px; color: #c7d1e0; }.technician-dashboard input, .technician-dashboard select, .technician-dashboard textarea { border: 1px solid #405170; border-radius: 7px; background: #0e1727; color: #fff; padding: 9px; font: inherit; }.technician-dashboard textarea { min-height: 80px; resize: vertical; }
+.technician-checklist-group { margin-top: 18px; }.technician-checklist-group > h3 { color: #9fc1ff; font-size: .8rem; letter-spacing: .08em; margin: 0; text-transform: uppercase; }.technician-checklist-item { border-top: 1px solid #2b3b55; padding: 16px 0; display: grid; gap: 10px; }.technician-checklist-group > h3 + .technician-checklist-item { margin-top: 8px; }.technician-checklist-item header { display: flex; gap: 8px; justify-content: space-between; }.technician-checklist-item header span { color: #ffca6e; font-size: .78rem; }.technician-checklist-item p, .technician-checklist-item small { margin: 0; color: #aab5c8; }.technician-checklist-item > button { justify-self: start; background: #263c60; }.technician-checklist-item__answer-label { color: #c7d1e0; font-size: .9rem; }.technician-choice-buttons { display: flex; flex-wrap: wrap; gap: 8px; }.technician-choice-buttons button { align-items: center; background: #14243c; border: 1px solid #405170; border-radius: 8px; color: #e7edf8; cursor: pointer; display: inline-flex; justify-self: auto; min-height: 42px; padding: 0 16px; }.technician-choice-buttons button:hover, .technician-choice-buttons button.is-selected { background: #1e5fc7; border-color: #6ba3ff; color: #fff; }.technician-choice-buttons button:focus-visible { outline: 3px solid #9fc1ff; outline-offset: 2px; }.technician-choice-buttons button:disabled { cursor: not-allowed; opacity: .55; }.technician-checklist-item__observation { color: #aab5c8; }.technician-checklist-item__observation summary { cursor: pointer; }.technician-checklist-item__observation label { margin-top: 10px; }
+.technician-dashboard__report { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }.technician-dashboard__report label:nth-last-child(-n+2) { grid-column: 1 / -1; }.technician-dashboard__blockers, .technician-dashboard__error { border-left: 4px solid #ff7181; border-radius: 6px; background: #3a1f2a; padding: 12px; color: #ffd5da; }.technician-dashboard__blockers ul { margin: 7px 0 0; padding-left: 20px; }
+.technician-dashboard__pause { display: grid; gap: 6px; margin: 14px 0; color: #c7d1e0; }.technician-dashboard__pause-button { background: #b66311; }.technician-dashboard__pause-button:hover:not(:disabled) { background: #d47a1b; }
+
+/* Tipografia operacional: leitura rápida no chão de fábrica, sem mudar o layout. */
+.technician-dashboard { font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif; font-size: 1rem; line-height: 1.5; text-rendering: optimizeLegibility; }
+.technician-dashboard h1, .technician-dashboard h2 { font-weight: 750; letter-spacing: -.025em; line-height: 1.14; }.technician-dashboard h1 { font-size: clamp(1.5rem, 3vw, 2rem); }.technician-dashboard h2 { font-size: clamp(1.2rem, 2.4vw, 1.5rem); }
+.technician-dashboard__heading p, .technician-dashboard__panel p { color: #b6c2d5; font-size: .97rem; line-height: 1.55; }.technician-dashboard button { letter-spacing: -.01em; }
+.technician-dashboard__facts dt { font-size: .72rem; font-weight: 750; letter-spacing: .06em; }.technician-dashboard__facts dd { color: #f2f6fd; font-size: .96rem; font-weight: 600; line-height: 1.35; }
+.technician-checklist-group > h3 { font-size: .76rem; font-weight: 800; letter-spacing: .1em; line-height: 1.3; }.technician-checklist-item { gap: 11px; padding: 18px 0; }.technician-checklist-item header strong { color: #f6f8fd; font-size: 1.04rem; font-weight: 750; letter-spacing: -.012em; line-height: 1.35; }.technician-checklist-item header span { font-size: .74rem; font-weight: 750; letter-spacing: .02em; }.technician-checklist-item p, .technician-checklist-item small { color: #b6c2d5; font-size: .94rem; line-height: 1.5; }.technician-checklist-item__answer-label { color: #dbe6f6; font-size: .89rem; font-weight: 700; }.technician-choice-buttons button { font-size: .94rem; }.technician-checklist-item__observation { color: #b6c2d5; font-size: .91rem; }.technician-checklist-item__observation summary { font-weight: 600; }
+
+/* O cabeçalho fica sobre fundo claro; painéis e checklist seguem a superfície operacional escura. */
+.technician-dashboard { color: #18314f; }.technician-dashboard__heading h1 { color: #102d50; }.technician-dashboard__heading .eyebrow { color: #416383; font-size: .76rem; font-weight: 800; letter-spacing: .08em; }.technician-dashboard__heading p { color: #4e6683; font-weight: 500; }.technician-dashboard__heading > button { background: #246fe5; box-shadow: 0 4px 10px rgba(36, 111, 229, .22); }.technician-dashboard__heading > button:hover { background: #145bc6; }
+.technician-dashboard__panel, .technician-dashboard__metric { background: #10213a; border-color: #294563; box-shadow: 0 3px 10px rgba(17, 40, 72, .08); }.technician-dashboard__panel h2 { color: #fff; }.technician-dashboard__metric span { color: #cad8eb; font-weight: 600; }.technician-dashboard__metric strong { color: #fff; }.technician-dashboard__metric.danger { border-color: #8d3345; background: #2b1b28; }.technician-dashboard__metric.warning { border-color: #8d6932; background: #2d271d; }.technician-dashboard__metric.danger strong { color: #ff91a1; }.technician-dashboard__metric.warning strong { color: #ffd27d; }
+@media (max-width: 760px) { .technician-dashboard { padding: 16px; }.technician-dashboard__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.technician-dashboard__facts, .technician-dashboard__report { grid-template-columns: 1fr; }.technician-dashboard__report label:nth-last-child(-n+2) { grid-column: auto; }.technician-dashboard__heading { display: grid; } }
+
+/* Painel do técnico: leitura rápida e aparência de central industrial. */
+.technician-dashboard__heading {
+  position: relative;
+  overflow: hidden;
+  align-items: center;
+  padding: 24px;
+  border: 1px solid #244c76;
+  border-radius: 18px;
+  background: linear-gradient(118deg, #0a1930 0%, #102d50 55%, #124b7d 130%);
+  box-shadow: 0 14px 30px rgba(13, 39, 71, .16);
+}
+.technician-dashboard__heading::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .3; background-image: linear-gradient(rgba(129, 195, 255, .14) 1px, transparent 1px), linear-gradient(90deg, rgba(129, 195, 255, .14) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(90deg, transparent, #000); }
+.technician-dashboard__heading > * { position: relative; z-index: 1; }
+.technician-dashboard__heading h1 { color: #fff; }
+.technician-dashboard__heading .eyebrow { color: #8fc8ff; }
+.technician-dashboard__heading p { max-width: 620px; color: #d4e5f9; }
+.technician-dashboard__heading > button { min-height: 44px; border: 1px solid rgba(181, 222, 255, .5); background: #1679ea; box-shadow: 0 8px 18px rgba(0, 0, 0, .2); }
+.technician-dashboard__connection { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 15px; color: #bcd8f4; font-size: .8rem; font-weight: 650; }
+.technician-dashboard__connection > span { width: 8px; height: 8px; border-radius: 50%; background: #49d394; box-shadow: 0 0 0 5px rgba(73, 211, 148, .14); }
+.technician-dashboard__connection b { padding-left: 7px; border-left: 1px solid rgba(189, 216, 244, .35); color: #fff; }
+.technician-dashboard__metrics { gap: 14px; }
+.technician-dashboard__metric { position: relative; min-height: 112px; overflow: hidden; padding: 18px 18px 16px; border-radius: 14px; }
+.technician-dashboard__metric::after { content: ''; position: absolute; right: -18px; bottom: -28px; width: 88px; height: 88px; border: 1px solid rgba(119, 187, 255, .25); border-radius: 50%; box-shadow: 0 0 0 15px rgba(119, 187, 255, .05), 0 0 0 30px rgba(119, 187, 255, .035); }
+.technician-dashboard__metric span, .technician-dashboard__metric strong { position: relative; z-index: 1; }
+.technician-dashboard__metric strong { font-size: 2.25rem; letter-spacing: -.04em; }
+.technician-dashboard__shortcuts { display: grid; grid-template-columns: minmax(180px, .65fr) minmax(0, 2.35fr); align-items: center; gap: 20px; padding: 16px 18px; border: 1px solid #cfe0f2; border-radius: 14px; background: linear-gradient(100deg, #f7fbff, #edf5ff); }
+.technician-dashboard__shortcuts > div:first-child { display: grid; gap: 3px; color: #173c64; }.technician-dashboard__shortcuts strong { font-size: 1rem; }
+.technician-dashboard__shortcut-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.technician-dashboard__shortcut-list button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 9px; min-height: 68px; padding: 11px; border: 1px solid #c5d8eb; border-radius: 10px; background: #fff; color: #183d65; text-align: left; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.technician-dashboard__shortcut-list button small { grid-column: 1 / -1; color: #63809f; font-size: .64rem; font-weight: 800; letter-spacing: .08em; }.technician-dashboard__shortcut-list button span { font-size: .83rem; font-weight: 750; line-height: 1.2; }.technician-dashboard__shortcut-list button b { display: grid; place-items: center; min-width: 24px; height: 24px; border-radius: 7px; background: #e6f0ff; color: #1565c0; font-size: .88rem; }
+.technician-dashboard__shortcut-list button:hover:not(:disabled), .technician-dashboard__shortcut-list button.is-active { transform: translateY(-2px); border-color: #2481e6; box-shadow: 0 8px 16px rgba(28, 94, 164, .13); }.technician-dashboard__shortcut-list button.is-active { background: #0f5fb8; color: #fff; }.technician-dashboard__shortcut-list button.is-active small { color: #bde1ff; }.technician-dashboard__shortcut-list button.is-active b { background: rgba(255, 255, 255, .16); color: #fff; }.technician-dashboard__shortcut-list button:focus-visible { outline: 3px solid #61aaff; outline-offset: 2px; }
+.technician-dashboard__panel-heading > span { display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; border-radius: 999px; background: rgba(113, 164, 221, .15); color: #d9eaff; font-size: .8rem; font-weight: 700; }
+.technician-dashboard__list { gap: 14px; }.technician-action { position: relative; min-height: 190px; padding: 16px !important; border: 1px solid #365b82 !important; border-left: 4px solid #2991f5 !important; border-radius: 12px !important; }.technician-action:hover { border-color: #65aeff !important; border-left-color: #8cc9ff !important; }.technician-action__top strong { color: #91c9ff; letter-spacing: .035em; font-size: .76rem; }.technician-action > strong { color: #fff; font-size: 1.02rem; line-height: 1.35; }.technician-action em { align-self: start; padding: 4px 7px; border-radius: 999px; background: rgba(255, 202, 110, .12); }
+@media (max-width: 900px) { .technician-dashboard__shortcuts { grid-template-columns: 1fr; }.technician-dashboard__shortcut-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .technician-dashboard__heading { padding: 20px; }.technician-dashboard__heading > button { width: 100%; }.technician-dashboard__connection b { width: 100%; padding: 0; border: 0; }.technician-dashboard__shortcut-list { grid-template-columns: 1fr; }.technician-dashboard__metric { min-height: 100px; }.technician-dashboard__shortcuts { padding: 14px; } }

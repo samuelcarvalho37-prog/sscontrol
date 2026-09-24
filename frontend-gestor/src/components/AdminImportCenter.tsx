@@ -51,6 +51,50 @@ function batchStatusLabel(status: string): string {
   return labels[status] ?? status
 }
 
+function normalizedHeader(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function modelForHeaders(
+  models: AdminImportModel[],
+  headers: string[],
+): AdminImportModel | null {
+  const available = new Set(headers.map(normalizedHeader))
+  const candidates = models
+    .map((model) => {
+      const fields = model.campos.filter((field) =>
+        available.has(normalizedHeader(field.chave)) ||
+        available.has(normalizedHeader(field.rotulo)) ||
+        field.aliases.some((alias) => available.has(normalizedHeader(alias))),
+      )
+      return {
+        model,
+        matchesRequired: model.campos
+          .filter((field) => field.obrigatorio)
+          .every((field) => fields.includes(field)),
+        score: fields.length,
+      }
+    })
+    .filter((candidate) => candidate.matchesRequired)
+    .sort((left, right) => right.score - left.score)
+  return candidates[0]?.model ?? null
+}
+
+const IMPORT_ORDER = [
+  'plantas',
+  'setores',
+  'linhas',
+  'ativos',
+  'componentes',
+  'materiais',
+  'valores_componentes',
+  'fontes_valores',
+]
+
 export function AdminImportCenter({ onSessionExpired }: AdminImportCenterProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [catalog, setCatalog] = useState<AdminImportCatalog | null>(null)
@@ -140,9 +184,14 @@ export function AdminImportCenter({ onSessionExpired }: AdminImportCenterProps) 
     setNotice('')
     try {
       const nextParsed = await parseAdminWorkbook(file, sheetName)
-      const model = catalog?.modelos.find((item) => item.tipo === selectedType)
+      const detectedModel = modelForHeaders(catalog?.modelos ?? [], nextParsed.headers)
+      const model = detectedModel ?? catalog?.modelos.find((item) => item.tipo === selectedType)
       if (model && nextParsed.rows.length > model.max_linhas) {
         throw new Error(`O modelo aceita no máximo ${model.max_linhas} linhas por lote.`)
+      }
+      if (detectedModel) {
+        setSelectedType(detectedModel.tipo)
+        setNotice(`Aba “${nextParsed.selectedSheet}” reconhecida como “${detectedModel.nome}”.`)
       }
       setSelectedFile(file)
       setParsed(nextParsed)
@@ -203,6 +252,89 @@ export function AdminImportCenter({ onSessionExpired }: AdminImportCenterProps) 
         return
       }
       setError(cause instanceof Error ? cause.message : 'Não foi possível confirmar a importação.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function importAllSheets() {
+    if (!selectedFile || !parsed || !catalog) return
+
+    const candidates: Array<{ parsed: ParsedAdminWorkbook; model: AdminImportModel }> = []
+    for (const sheetName of parsed.sheetNames) {
+      const sheet = await parseAdminWorkbook(selectedFile, sheetName)
+      const model = modelForHeaders(catalog.modelos, sheet.headers)
+      if (model) candidates.push({ parsed: sheet, model })
+    }
+    candidates.sort(
+      (left, right) =>
+        IMPORT_ORDER.indexOf(left.model.tipo) - IMPORT_ORDER.indexOf(right.model.tipo),
+    )
+    if (!candidates.length) {
+      setError('Nenhuma aba compatível com os modelos controlados foi encontrada.')
+      return
+    }
+    const summary = candidates.map((item) => item.parsed.selectedSheet).join(', ')
+    if (!window.confirm(
+      `Importar as abas ${summary}? Cada aba será pré-analisada e confirmada na ordem de dependência. Se uma aba posterior falhar, os lotes já confirmados serão revertidos automaticamente.`,
+    )) return
+
+    setBusy('bulk-import')
+    setError('')
+    setNotice('')
+    const confirmedBatches: AdminImportBatch[] = []
+    try {
+      let completed = 0
+      for (const candidate of candidates) {
+        setSelectedType(candidate.model.tipo)
+        setParsed(candidate.parsed)
+        const batch = await validateAdminImport({
+          tipo: candidate.model.tipo,
+          arquivo_nome: candidate.parsed.fileName,
+          aba_nome: candidate.parsed.selectedSheet,
+          cabecalhos: candidate.parsed.headers,
+          linhas: candidate.parsed.rows,
+        })
+        setAnalysis(batch)
+        setBatches((current) => [batch, ...current.filter((item) => item.id !== batch.id)])
+        if (batch.status !== 'VALIDADO') {
+          throw new Error(
+            `A aba “${candidate.parsed.selectedSheet}” não passou na pré-análise. Corrija as linhas indicadas antes de continuar.`,
+          )
+        }
+        const confirmed = await confirmAdminImport(batch.id, batch.validacao_hash)
+        setAnalysis(confirmed)
+        setBatches((current) => [confirmed, ...current.filter((item) => item.id !== confirmed.id)])
+        confirmedBatches.push(confirmed)
+        completed += 1
+      }
+      await loadWorkspace()
+      const ignored = parsed.sheetNames.filter(
+        (sheetName) => !candidates.some((candidate) => candidate.parsed.selectedSheet === sheetName),
+      )
+      setNotice(`${completed} aba(s) importada(s) com sucesso.${ignored.length ? ` Aba(s) de referência não importadas: ${ignored.join(', ')}.` : ''}`)
+    } catch (cause) {
+      if (isGestorAuthenticationError(cause)) {
+        onSessionExpired()
+        return
+      }
+      const originalMessage = cause instanceof Error ? cause.message : 'Não foi possível concluir a importação completa.'
+      const rolledBack: string[] = []
+      const rollbackErrors: string[] = []
+      for (const batch of [...confirmedBatches].reverse()) {
+        try {
+          const reverted = await rollbackAdminImport(
+            batch.id,
+            'Importação completa interrompida por erro em uma aba posterior.',
+          )
+          rolledBack.push(batch.aba_nome)
+          setBatches((current) => [reverted, ...current.filter((item) => item.id !== reverted.id)])
+          if (analysis?.id === reverted.id) setAnalysis(reverted)
+        } catch {
+          rollbackErrors.push(batch.aba_nome)
+        }
+      }
+      setError(`${originalMessage}${rolledBack.length ? ` As abas já importadas foram revertidas: ${rolledBack.join(', ')}.` : ''}${rollbackErrors.length ? ` Não foi possível reverter automaticamente: ${rollbackErrors.join(', ')}.` : ''}`)
     } finally {
       setBusy('')
     }
@@ -293,7 +425,7 @@ export function AdminImportCenter({ onSessionExpired }: AdminImportCenterProps) 
                 </button>
               ) : (
                 <section className="admin-import-file-card">
-                  <header><div><CheckIcon /><span><strong>{parsed.fileName}</strong><small>{parsed.rows.length} linha(s) · {parsed.headers.length} coluna(s)</small></span></div><button type="button" onClick={resetFile}>Trocar arquivo</button></header>
+                  <header><div><CheckIcon /><span><strong>{parsed.fileName}</strong><small>{parsed.rows.length} linha(s) · {parsed.headers.length} coluna(s)</small></span></div><div><button type="button" disabled={Boolean(busy)} onClick={() => void importAllSheets()}>{busy === 'bulk-import' ? 'Importando abas…' : 'Importar todas as abas'}</button><button type="button" disabled={Boolean(busy)} onClick={resetFile}>Trocar arquivo</button></div></header>
                   {parsed.sheetNames.length > 1 ? (
                     <label><span>Aba a importar</span><select value={parsed.selectedSheet} onChange={(event) => selectedFile && void readFile(selectedFile, event.target.value)}>{parsed.sheetNames.map((name) => <option key={name}>{name}</option>)}</select></label>
                   ) : null}

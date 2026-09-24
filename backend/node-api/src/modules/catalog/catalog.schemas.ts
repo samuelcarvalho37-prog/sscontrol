@@ -177,7 +177,9 @@ export const updateComponentBodySchema = Type.Partial(componentFields, {
 const materialFields = Type.Object({
   sku: shortCode,
   nome: shortName,
+  nome_facil: Type.Optional(Type.Union([shortName, Type.Null()])),
   unidade: Type.String({ minLength: 1, maxLength: 30 }),
+  valor_unitario: Type.Optional(Type.Number({ minimum: 0 })),
   estoque_atual: Type.Number({ minimum: 0 }),
   estoque_minimo: Type.Number({ minimum: 0 }),
   status: recordStatus,

@@ -1,9 +1,13 @@
 import type { ApiEnvelope } from "../../types/api";
-import { getApiTransport, getApiUrl, getLegacyApiUrl } from "./config";
+import { getApiTransport, getApiUrl, getDevelopmentTenantSlug, getLegacyApiUrl } from "./config";
 
 export const API_TIMEOUT_MS = {
   FAST_READ: 15_000,
-  DETAIL_READ: 30_000,
+  // Administrative workspaces can hydrate related catalogues together
+  // (structure, assets, people and permissions).  On a cold local database
+  // that is legitimately slower than a simple detail read, so avoid turning a
+  // completed request into a misleading "API exceeded 30 seconds" error.
+  DETAIL_READ: 45_000,
   SAVE: 45_000,
   CRITICAL_WRITE: 60_000,
   EVIDENCE_UPLOAD: 90_000,
@@ -14,7 +18,6 @@ export interface ApiCallOptions {
   dedupe?: boolean;
   dedupeKey?: string;
 }
-
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -27,6 +30,11 @@ export class ApiRequestError extends Error {
 }
 
 const inFlightReads = new Map<string, Promise<ApiEnvelope<unknown>>>();
+
+function developmentTenantHeader(): Record<string, string> {
+  const slug = getDevelopmentTenantSlug();
+  return slug ? { "X-VORQIX-DEV-TENANT": slug } : {};
+}
 
 function stableSerialize(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -122,7 +130,7 @@ async function executeAppsScriptCall<T>(
 }
 
 interface NodeActionRequest {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: Record<string, unknown>;
   token?: string;
@@ -307,9 +315,12 @@ function workOrderRow(value: unknown): JsonRecord {
   const validationStatus = item.validacao_status ?? validation.status;
   return {
     ...item,
+    exige_liberacao_pos_intervencao: record(item.analise_tecnica).exige_liberacao_pos_intervencao === true,
+    planejada_para: item.programada_para ?? item.planejada_para,
+    modo_parada_manutencao: stopModeFromNode[upperText(item.modo_parada ?? item.modo_parada_manutencao)] ?? item.modo_parada ?? item.modo_parada_manutencao,
     status: workOrderStatusFromNode[upperText(item.status)] ?? item.status,
     prioridade: priorityFromNode[upperText(item.prioridade)] ?? item.prioridade,
-    tipo: planTypeFromNode[upperText(item.tipo)] ?? item.tipo,
+    tipo: planTypeFromNode[upperText(item.tipo ?? item.tipo_trabalho)] ?? item.tipo ?? item.tipo_trabalho,
     plano_id: item.plano_id,
     plano_versao_id: item.plano_versao_id,
     plano_itens_count: Number(item.plano_itens_count ?? records(item.checklist_itens).length),
@@ -345,12 +356,17 @@ function workOrderBody(data: JsonRecord, creating: boolean): JsonRecord {
     analise_tecnica: {
       ...record(data.analise_tecnica),
       briefing_operador: data.descricao,
+      exige_liberacao_pos_intervencao: data.exige_liberacao_pos_intervencao === true,
       modo_parada: data.modo_parada_manutencao,
     },
   };
   if (!creating) return body;
   return {
-    plano_versao_id: data.plano_versao_id || data.plano_id,
+    ...(data.plano_versao_id || data.plano_id
+      ? { plano_versao_id: data.plano_versao_id || data.plano_id }
+      : {}),
+    ...(data.ativo_id ? { ativo_id: data.ativo_id } : {}),
+    ...(data.ativo_tag ? { ativo_tag: data.ativo_tag } : {}),
     tipo_origem: data.origem || "ADMIN",
     entidade_origem_id: data.entidade_origem_id || null,
     tipo_trabalho: planTypeToNode[upperText(data.tipo)] ?? upperText(data.tipo),
@@ -424,6 +440,7 @@ function maintenancePlanRow(value: unknown): JsonRecord {
     ...item,
     ...current,
     versao_id: current.id ?? item.versao_id,
+    versao_status: current.status ?? item.status,
     plano_itens_count: item.plano_itens_count ?? current.plano_itens_count,
     atualizado_em: item.updated_at ?? item.atualizado_em,
   });
@@ -577,7 +594,9 @@ function catalogWriteBody(
     return {
       sku: data.sku,
       nome: data.nome,
+      nome_facil: nullableTextValue(data.nome_facil),
       unidade: data.unidade,
+      valor_unitario: nullableNumberValue(data.valor_unitario) ?? 0,
       estoque_atual: nullableNumberValue(data.estoque_atual) ?? 0,
       estoque_minimo: nullableNumberValue(data.estoque_minimo) ?? 0,
       status: recordStatusToNode[requestedStatus] ?? requestedStatus,
@@ -893,7 +912,7 @@ function mapTechnicalSummary(value: JsonRecord): JsonRecord {
     oee_qualidade_pct: null,
     producao_amostra: 0,
     metodologia:
-      "Indicadores calculados exclusivamente a partir de eventos tÃ©cnicos reais.",
+      "Indicadores calculados exclusivamente a partir de eventos técnicos reais.",
     ranking_ativos: records(value.ranking_ativos),
   };
 }
@@ -947,7 +966,7 @@ function mapActionDetail(value: JsonRecord): JsonRecord {
     execucoes: Object.keys(execution).length > 0 ? [execution] : [],
     checklist: items,
     evidencias: evidence,
-    materiais: [],
+    materiais: records(execution.materiais),
     locks: [],
     historico: [],
   };
@@ -1039,7 +1058,7 @@ function nodeActionRequest(
         path: `/v1/workflow/technical-demands/${encodeURIComponent(String(payload.demanda_id))}/sign`,
         body: {
           declaracao: payload.declaracao ?? payload.parecer,
-          significado: "AprovaÃ§Ã£o tÃ©cnica rastreÃ¡vel",
+          significado: "Aprovação técnica rastreável",
         },
         token,
         transform: (data) => {
@@ -1047,7 +1066,9 @@ function nodeActionRequest(
           return {
             signed: true,
             validated: true,
-            completed: data.status === "APPROVED",
+            completed: ["APPROVED", "COMPLETED"].includes(
+              String(data.status ?? "").toUpperCase(),
+            ),
             assinaturas_pendentes: Math.max(
               0,
               Number(validation.assinaturas_exigidas ?? 0) -
@@ -1092,7 +1113,7 @@ function nodeActionRequest(
         path: `/v1/workflow/technical-demands/${encodeURIComponent(String(payload.demanda_id))}/sign`,
         body: {
           declaracao: payload.parecer,
-          significado: "AprovaÃ§Ã£o tÃ©cnica rastreÃ¡vel",
+          significado: "Aprovação técnica rastreável",
         },
         token,
         transform: (data) => ({
@@ -1122,6 +1143,21 @@ function nodeActionRequest(
           total: Number(data.total ?? 0),
           acoes: records(data.acoes).map(mapAction),
         }),
+      };
+    case "maintenance.technicians.list":
+      return { method: "GET", path: "/v1/maintenance/technicians", token };
+    case "maintenance.actions.assign":
+      return {
+        method: "PUT",
+        path: `/v1/maintenance/actions/${encodeURIComponent(String(payload.acao_id))}/assignment`,
+        body: { responsavel_id: payload.responsavel_id, tecnicos_apoio_ids: payload.tecnicos_apoio_ids },
+        token,
+      };
+    case "maintenance.work-orders.release":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/release`,
+        token,
       };
     case "gestor.detalhe_acao":
       return {
@@ -1166,6 +1202,76 @@ function nodeActionRequest(
             actionStatusFromNode[String(data.status ?? "").toUpperCase()] ??
             data.status,
         }),
+      };
+    case "operator-actions.list":
+      return {
+        method: "GET",
+        path: queryPath("/v1/maintenance/operator-actions", { limite: payload.limite, historico: payload.historico }),
+        token,
+      };
+    case "operator-actions.get":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}`,
+        token,
+      };
+    case "operator-actions.start":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/start`,
+        body: { modo_parada: payload.modo_parada },
+        token,
+      };
+    case "maintenance.executions.pause":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/pause`,
+        body: { motivo: payload.motivo },
+        token,
+      };
+    case "maintenance.executions.resume":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/resume`,
+        token,
+      };
+    case "operator-actions.responses":
+      return {
+        method: "PUT",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/responses`,
+        body: { itens: payload.itens },
+        token,
+      };
+    case "operator-actions.materials.list":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/materials`,
+        token,
+      };
+    case "operator-actions.materials.consume":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/materials`,
+        body: { material_id: payload.material_id, quantidade: payload.quantidade, observacao: payload.observacao },
+        token,
+      };
+    case "operator-actions.validation":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/validation`,
+        token,
+      };
+    case "operator-actions.complete":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/complete`,
+        body: {
+          relatorio_tecnico: payload.relatorio_tecnico,
+          resultado: payload.resultado,
+          observacao: payload.observacao,
+          modo_parada: payload.modo_parada,
+        },
+        token,
       };
     case "gestor.listar_paradas":
       return {
@@ -1216,6 +1322,17 @@ function nodeActionRequest(
         },
       };
     }
+    case "gestor.obter_ocorrencia":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/occurrences/${encodeURIComponent(String(payload.ocorrencia_id))}`,
+        token,
+        transform: (data) => ({
+          ...data,
+          status: data.status === "OPEN" ? "AGUARDANDO_ANALISE" : data.status,
+          criado_em: data.criada_em,
+        }),
+      };
     case "gestor.notificacoes.listar":
       return {
         method: "GET",
@@ -1261,6 +1378,17 @@ function nodeActionRequest(
           },
         }),
       };
+    case "cmms.pcm_dashboard": {
+      const period = defaultAnalyticsPeriod(payload);
+      return {
+        method: "GET",
+        path: queryPath("/v1/analytics/technical-summary", {
+          inicio: period.inicio, fim: period.fim, limite_ranking: 10,
+        }),
+        token,
+        transform: (data) => ({ ...record(data.pcm), relatorios: record(data.relatorios) }),
+      };
+    }
     case "cmms.kpis_base": {
       const period = defaultAnalyticsPeriod(payload);
       return {
@@ -1321,7 +1449,8 @@ function nodeActionRequest(
           total: records(data.itens).length,
           modelos: records(data.itens).map((item) => ({
             ...item,
-            workflow_status: item.status,
+            workflow_status:
+              checklistStatusFromNode[upperText(item.status)] ?? item.status,
             itens_count: item.total_itens,
             atualizado_em: item.updated_at,
           })),
@@ -1336,7 +1465,10 @@ function nodeActionRequest(
           plano: {
             ...data,
             ...record(data.versao_atual),
-            workflow_status: record(data.versao_atual).status,
+            workflow_status:
+              checklistStatusFromNode[
+                upperText(record(data.versao_atual).status)
+              ] ?? record(data.versao_atual).status,
             itens_count: records(data.itens).length,
           },
           ativo: data.ativo_id
@@ -1371,8 +1503,14 @@ function nodeActionRequest(
           validated: true,
           plano_id: payload.plano_id,
           decisao: payload.decisao,
-          workflow_status: record(data.versao_atual).status ?? data.status,
-          status: record(data.versao_atual).status ?? data.status,
+          workflow_status:
+            checklistStatusFromNode[
+              upperText(record(data.versao_atual).status ?? data.status)
+            ] ?? record(data.versao_atual).status ?? data.status,
+          status:
+            checklistStatusFromNode[
+              upperText(record(data.versao_atual).status ?? data.status)
+            ] ?? record(data.versao_atual).status ?? data.status,
         }),
       };
     case "admin.intervencoes.listar":
@@ -1389,6 +1527,13 @@ function nodeActionRequest(
           const interventions = records(data.itens).map(workOrderRow);
           return { total: interventions.length, intervencoes: interventions };
         },
+      };
+    case "admin.intervencoes.detalhe":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.intervencao_id))}`,
+        token,
+        transform: (data) => workOrderRow(data),
       };
     case "admin.intervencoes.salvar": {
       const data = record(payload.dados);
@@ -2032,7 +2177,7 @@ function nodeActionRequest(
           method: "GET",
           path: queryPath("/v1/maintenance/plans", {
             busca: payload.busca,
-            limite: Math.min(Number(payload.limite ?? 100), 100),
+            limite: Math.min(Number(payload.limite ?? 100), 2_000),
           }),
           token,
           transform: (data) => {
@@ -2211,7 +2356,7 @@ async function executeNodeCall<T>(
   signal?.addEventListener("abort", abortFromCaller, { once: true });
 
   try {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...developmentTenantHeader() };
     if (request.body) headers["Content-Type"] = "application/json";
     if (request.token) headers.Authorization = `Bearer ${request.token}`;
     const response = await fetch(`${nodeBaseUrl(apiUrl)}${request.path}`, {

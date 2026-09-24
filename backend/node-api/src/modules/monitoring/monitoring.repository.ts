@@ -21,6 +21,20 @@ function first(rows: readonly MonitoringRow[]): MonitoringRow | null {
 }
 
 export class MonitoringRepository {
+  async hasPendingPostInterventionRelease(client: PoolClient, assetId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM maintenance.work_orders work_order
+      WHERE work_order.asset_id=$1 AND work_order.status NOT IN ('COMPLETED','CANCELLED')
+        AND EXISTS (SELECT 1 FROM workflow.technical_demands demand WHERE demand.tenant_id=work_order.tenant_id
+          AND demand.entity_id=work_order.id AND demand.demand_type='POST_INTERVENTION_RELEASE') AND EXISTS (
+          SELECT 1 FROM maintenance.work_order_actions action JOIN maintenance.executions execution
+          ON execution.work_order_action_id=action.id AND execution.tenant_id=action.tenant_id
+          WHERE action.work_order_id=work_order.id
+            AND execution.status IN ('IN_PROGRESS','PAUSED','BLOCKED','COMPLETED')) LIMIT 1`,
+      [assetId],
+    );
+    return result.rows.length > 0;
+  }
   async findParameterReadingContext(
     client: PoolClient,
     readingId: string,
@@ -202,6 +216,13 @@ export class MonitoringRepository {
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.created_at AS criada_em,
               occurrence.updated_at AS atualizada_em, occurrence.closed_at AS encerrada_em,
+              (SELECT jsonb_build_object('triagem',history.payload->'triagem','foto',history.payload->'foto',
+                       'regra_prioridade',history.payload->'regra_prioridade')
+               FROM maintenance.history_events history
+               WHERE history.tenant_id=occurrence.tenant_id AND history.asset_id=occurrence.asset_id
+                 AND history.event_type='OCCURRENCE_REPORTED'
+                 AND history.payload->>'occurrenceId'=occurrence.id::text
+               ORDER BY history.occurred_at DESC LIMIT 1) AS relato_producao,
               CASE WHEN stop.id IS NULL THEN NULL ELSE jsonb_build_object(
                 'id',stop.id,'status',stop.status,'tipo',stop.stop_type,'motivo',stop.reason,
                 'iniciada_em',stop.started_at,'concluida_em',stop.completed_at,
@@ -551,6 +572,7 @@ export class MonitoringRepository {
     notificationId: string,
     roleTypes: readonly string[],
     excludedUserId: string | null,
+    roleCodes: readonly string[] = [],
   ): Promise<void> {
     await client.query(
       `INSERT INTO workflow.notification_recipients
@@ -559,13 +581,14 @@ export class MonitoringRepository {
        FROM iam.user_roles user_role
        JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
        JOIN iam.users user_account ON user_account.tenant_id=user_role.tenant_id AND user_account.id=user_role.user_id
-       WHERE user_role.tenant_id=$1 AND role.role_type=ANY($3::text[])
+       WHERE user_role.tenant_id=$1
+         AND (role.role_type=ANY($3::text[]) OR role.code=ANY($5::text[]))
          AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
          AND ($4::uuid IS NULL OR user_account.id<>$4)
        ON CONFLICT (tenant_id,notification_id,user_id) DO UPDATE
        SET delivery_status='DELIVERED',delivered_at=COALESCE(workflow.notification_recipients.delivered_at,clock_timestamp()),
            last_notified_at=clock_timestamp(),delivery_attempts=workflow.notification_recipients.delivery_attempts+1`,
-      [tenantId, notificationId, roleTypes, excludedUserId],
+      [tenantId, notificationId, roleTypes, excludedUserId, roleCodes],
     );
   }
 

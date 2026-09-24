@@ -605,16 +605,19 @@ export class AdminService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const rows = await this.repository.permissionMatrix(client);
-        const profiles: AdminProfile[] = ['ADMIN', 'GESTOR', 'OPERADOR'];
+        const profiles = await this.repository.identityRoles(client);
         return {
           chave: 'permissions.matrix.capabilities.v1',
-          perfis: profiles.map((profile) => {
-            const roleType = profile === 'GESTOR' ? 'MANAGER' : profile;
-            const capabilities = rows.filter((row) => row.role_type === roleType);
+          perfis: profiles.map((role) => {
+            const profile = String(role.code);
+            const capabilities = rows.filter((row) => row.role_code === profile);
             return {
               perfil: profile,
-              editavel: profile !== 'ADMIN',
-              acesso_total: profile === 'ADMIN',
+              id: String(role.id),
+              nome: String(role.name),
+              roleType: String(role.role_type),
+              editavel: role.role_type !== 'ADMIN' && role.protected !== true,
+              acesso_total: false,
               capacidades: capabilities.map((row) => ({
                 id: String(row.code),
                 nome: String(row.name),
@@ -636,8 +639,6 @@ export class AdminService {
     permissions: Readonly<Record<string, boolean>>,
     metadata: AdminAuditMetadata,
   ) {
-    if (profile === 'ADMIN')
-      fail('ADMIN_PROFILE_PROTECTED', 'O núcleo de permissões do Administrador é protegido.', 409);
     await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {

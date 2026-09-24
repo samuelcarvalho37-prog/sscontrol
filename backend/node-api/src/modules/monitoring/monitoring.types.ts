@@ -1,3 +1,4 @@
+import type { OccurrenceAssessment } from './occurrence-assessment.js';
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type AlertSeverity = 'INFO' | Severity;
 export type StopStatus =
@@ -28,6 +29,8 @@ export interface OccurrenceListQuery extends PageQuery {
 }
 
 export interface CreateOccurrenceInput {
+  readonly assessment?: OccurrenceAssessment;
+  readonly photo?: string;
   readonly assetId: string;
   readonly componentId: string | null;
   readonly occurrenceType: string;

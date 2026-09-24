@@ -21,7 +21,7 @@ export async function listAdminEntity(
 ): Promise<AdminEntityList> {
   const response = await callApi<AdminEntityList>(
     'admin.listar',
-    { token: adminToken(), entidade: entity, limite: 500 },
+    { token: adminToken(), entidade: entity, limite: entity === 'planos' ? 2_000 : 500 },
     signal,
     { timeoutMs: API_TIMEOUT_MS.DETAIL_READ, dedupe: true },
   )

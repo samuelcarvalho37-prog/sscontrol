@@ -6,6 +6,7 @@ import test from 'node:test';
 import { Pool, type PoolClient } from 'pg';
 
 import { buildApp } from '../src/app.js';
+import { MonitoringRepository } from '../src/modules/monitoring/monitoring.repository.js';
 import { createTestEnvironment } from './helpers/environment.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -17,6 +18,7 @@ const ids = {
   quality: randomUUID(),
   safety: randomUUID(),
   operator: randomUUID(),
+  support: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
   operatorRole: randomUUID(),
@@ -34,6 +36,7 @@ const ids = {
   checklist: randomUUID(),
   checklistVersion: randomUUID(),
   confirmationItem: randomUUID(),
+  inspectionItem: randomUUID(),
   parameterItem: randomUUID(),
   evidenceItem: randomUUID(),
   plan: randomUUID(),
@@ -46,6 +49,11 @@ interface Identities {
   readonly quality: string;
   readonly safety: string;
   readonly operator: string;
+  readonly support: string;
+}
+
+interface SeededIdentities extends Identities {
+  readonly tenantSlug: string;
 }
 
 function token(): { readonly raw: string; readonly hash: string } {
@@ -96,16 +104,18 @@ async function transaction<T>(
   }
 }
 
-async function seed(pool: Pool): Promise<Identities> {
+async function seed(pool: Pool): Promise<SeededIdentities> {
   const admin = token();
   const quality = token();
   const safety = token();
   const operator = token();
+  const support = token();
+  const tenantSlug = `operations-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
       VALUES ($1,'Operações Testes','Operações Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `operations-${randomUUID()}`],
+       [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
@@ -116,21 +126,23 @@ async function seed(pool: Pool): Promise<Identities> {
     );
     await client.query(
       `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
-      ($1,$5,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
-      ($2,$5,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
-      ($3,$5,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
-      ($4,$5,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false)`,
-      [ids.admin, ids.quality, ids.safety, ids.operator, tenantId],
+      ($1,$6,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
+      ($2,$6,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
+      ($3,$6,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
+      ($4,$6,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false),
+      ($5,$6,'USR-OPS-SUP','Apoio Operações','ops.support@fabcontrol.local',false)`,
+      [ids.admin, ids.quality, ids.safety, ids.operator, ids.support, tenantId],
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
-      ($1,$2,$6),($1,$3,$7),($1,$4,$7),($1,$5,$8)`,
+      ($1,$2,$7),($1,$3,$8),($1,$4,$8),($1,$5,$9),($1,$6,$9)`,
       [
         tenantId,
         ids.admin,
         ids.quality,
         ids.safety,
         ids.operator,
+        ids.support,
         ids.adminRole,
         ids.validatorRole,
         ids.operatorRole,
@@ -147,6 +159,7 @@ async function seed(pool: Pool): Promise<Identities> {
           'maintenance.work-orders.manage',
           'maintenance.work-orders.release',
           'maintenance.executions.read',
+          'analytics.technical.read',
         ],
       ],
     );
@@ -213,6 +226,7 @@ async function seed(pool: Pool): Promise<Identities> {
       [ids.quality, quality],
       [ids.safety, safety],
       [ids.operator, operator],
+      [ids.support, support],
     ] as const) {
       await client.query(
         `INSERT INTO iam.sessions
@@ -273,11 +287,13 @@ async function seed(pool: Pool): Promise<Identities> {
       `INSERT INTO maintenance.checklist_items
       (id,tenant_id,checklist_template_version_id,sequence,title,instruction,response_type_code,category,required,evidence_required,minimum_evidence_photos,blocks_completion,parameter_definition_id,minimum_value,maximum_value,unit)
       VALUES
-      ($1,$4,$5,1,'Confirmar bloqueio','Confirme o bloqueio seguro.','CONFIRMACAO','SEGURANCA',true,false,0,true,NULL,NULL,NULL,NULL),
-      ($2,$4,$5,2,'Medir temperatura','Registre a temperatura.','PARAMETRO','TECNICO',true,false,0,true,$6,150,170,'°C'),
-      ($3,$4,$5,3,'Fotografar condição','Registre evidência.','EVIDENCIA','TECNICO',true,true,1,true,NULL,NULL,NULL,NULL)`,
+      ($1,$5,$6,1,'Confirmar bloqueio','Confirme o bloqueio seguro.','CONFIRMACAO','SEGURANCA',true,false,0,true,NULL,NULL,NULL,NULL),
+      ($2,$5,$6,2,'Inspecionar condição do rolamento','Registre a condição encontrada.','OK_NOK','MECANICA',true,false,0,true,NULL,NULL,NULL,NULL),
+      ($3,$5,$6,3,'Medir temperatura','Registre a temperatura.','PARAMETRO','TECNICO',true,false,0,true,$7,150,170,'°C'),
+      ($4,$5,$6,4,'Fotografar condição','Registre evidência.','EVIDENCIA','TECNICO',true,true,1,true,NULL,NULL,NULL,NULL)`,
       [
         ids.confirmationItem,
+        ids.inspectionItem,
         ids.parameterItem,
         ids.evidenceItem,
         tenantId,
@@ -314,7 +330,14 @@ async function seed(pool: Pool): Promise<Identities> {
       [ids.storageObject, tenantId, 'd'.repeat(64), ids.operator],
     );
   });
-  return { admin: admin.raw, quality: quality.raw, safety: safety.raw, operator: operator.raw };
+  return {
+    admin: admin.raw,
+    quality: quality.raw,
+    safety: safety.raw,
+    operator: operator.raw,
+    support: support.raw,
+    tenantSlug,
+  };
 }
 
 test(
@@ -324,7 +347,7 @@ test(
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 4 });
     const identities = await seed(pool);
-    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId) });
+    const app = await buildApp({ environment: createTestEnvironment(databaseUrl, tenantId, identities.tenantSlug) });
     context.after(async () => {
       await app.close();
       await pool.end();
@@ -344,8 +367,8 @@ test(
         descricao: 'Conteúdo inicial que será devolvido pela Qualidade.',
         prioridade: 'MEDIUM',
         responsavel_id: null,
-        programada_para: null,
-        analise_tecnica: { situacao: 'Análise inicial' },
+        programada_para: new Date(Date.now() - 60000).toISOString(),
+        analise_tecnica: { situacao: 'Análise inicial', exige_liberacao_pos_intervencao: true },
       },
     });
     assert.equal(correctionDraft.statusCode, 200, correctionDraft.body);
@@ -383,9 +406,10 @@ test(
         descricao: 'Riscos, bloqueio e resultado técnico foram detalhados para nova validação.',
         prioridade: 'HIGH',
         responsavel_id: null,
-        programada_para: null,
+        programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
           situacao: 'Revisão preventiva',
+          exige_liberacao_pos_intervencao: true,
           riscos: ['energia residual'],
           resultado_esperado: 'Equipamento seguro e liberado',
         },
@@ -420,6 +444,13 @@ test(
       assert.equal(Number(history.rows[0]!.review_count), 2);
     });
 
+    await app.inject({
+      method: 'POST',
+      url: `/v1/workflow/technical-demands/${correctionResubmitted.json().data.validacao.id}/request-changes`,
+      headers: bearer(identities.quality),
+      payload: { motivo: 'Manter esta ordem de teste em correção, sem execução disponível.' },
+    });
+
     const created = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/work-orders',
@@ -432,10 +463,11 @@ test(
         titulo: 'Preventiva integral da prensa',
         descricao: 'Executar checklist validado.',
         prioridade: 'HIGH',
-        responsavel_id: null,
-        programada_para: null,
+        responsavel_id: ids.operator,
+        programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
           situacao: 'Manutenção programada',
+          exige_liberacao_pos_intervencao: true,
           resultado_esperado: 'Equipamento seguro',
         },
       },
@@ -456,7 +488,18 @@ test(
     });
     assert.equal(submitted.statusCode, 200, submitted.body);
     const demandId: string = submitted.json().data.validacao.id;
-    assert.equal(submitted.json().data.checklist_itens.length, 3);
+    await transaction(pool, async (client) => {
+      const postIntervention = await client.query(
+        `SELECT demand_type, status FROM workflow.technical_demands WHERE id=$1`,
+        [demandId],
+      );
+      assert.deepEqual(postIntervention.rows[0], {
+        demand_type: 'POST_INTERVENTION_RELEASE',
+        status: 'OPEN',
+      });
+    });
+    // O cenário completo inclui confirmação, inspeção, parâmetro e evidência.
+    assert.equal(submitted.json().data.checklist_itens.length, 4);
 
     const technicalContext = await app.inject({
       method: 'GET',
@@ -469,7 +512,7 @@ test(
 
     const technicalQueue = await app.inject({
       method: 'GET',
-      url: '/v1/workflow/technical-demands?status=AWAITING_SIGNATURE',
+      url: '/v1/workflow/technical-demands?status=OPEN',
       headers: bearer(identities.quality),
     });
     assert.equal(technicalQueue.statusCode, 200, technicalQueue.body);
@@ -492,15 +535,7 @@ test(
         significado: 'Aprovação de Qualidade',
       },
     });
-    assert.equal(qualitySigned.statusCode, 200, qualitySigned.body);
-    assert.equal(qualitySigned.json().data.status, 'IN_TECHNICAL_REVIEW');
-
-    const prematureRelease = await app.inject({
-      method: 'POST',
-      url: `/v1/maintenance/work-orders/${workOrderId}/release`,
-      headers: bearer(identities.admin),
-    });
-    assert.equal(prematureRelease.statusCode, 409, prematureRelease.body);
+    assert.equal(qualitySigned.statusCode, 409, qualitySigned.body);
 
     const safetySigned = await app.inject({
       method: 'POST',
@@ -511,10 +546,19 @@ test(
         significado: 'Aprovação de Segurança',
       },
     });
-    assert.equal(safetySigned.statusCode, 200, safetySigned.body);
-    assert.equal(safetySigned.json().data.status, 'RELEASED');
-    assert.equal(safetySigned.json().data.validacao.assinaturas.length, 2);
-    assert.equal(safetySigned.json().data.acoes.length, 1);
+    assert.equal(safetySigned.statusCode, 409, safetySigned.body);
+    assert.equal(submitted.json().data.status, 'APPROVED');
+    assert.equal(submitted.json().data.validacao.assinaturas.length, 0);
+    assert.equal(submitted.json().data.acoes.length, 0);
+
+    const releasedByPcm = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${workOrderId}/release`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(releasedByPcm.statusCode, 200, releasedByPcm.body);
+    assert.equal(releasedByPcm.json().data.status, 'RELEASED');
+    assert.equal(releasedByPcm.json().data.acoes.length, 1);
 
     const workOrderList = await app.inject({
       method: 'GET',
@@ -529,9 +573,9 @@ test(
     assert.ok(listedWorkOrder);
     assert.equal(listedWorkOrder.plano_id, ids.plan);
     assert.equal(listedWorkOrder.plano_versao_id, ids.planVersion);
-    assert.equal(listedWorkOrder.plano_itens_count, 3);
+    assert.equal(listedWorkOrder.plano_itens_count, 4);
     assert.equal(listedWorkOrder.acao_status, 'READY');
-    assert.equal(listedWorkOrder.assinaturas_realizadas, 2);
+    assert.equal(listedWorkOrder.assinaturas_realizadas, 0);
 
     const managerActions = await app.inject({
       method: 'GET',
@@ -552,13 +596,36 @@ test(
     const actionId: string = queue.json().data.itens[0].id;
     assert.equal(queue.json().data.itens[0].componente_tag, 'MOT-OPS-001');
 
+    await transaction(pool, async (client) => {
+      await client.query(
+        `UPDATE maintenance.work_order_actions
+         SET technical_analysis=jsonb_set(COALESCE(technical_analysis, '{}'::jsonb),
+             '{tecnicos_apoio_ids}', $2::jsonb, true)
+         WHERE id=$1`,
+        [actionId, JSON.stringify([ids.support])],
+      );
+    });
+    const supportQueue = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/operator-actions',
+      headers: bearer(identities.support),
+    });
+    assert.equal(supportQueue.statusCode, 200, supportQueue.body);
+    assert.equal(supportQueue.json().data.itens.length, 1);
+    assert.equal(supportQueue.json().data.itens[0].id, actionId);
+    const supportContext = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/operator-actions/${actionId}`,
+      headers: bearer(identities.support),
+    });
+    assert.equal(supportContext.statusCode, 200, supportContext.body);
     const actionContext = await app.inject({
       method: 'GET',
       url: `/v1/maintenance/operator-actions/${actionId}`,
       headers: bearer(identities.operator),
     });
     assert.equal(actionContext.statusCode, 200, actionContext.body);
-    assert.equal(actionContext.json().data.acao.checklist_itens.length, 3);
+    assert.equal(actionContext.json().data.acao.checklist_itens.length, 4);
     assert.equal(actionContext.json().data.execucao, null);
 
     const assumed = await app.inject({
@@ -568,7 +635,7 @@ test(
     });
     assert.equal(assumed.statusCode, 200, assumed.body);
     const executionId: string = assumed.json().data.id;
-    assert.equal(assumed.json().data.itens.length, 3);
+    assert.equal(assumed.json().data.itens.length, 4);
 
     const started = await app.inject({
       method: 'POST',
@@ -577,6 +644,11 @@ test(
       payload: { modo_parada: 'STOPPED' },
     });
     assert.equal(started.statusCode, 200, started.body);
+    const pcmUrl = `/v1/analytics/technical-summary?inicio=${encodeURIComponent(new Date(Date.now()-86400000).toISOString())}&fim=${encodeURIComponent(new Date(Date.now()+60000).toISOString())}`;
+    const activePcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
+    assert.equal(activePcm.statusCode,200,activePcm.body);
+    assert.equal(activePcm.json().data.pcm.atual.tecnicos_em_atividade,1);
+    assert.equal(activePcm.json().data.pcm.tecnicos[0].id,ids.operator);
 
     const resumedAtomically = await app.inject({
       method: 'POST',
@@ -591,8 +663,24 @@ test(
     const executionItems: readonly { id: string; tipo_resposta: string }[] =
       started.json().data.itens;
     const confirmation = executionItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
+    const inspection = executionItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
     const parameter = executionItems.find((item) => item.tipo_resposta === 'PARAMETRO')!;
     const evidence = executionItems.find((item) => item.tipo_resposta === 'EVIDENCIA')!;
+
+    const validationBeforeInspection = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/executions/${executionId}/validation`,
+      headers: bearer(identities.operator),
+    });
+    assert.equal(validationBeforeInspection.statusCode, 200, validationBeforeInspection.body);
+    assert.equal(validationBeforeInspection.json().data.pode_concluir, false);
+    assert.equal(
+      validationBeforeInspection.json().data.pendencias.some(
+        (item: { item_id: string; tipo: string }) =>
+          item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
+      ),
+      true,
+    );
 
     const answered = await app.inject({
       method: 'PUT',
@@ -607,6 +695,12 @@ test(
             observacao: null,
           },
           {
+            item_id: inspection.id,
+            resposta: 'OK',
+            valor: null,
+            observacao: 'Sem anormalidades.',
+          },
+          {
             item_id: parameter.id,
             resposta: null,
             valor: 160,
@@ -616,7 +710,24 @@ test(
       },
     });
     assert.equal(answered.statusCode, 200, answered.body);
-    assert.equal(answered.json().data.quantidade_salva, 2);
+    assert.equal(answered.json().data.quantidade_salva, 3);
+    const savedInspection = answered.json().data.execucao.itens.find(
+      (item: { id: string }) => item.id === inspection.id,
+    );
+    assert.equal(savedInspection.resposta_opcao, 'OK');
+    assert.equal(savedInspection.observacao, 'Sem anormalidades.');
+
+    const reloadedAction = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/operator-actions/${actionId}`,
+      headers: bearer(identities.operator),
+    });
+    assert.equal(reloadedAction.statusCode, 200, reloadedAction.body);
+    const reloadedInspection = reloadedAction.json().data.execucao.itens.find(
+      (item: { id: string }) => item.id === inspection.id,
+    );
+    assert.equal(reloadedInspection.resposta_opcao, 'OK');
+    assert.equal(reloadedInspection.observacao, 'Sem anormalidades.');
 
     const blockedCompletion = await app.inject({
       method: 'POST',
@@ -639,6 +750,24 @@ test(
     assert.equal(blockedValidation.statusCode, 200, blockedValidation.body);
     assert.equal(blockedValidation.json().data.pode_concluir, false);
     assert.equal(blockedValidation.json().data.evidencias_pendentes, 1);
+    assert.equal(
+      blockedValidation.json().data.pendencias.some(
+        (item: { item_id: string; tipo: string }) =>
+          item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
+      ),
+      false,
+    );
+    const evidenceBlocker = blockedValidation.json().data.pendencias.find(
+      (item: { item_id: string; tipo: string }) =>
+        item.item_id === evidence.id && item.tipo === 'EVIDENCIA_OBRIGATORIA',
+    );
+    assert.deepEqual(evidenceBlocker, {
+      item_id: evidence.id,
+      titulo: 'Fotografar condição',
+      sequencia: 4,
+      tipo: 'EVIDENCIA_OBRIGATORIA',
+      mensagem: 'Evidência obrigatória não anexada.',
+    });
 
     const evidenced = await app.inject({
       method: 'POST',
@@ -737,21 +866,76 @@ test(
       payload: {
         resultado: 'Preventiva concluída com sucesso.',
         observacao: 'Equipamento liberado.',
+        relatorio_tecnico: {
+          diagnostico_tecnico: 'Desgaste no rolamento confirmado.',
+          acao_realizada: 'Rolamento substituído e conjunto alinhado.',
+          pecas_materiais: '1 rolamento 6204; 30 g de graxa.',
+          medicoes: 'Vibração após intervenção: 1,2 mm/s.',
+        },
         modo_parada: 'STOPPED',
       },
     });
     assert.equal(completed.statusCode, 200, completed.body);
     assert.equal(completed.json().data.execucao.status, 'COMPLETED');
+    assert.equal(
+      completed.json().data.execucao.relatorio_tecnico.diagnostico_tecnico,
+      'Desgaste no rolamento confirmado.',
+    );
+    assert.equal(
+      completed.json().data.execucao.relatorio_tecnico.pecas_materiais,
+      '1 rolamento 6204; 30 g de graxa.',
+    );
 
+    const awaitingTechnicalReview = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/work-orders/${workOrderId}`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(awaitingTechnicalReview.statusCode, 200, awaitingTechnicalReview.body);
+    // IN_TECHNICAL_REVIEW é o valor canônico persistido para “aguardando validação”.
+    assert.equal(awaitingTechnicalReview.json().data.status, 'IN_TECHNICAL_REVIEW');
+
+    await transaction(pool, async client => {
+      assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),true);
+    });
+    const bypassRelease = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/actions/${actionId}/review`,
+      headers: bearer(identities.quality),
+      payload: { decisao: 'APPROVE', comentario: 'Tentativa de aprovação sem as assinaturas.' },
+    });
+    assert.equal(bypassRelease.statusCode, 409, bypassRelease.body);
+    for (const token of [identities.quality, identities.safety]) {
+      const signedAfterExecution = await app.inject({
+        method: 'POST',
+        url: `/v1/workflow/technical-demands/${demandId}/sign`,
+        headers: bearer(token),
+        payload: {
+          declaracao:
+            'Confirmo a liberação após verificar o relatório e as evidências da intervenção.',
+          significado: 'Liberação pós-intervenção',
+        },
+      });
+      assert.equal(signedAfterExecution.statusCode, 200, signedAfterExecution.body);
+      assert.equal(
+        signedAfterExecution.json().data.acoes.length,
+        1,
+        'Assinar a liberação não deve gerar outra ação',
+      );
+    }
+
+    await transaction(pool, async client => {
+      assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),false);
+    });
     const completedAction = await app.inject({
       method: 'GET',
       url: `/v1/maintenance/actions/${actionId}`,
       headers: bearer(identities.quality),
     });
     assert.equal(completedAction.statusCode, 200, completedAction.body);
-    assert.equal(completedAction.json().data.acao.status, 'PENDING');
+    assert.equal(completedAction.json().data.acao.status, 'COMPLETED');
     assert.equal(completedAction.json().data.execucao.status, 'COMPLETED');
-    assert.equal(completedAction.json().data.execucao.itens.length, 3);
+    assert.equal(completedAction.json().data.execucao.itens.length, 4);
 
     const emptyQueue = await app.inject({
       method: 'GET',
@@ -772,7 +956,7 @@ test(
     });
     assert.equal(reviewed.statusCode, 200, reviewed.body);
     assert.equal(reviewed.json().data.status, 'COMPLETED');
-    assert.equal(reviewed.json().data.already_validated, false);
+    assert.equal(reviewed.json().data.already_validated, true);
 
     const repeatedReview = await app.inject({
       method: 'POST',
@@ -797,6 +981,170 @@ test(
       assert.equal(Number(persisted.rows[0]!.signatures), 2);
       assert.equal(Number(persisted.rows[0]!.readings), 1);
       assert.equal(persisted.rows[0]!.work_order_status, 'COMPLETED');
+    });
+    for (const scenario of [
+      { type: 'CORRECTIVE', scheduled: true, release: true },
+      { type: 'INSPECTION', scheduled: true, release: true },
+      { type: 'PREVENTIVE', scheduled: true, release: false },
+      { type: 'PREVENTIVE', scheduled: false, release: true },
+    ]) {
+      const ordinary = await app.inject({
+        method: 'POST',
+        url: '/v1/maintenance/work-orders',
+        headers: bearer(identities.admin),
+        payload: {
+          plano_versao_id: ids.planVersion,
+          tipo_origem: 'ADMIN',
+          entidade_origem_id: null,
+          tipo_trabalho: scenario.type,
+          titulo: 'Atividade sem validação obrigatória',
+          descricao: 'Fluxo comum sem exigência de Qualidade/Segurança.',
+          prioridade: scenario.type === 'CORRECTIVE' ? 'CRITICAL' : 'LOW',
+          responsavel_id: null,
+          programada_para: scenario.scheduled ? new Date(Date.now() + (scenario.type === 'PREVENTIVE' ? 86400000 : -60000)).toISOString() : null,
+          analise_tecnica: { exige_liberacao_pos_intervencao: scenario.release },
+        },
+      });
+      assert.equal(ordinary.statusCode, 200, ordinary.body);
+      const approved = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/submit-review`,
+        headers: bearer(identities.admin),
+        payload: {
+          politica_assinatura: 'QUALIDADE_E_SEGURANCA',
+          assinaturas_exigidas: 2,
+          primeira_resposta_ate: null,
+          resolucao_ate: null,
+        },
+      });
+      assert.equal(approved.statusCode, 200, approved.body);
+      assert.equal(approved.json().data.validacao, null);
+      assert.equal(approved.json().data.status, 'APPROVED');
+      const released = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/release`,
+        headers: bearer(identities.admin),
+      });
+      assert.equal(released.statusCode, 200, released.body);
+      assert.equal(released.json().data.status, 'RELEASED');
+    }
+    const finalPcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
+    assert.equal(finalPcm.statusCode,200,finalPcm.body);
+    assert.equal(finalPcm.json().data.pcm.atual.tecnicos_em_atividade,0);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_abertas,5);
+    assert.equal(finalPcm.json().data.pcm.atual.backlog_horas_estimadas,3.75);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_criticas,1);
+    assert.equal(finalPcm.json().data.pcm.atual.ordens_atrasadas,3);
+    assert.equal(finalPcm.json().data.pcm.atual.preventivas_proximas,1);
+    assert.equal(finalPcm.json().data.pcm.preventivas.length,1);
+
+    const normalWorkOrder = await app.inject({
+      method: 'POST', url: '/v1/maintenance/work-orders', headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion, tipo_origem: 'ADMIN', entidade_origem_id: null,
+        tipo_trabalho: 'PREVENTIVE', titulo: 'Preventiva normal concluída pelo técnico',
+        descricao: 'Fluxo normal sem validação posterior.', prioridade: 'MEDIUM',
+        responsavel_id: null, programada_para: new Date(Date.now() + 86400000).toISOString(),
+        analise_tecnica: { resultado_esperado: 'Equipamento liberado.' },
+      },
+    });
+    assert.equal(normalWorkOrder.statusCode, 200, normalWorkOrder.body);
+    const normalWorkOrderId: string = normalWorkOrder.json().data.id;
+    const normalApproved = await app.inject({
+      method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/submit-review`, headers: bearer(identities.admin),
+      payload: { politica_assinatura: 'QUALIDADE', assinaturas_exigidas: 1, primeira_resposta_ate: null, resolucao_ate: null },
+    });
+    assert.equal(normalApproved.statusCode, 200, normalApproved.body);
+    assert.equal(normalApproved.json().data.status, 'APPROVED');
+    assert.equal(normalApproved.json().data.validacao, null);
+
+    const normalReleased = await app.inject({
+      method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/release`, headers: bearer(identities.admin),
+    });
+    assert.equal(normalReleased.statusCode, 200, normalReleased.body);
+    assert.equal(normalReleased.json().data.status, 'RELEASED');
+
+    await transaction(pool, async (client) => {
+      const legacyDemandId = randomUUID();
+      const legacyRequirementId = randomUUID();
+      await client.query(
+        `INSERT INTO workflow.technical_demands
+         (id,tenant_id,demand_type,entity_type,entity_id,origin_type,title,description,priority,status,created_by,
+          creator_role_snapshot,signature_required,required_signature_count,segregation_required,signature_policy,payload_hash_sha256)
+         VALUES ($1,$2,'WORK_ORDER_VALIDATION','WORK_ORDER',$3,'TEST','Assinatura isolada',
+          'Não deve reter uma OS normal após a conclusão técnica.','MEDIUM','AWAITING_SIGNATURE',$4,
+          'ADMIN:ADMIN',true,1,true,'QUALIDADE',$5)`,
+        [legacyDemandId, tenantId, normalWorkOrderId, ids.admin, 'e'.repeat(64)],
+      );
+      await client.query(
+        `INSERT INTO workflow.demand_validator_requirements
+         (id,tenant_id,technical_demand_id,requirement_code,technical_area_id,required_count,status)
+         VALUES ($1,$2,$3,'QUALITY_SIGNATURE',$4,1,'PENDING')`,
+        [legacyRequirementId, tenantId, legacyDemandId, ids.qualityArea],
+      );
+      await client.query(
+        `UPDATE maintenance.work_orders SET technical_demand_id=$2 WHERE id=$1`,
+        [normalWorkOrderId, legacyDemandId],
+      );
+    });
+
+    const normalQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.operator) });
+    assert.equal(normalQueue.statusCode, 200, normalQueue.body);
+    const normalAction = normalQueue.json().data.itens.find(
+      (item: { ordem_id: string }) => item.ordem_id === normalWorkOrderId,
+    );
+    assert.ok(normalAction);
+    const normalActionId: string = normalAction.id;
+    const normalStarted = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`, headers: bearer(identities.operator),
+      payload: { modo_parada: 'NO_STOP' },
+    });
+    assert.equal(normalStarted.statusCode, 200, normalStarted.body);
+    assert.equal(normalStarted.json().data.execucao.operador_id, ids.operator);
+    const normalExecutionId: string = normalStarted.json().data.execucao.id;
+    const normalItems: readonly { id: string; tipo_resposta: string }[] = normalStarted.json().data.execucao.itens;
+    const normalConfirmation = normalItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
+    const normalInspection = normalItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
+    const normalParameter = normalItems.find((item) => item.tipo_resposta === 'PARAMETRO')!;
+    const normalEvidence = normalItems.find((item) => item.tipo_resposta === 'EVIDENCIA')!;
+    const normalResponses = await app.inject({
+      method: 'PUT', url: `/v1/maintenance/operator-actions/${normalActionId}/responses`, headers: bearer(identities.operator),
+      payload: { itens: [
+        { item_id: normalConfirmation.id, resposta: 'SIM', valor: null, observacao: null },
+        { item_id: normalInspection.id, resposta: 'OK', valor: null, observacao: 'Condição normal.' },
+        { item_id: normalParameter.id, resposta: null, valor: 160, observacao: null },
+      ] },
+    });
+    assert.equal(normalResponses.statusCode, 200, normalResponses.body);
+    const normalEvidenceSaved = await app.inject({
+      method: 'POST', url: `/v1/maintenance/executions/${normalExecutionId}/items/${normalEvidence.id}/evidence`, headers: bearer(identities.operator),
+      payload: { objeto_armazenamento_id: ids.storageObject, tipo: 'PHOTO', observacao: 'Evidência normal.', capturada_em: null },
+    });
+    assert.equal(normalEvidenceSaved.statusCode, 200, normalEvidenceSaved.body);
+    const normalCompleted = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/complete`, headers: bearer(identities.operator),
+      payload: { resultado: 'Preventiva normal concluída.', observacao: null, modo_parada: 'NO_STOP' },
+    });
+    assert.equal(normalCompleted.statusCode, 200, normalCompleted.body);
+    const normalClosed = await app.inject({
+      method: 'GET', url: `/v1/maintenance/work-orders/${normalWorkOrderId}`, headers: bearer(identities.admin),
+    });
+    assert.equal(normalClosed.statusCode, 200, normalClosed.body);
+    assert.equal(normalClosed.json().data.status, 'COMPLETED');
+    assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
+    await transaction(pool, async (client) => {
+      const isolatedSignatureRequirement = await client.query(
+        `SELECT demand.demand_type, requirement.requirement_code
+         FROM maintenance.work_orders work_order
+         JOIN workflow.technical_demands demand ON demand.id=work_order.technical_demand_id
+         JOIN workflow.demand_validator_requirements requirement ON requirement.technical_demand_id=demand.id
+         WHERE work_order.id=$1`,
+        [normalWorkOrderId],
+      );
+      assert.deepEqual(isolatedSignatureRequirement.rows[0], {
+        demand_type: 'WORK_ORDER_VALIDATION',
+        requirement_code: 'QUALITY_SIGNATURE',
+      });
     });
   },
 );

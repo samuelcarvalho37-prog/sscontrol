@@ -235,6 +235,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       })
     } catch (cause) {
       if (cause instanceof ApiRequestError) {
+        if (cause.code === 'CORS_ORIGIN_DENIED') {
+          setError('O endereço deste portal não está autorizado na API. Verifique a configuração da conexão.')
+          return
+        }
         if (cause.code === 'ACCOUNT_LOCKED') {
           setView('locked')
           return
@@ -365,9 +369,9 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     return (
       <main className="auth-shell auth-shell--startup">
         <section className="auth-startup" aria-live="polite" aria-busy="true">
-          <span className="auth-brand__mark auth-brand__mark--startup" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div className="auth-startup__spinner" aria-hidden="true" />
-          <h1>FAB Control</h1>
+          <h1>VORQIX</h1>
           <p>{startupLabel}</p>
           <div className="auth-startup__progress" aria-hidden="true">
             <span />
@@ -390,10 +394,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="auth-title">
         <header className="auth-brand">
-          <span className="auth-brand__mark" aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
             <span className="auth-brand__eyebrow">Operação industrial</span>
-            <h1 id="auth-title">FAB Control</h1>
+            <h1 id="auth-title">VORQIX</h1>
           </div>
         </header>
 

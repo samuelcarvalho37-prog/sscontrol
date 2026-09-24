@@ -27,7 +27,7 @@ import { getAdminImportCatalog } from '../api/imports'
 import { listAdminInterventions } from '../api/interventions'
 import { getSystemHealth, warmupGestor } from '../api/system'
 
-export type WorkspaceStartupRole = 'ADMIN' | 'GESTOR'
+export type WorkspaceStartupRole = string
 
 export interface WorkspaceStartupProgress {
   percent: number
@@ -48,7 +48,7 @@ type ProgressReporter = (progress: WorkspaceStartupProgress) => void
 type StartupTask = () => Promise<unknown>
 
 function normalizeRole(session: GestorSession): WorkspaceStartupRole {
-  return session.user.perfil.trim().toUpperCase() === 'ADMIN' ? 'ADMIN' : 'GESTOR'
+  return session.user.primaryRoleCode ?? session.user.perfil
 }
 
 async function runGroup(
@@ -224,7 +224,9 @@ export async function prepareWorkspace(
   })
   const warmup = await warmupGestor(session.token, signal)
 
-  const verifiedModules = role === 'ADMIN'
+  const verifiedModules = session.user.capacidades !== undefined
+    ? await prepareCapabilityWorkspace(session.user.capacidades, signal)
+    : role === 'ADMIN'
     ? await prepareAdminWorkspace(signal, report)
     : await prepareManagerWorkspace(signal, report)
 
@@ -244,4 +246,13 @@ export async function prepareWorkspace(
     loadedTables: warmup.loaded_tables ?? Object.keys(warmup.loaded ?? {}).length,
     verifiedModules,
   }
+}
+
+async function prepareCapabilityWorkspace(capabilities: string[], signal: AbortSignal): Promise<number> {
+  const tasks: StartupTask[] = []
+  if (capabilities.includes('maintenance.work-orders.read')) tasks.push(() => getGestorTechnicalContext(signal), () => getGestorTechnicalDemands(signal))
+  if (capabilities.includes('workflow.notifications.read')) tasks.push(() => getUnreadNotificationCount(signal))
+  if (capabilities.includes('admin.identity.read')) tasks.push(() => listAdminUsers({}, signal), () => getAdminPermissionMatrix(signal))
+  await Promise.all(tasks.map((task) => task()))
+  return tasks.length
 }

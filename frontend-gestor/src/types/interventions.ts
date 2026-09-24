@@ -13,13 +13,16 @@ export interface AdminTechnicalDemandSummary extends AdminEntityRecord {
 }
 
 export interface AdminIntervention {
+  exige_liberacao_pos_intervencao?: boolean
   id: string
   codigo: string
-  ativo_id: string
+  ativo_id?: string
+  ativo_tag?: string
   componente_id?: string
-  plano_id: string
+  plano_id?: string
   plano_versao_id?: string
   origem: string
+  entidade_origem_id?: string
   tipo: string
   titulo: string
   descricao: string
@@ -29,6 +32,14 @@ export interface AdminIntervention {
   modo_parada_manutencao?: string
   ativo_tag?: string
   ativo_nome?: string
+  linha_id?: string
+  linha_tag?: string
+  linha_nome?: string
+  setor_id?: string
+  setor_tag?: string
+  setor_nome?: string
+  responsavel_id?: string
+  responsavel_nome?: string
   componente_tag?: string
   componente_nome?: string
   plano_nome?: string
@@ -37,15 +48,26 @@ export interface AdminIntervention {
   acao_id?: string
   acao_status?: string
   demanda?: AdminTechnicalDemandSummary | null
+  auditoria?: {
+    acao: string
+    entidade: string
+    entidade_id: string
+    usuario: string | null
+    perfil: string | null
+    ocorreu_em: string
+  }[]
   criado_em?: string
   atualizado_em?: string
 }
 
 export interface AdminInterventionInput {
+  origem?: string
+  entidade_origem_id?: string
+  exige_liberacao_pos_intervencao?: boolean
   id?: string
-  ativo_id: string
+  ativo_id?: string
   componente_id?: string
-  plano_id: string
+  plano_id?: string
   plano_versao_id?: string
   tipo: string
   titulo: string

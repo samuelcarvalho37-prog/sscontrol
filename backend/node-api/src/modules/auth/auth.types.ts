@@ -1,4 +1,5 @@
 export type SessionPurpose = 'APPLICATION' | 'FIRST_ACCESS' | 'PLATFORM_MAINTENANCE';
+export type RoleType = 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'CUSTOM';
 
 export interface AuthenticatedUser {
   readonly id: string;
@@ -6,7 +7,10 @@ export interface AuthenticatedUser {
   readonly employeeNumber: string;
   readonly name: string;
   readonly email: string | null;
-  readonly profile: 'ADMIN' | 'GESTOR' | 'OPERADOR' | 'SISTEMA';
+  readonly profile: string;
+  readonly primaryRoleCode: string | null;
+  readonly roleCodes: readonly string[];
+  readonly roleType: RoleType | null;
   readonly areaId: string | null;
   readonly technicalRoleId: string | null;
   readonly roles: readonly string[];
@@ -27,6 +31,8 @@ export interface RequestMetadata {
   readonly ipAddress: string;
   readonly userAgent: string | null;
   readonly traceId: string;
+  readonly host: string | undefined;
+  readonly developmentTenantSlug: string | undefined;
 }
 
 export interface LoginInput {

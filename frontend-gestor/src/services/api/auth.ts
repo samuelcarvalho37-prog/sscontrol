@@ -7,6 +7,10 @@ export interface AuthenticatedGestor {
   email: string
   matricula: string
   perfil: string
+  primaryRoleCode?: string | null
+  roleCodes?: string[]
+  roleType?: 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'CUSTOM' | null
+  capacidades?: string[]
 }
 
 export interface GestorSession {
@@ -89,15 +93,6 @@ export async function loginGestor(
   }
 
   assertReleaseVersion(response.data.release_version)
-
-  const profile = response.data.usuario.perfil.trim().toUpperCase()
-  if (!['GESTOR', 'ADMIN'].includes(profile)) {
-    throw new ApiRequestError(
-      'Este aplicativo permite acesso apenas aos perfis GESTOR ou ADMIN.',
-      'ROLE_NOT_ALLOWED',
-      { received: profile },
-    )
-  }
 
   return response.data
 }

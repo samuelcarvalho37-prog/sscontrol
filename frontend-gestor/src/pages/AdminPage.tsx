@@ -8,6 +8,8 @@ import { AdminChecklistBuilder } from '../components/AdminChecklistBuilder'
 import { AdminTechnicalStructure } from '../components/AdminTechnicalStructure'
 import { AdminInterventionsWorkspace } from '../components/AdminInterventionsWorkspace'
 import { AdminAnalyticsWorkspace } from '../components/AdminAnalyticsWorkspace'
+import { PcmDashboard } from '../components/PcmDashboard'
+import { usesNodeApi } from '../services/api/config'
 import { AdminDocumentsWorkspace } from '../components/AdminDocumentsWorkspace'
 import { AdminGovernanceWorkspace } from '../components/AdminGovernanceWorkspace'
 import { AdminBackupWorkspace } from '../components/AdminBackupWorkspace'
@@ -56,7 +58,7 @@ export type AdminModule =
   | 'configuration'
   | 'users'
   | 'permissions'
-type EditablePermissionProfile = 'GESTOR' | 'OPERADOR'
+type EditablePermissionProfile = string
 
 const PROFILE_LABELS: Record<AdminUserProfile, string> = {
   ADMIN: 'Administrador',
@@ -121,6 +123,8 @@ export function AdminPage({
     ])
     setUsers(nextUsers)
     setPermissionMatrix(nextMatrix)
+    setSelectedPermissionProfile((current) => nextMatrix.perfis.some((item) => item.perfil === current && item.editavel)
+      ? current : nextMatrix.perfis.find((item) => item.editavel)?.perfil ?? '')
   }, [])
 
   useEffect(() => {
@@ -147,7 +151,7 @@ export function AdminPage({
   const visibleUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
     return users.filter((user) => {
-      if (profileFilter && user.perfil !== profileFilter) return false
+      if (profileFilter && !(user.roleCodes ?? [user.perfil]).includes(profileFilter)) return false
       if (statusFilter && user.status !== statusFilter) return false
       if (!term) return true
       return [user.nome, user.email, user.matricula, user.id]
@@ -269,7 +273,7 @@ export function AdminPage({
           )),
         }
       })
-      setNotice(`Permissões do perfil ${PROFILE_LABELS[selectedPermissionProfile]} atualizadas e auditadas.`)
+      setNotice(`Permissões do perfil ${selectedPermissionProfile} atualizadas e auditadas.`)
     } catch (cause) {
       if (isGestorAuthenticationError(cause)) {
         onSessionExpired()
@@ -410,7 +414,7 @@ export function AdminPage({
         />
       ) : null}
 
-      {tab === 'analytics' ? <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} /> : null}
+      {tab === 'analytics' ? (usesNodeApi() ? <PcmDashboard onSessionExpired={onSessionExpired} /> : <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} />) : null}
 
       {tab === 'documents' ? <AdminDocumentsWorkspace onSessionExpired={onSessionExpired} /> : null}
 
@@ -442,9 +446,7 @@ export function AdminPage({
                 <span>Perfil</span>
                 <select value={profileFilter} onChange={(event) => setProfileFilter(event.target.value as AdminUserProfile | '')}>
                   <option value="">Todos</option>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="GESTOR">Gestor</option>
-                  <option value="OPERADOR">Operador</option>
+                  {permissionMatrix?.perfis.map((item) => <option key={item.perfil} value={item.perfil}>{item.nome ?? item.perfil}</option>)}
                 </select>
               </label>
               <label>
@@ -471,7 +473,7 @@ export function AdminPage({
                       <span className="admin-user-avatar">{user.nome.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
                       <span><strong>{user.nome}{self ? ' · Você' : ''}</strong><small>{user.matricula} · {user.email}</small></span>
                     </div>
-                    <div><span className={`profile-chip profile-chip--${user.perfil.toLowerCase()}`}>{PROFILE_LABELS[user.perfil]}</span><small className={user.status === 'ATIVO' ? 'user-status user-status--active' : 'user-status'}>{user.status}</small></div>
+                    <div><span className={`profile-chip profile-chip--${(user.perfil ?? '').toLowerCase()}`}>{(user.roleCodes ?? [user.perfil]).join(', ') || 'Sem perfil ativo'}</span><small className={user.status === 'ATIVO' ? 'user-status user-status--active' : 'user-status'}>{user.status}</small></div>
                     <div className="admin-user-security">
                       {blocked ? <span className="security-flag security-flag--danger">Bloqueado até {formatDate(user.bloqueado_ate)}</span> : null}
                       {user.recuperacao_pendente ? <span className="security-flag security-flag--warning">Recuperação {user.recuperacao_referencia}</span> : null}
@@ -501,14 +503,14 @@ export function AdminPage({
             <article className="permission-profile-card permission-profile-card--locked">
               <ShieldIcon /><span><strong>Administrador</strong><small>Acesso técnico integral e protegido contra bloqueio.</small></span><b>Protegido</b>
             </article>
-            {(['GESTOR', 'OPERADOR'] as EditablePermissionProfile[]).map((profile) => (
+            {(permissionMatrix?.perfis.filter((item) => item.editavel).map((item) => item.perfil) ?? []).map((profile) => (
               <button
                 key={profile}
                 type="button"
                 className={selectedPermissionProfile === profile ? 'permission-profile-card is-active' : 'permission-profile-card'}
                 onClick={() => setSelectedPermissionProfile(profile)}
               >
-                <UsersIcon /><span><strong>{PROFILE_LABELS[profile]}</strong><small>{permissionMatrix?.perfis.find((item) => item.perfil === profile)?.capacidades.filter((item) => item.permitido).length ?? 0} capacidades habilitadas</small></span>
+                <UsersIcon /><span><strong>{PROFILE_LABELS[profile] ?? profile}</strong><small>{permissionMatrix?.perfis.find((item) => item.perfil === profile)?.capacidades.filter((item) => item.permitido).length ?? 0} capacidades habilitadas</small></span>
               </button>
             ))}
           </aside>
@@ -516,7 +518,7 @@ export function AdminPage({
           <section className="permission-capabilities">
             <header>
               <div><span className="eyebrow">{selectedPermissionProfile}</span><h2>Capacidades do perfil</h2><p>Desative somente o necessário. O backend continua validando propriedade, sessão e contexto de cada operação.</p></div>
-              <button className="primary-button" type="button" disabled={savingPermissions} onClick={() => void savePermissions()}>{savingPermissions ? 'Salvando…' : 'Salvar matriz'}</button>
+              <button className="primary-button" type="button" disabled={savingPermissions || !selectedPermissions?.editavel} onClick={() => void savePermissions()}>{savingPermissions ? 'Salvando…' : 'Salvar matriz'}</button>
             </header>
             <div className="permission-capability-list">
               {selectedPermissions?.capacidades.map((capability) => (

@@ -318,9 +318,9 @@ export function PlatformMotorWorkspace({
     <main className="platform-motor-shell">
       <header className="platform-motor-topbar">
         <div className="platform-motor-brand">
-          <span aria-hidden="true">FC</span>
+          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
-            <strong>Fab Control</strong>
+            <strong>VORQIX</strong>
             <small>Núcleo protegido do Motor</small>
           </div>
         </div>

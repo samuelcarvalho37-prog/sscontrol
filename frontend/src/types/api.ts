@@ -247,6 +247,7 @@ export interface OperatorActionDetailData {
     email?: string;
   } | null;
   execucao?: {
+    relatorio_tecnico?: ExecutionTechnicalReport;
     id?: string;
     acao_id?: string;
     operador_id?: string;
@@ -500,10 +501,18 @@ export type OperatorFinalOutcome =
   | "OUTRO";
 
 export interface FinalizeActionInput {
+  relatorio_tecnico?: ExecutionTechnicalReport;
   resultado: "OK" | "NOK";
   resultado_operacional: OperatorFinalOutcome;
   observacao: string;
   duracao_segundos?: number;
+}
+
+export interface ExecutionTechnicalReport {
+  diagnostico_tecnico: string;
+  acao_realizada: string;
+  pecas_materiais: string;
+  medicoes: string;
 }
 
 export interface FinalizeActionData {

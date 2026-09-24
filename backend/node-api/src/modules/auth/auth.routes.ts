@@ -1,5 +1,6 @@
 import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 
+import type { Environment } from '../../config/environment.js';
 import type { AuthController } from './auth.controller.js';
 import {
   emptyBodySchema,
@@ -10,13 +11,22 @@ import {
   successEnvelopeSchema,
 } from './auth.schemas.js';
 
+export type AuthRateLimitTarget = 'login' | 'firstAccess' | 'recovery' | 'maintenance';
+
+export function authRateLimitConfig(environment: Environment, target: AuthRateLimitTarget) {
+  const limit = environment.auth.rateLimit[target];
+  return {
+    max: limit.max,
+    timeWindow: limit.windowSeconds * 1_000,
+  };
+}
+
 export function createAuthRoutes(controller: AuthController): FastifyPluginAsyncTypebox {
   return (app) => {
     app.post('/v1/auth/login', {
       config: {
         rateLimit: {
-          max: 10,
-          timeWindow: '1 minute',
+          ...authRateLimitConfig(app.environment, 'login'),
         },
       },
       schema: {
@@ -31,8 +41,7 @@ export function createAuthRoutes(controller: AuthController): FastifyPluginAsync
     app.post('/v1/auth/first-access', {
       config: {
         rateLimit: {
-          max: 5,
-          timeWindow: '5 minutes',
+          ...authRateLimitConfig(app.environment, 'firstAccess'),
         },
       },
       schema: {
@@ -47,8 +56,7 @@ export function createAuthRoutes(controller: AuthController): FastifyPluginAsync
     app.post('/v1/auth/recovery', {
       config: {
         rateLimit: {
-          max: 3,
-          timeWindow: '10 minutes',
+          ...authRateLimitConfig(app.environment, 'recovery'),
         },
       },
       schema: {
@@ -63,8 +71,7 @@ export function createAuthRoutes(controller: AuthController): FastifyPluginAsync
     app.post('/v1/auth/maintenance/exchange', {
       config: {
         rateLimit: {
-          max: 5,
-          timeWindow: '15 minutes',
+          ...authRateLimitConfig(app.environment, 'maintenance'),
         },
       },
       schema: {

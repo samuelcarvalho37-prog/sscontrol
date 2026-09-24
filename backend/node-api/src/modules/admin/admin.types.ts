@@ -1,4 +1,4 @@
-export type AdminProfile = 'ADMIN' | 'GESTOR' | 'OPERADOR';
+export type AdminProfile = string;
 export type AdminStatus = 'ATIVO' | 'INATIVO';
 
 export interface AdminAuditMetadata {

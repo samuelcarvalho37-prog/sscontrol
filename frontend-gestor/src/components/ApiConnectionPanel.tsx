@@ -93,7 +93,7 @@ export function ApiConnectionPanel({ compact = false, onSaved }: ApiConnectionPa
       <div className="connection-panel__heading">
         <div>
           <span className="eyebrow">CONEXÃO SEGURA</span>
-          <h2>API do Fab Control</h2>
+          <h2>API do VORQIX</h2>
         </div>
         <span className={getApiUrl() ? 'status-chip status-chip--success' : 'status-chip'}>
           {getApiUrl() ? 'Informada' : 'Pendente'}
