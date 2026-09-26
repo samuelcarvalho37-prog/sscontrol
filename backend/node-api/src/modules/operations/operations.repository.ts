@@ -27,6 +27,10 @@ function required<T extends QueryResultRow>(rows: readonly T[], message: string)
   return row;
 }
 
+function nonEmptyText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 export class OperationsRepository {
   async findPublishedPlanContext(
     client: PoolClient,
@@ -524,6 +528,17 @@ export class OperationsRepository {
       `UPDATE maintenance.work_orders SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1`,
       [orderId],
     );
+    await client.query(
+      `UPDATE workflow.notification_recipients recipient
+       SET dismissed_at=COALESCE(recipient.dismissed_at,clock_timestamp()),
+           read_at=COALESCE(recipient.read_at,clock_timestamp())
+       FROM workflow.notifications notification
+       WHERE notification.id=recipient.notification_id
+         AND notification.entity_id=$1
+         AND notification.entity_type IN ('WORK_ORDER','ORDEM_SERVICO','MAINTENANCE_WORK_ORDER')
+         AND recipient.dismissed_at IS NULL`,
+      [orderId],
+    );
   }
 
   async findDemand(client: PoolClient, id: string, lock = false): Promise<OperationsRow | null> {
@@ -731,14 +746,15 @@ export class OperationsRepository {
     meaning: string,
     declaration: string,
     signatureHash: string,
-  ): Promise<void> {
-    await client.query(
+  ): Promise<string> {
+    const result = await client.query<OperationsRow>(
       `
         INSERT INTO workflow.technical_signatures (
           tenant_id, technical_demand_id, validator_requirement_id, entity_type,
           entity_id, entity_version, user_id, role_snapshot, technical_area_id,
           technical_role_id, meaning, declaration, payload_hash_sha256, signature_hash_sha256
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        RETURNING id
       `,
       [
         tenantId,
@@ -757,6 +773,62 @@ export class OperationsRepository {
         signatureHash,
       ],
     );
+    return required(result.rows, 'A assinatura técnica não foi persistida.').id;
+  }
+
+  async createTechnicalValidationReport(
+    client: PoolClient,
+    input: {
+      tenantId: string;
+      signatureId: string;
+      workOrderId: string;
+      reportType: 'QUALITY' | 'SAFETY';
+      technicalOpinion: string;
+      attestationText: string;
+      contentHash: string;
+    },
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO workflow.technical_validation_reports (
+        tenant_id,technical_signature_id,work_order_id,report_type,report_code,
+        technical_opinion,attestation_text,content_hash_sha256
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        input.tenantId,
+        input.signatureId,
+        input.workOrderId,
+        input.reportType,
+        `RPT-${input.reportType}-${input.contentHash.slice(0, 12).toUpperCase()}`,
+        input.technicalOpinion,
+        input.attestationText,
+        input.contentHash,
+      ],
+    );
+  }
+
+  async listTechnicalValidationReports(
+    client: PoolClient,
+    technicalAreaCode: string,
+  ): Promise<readonly OperationsRow[]> {
+    const reportType = technicalAreaCode === 'QUALITY' ? 'QUALITY' : 'SAFETY';
+    const result = await client.query<OperationsRow>(
+      `SELECT report.id,report.report_code AS codigo,report.report_type AS tipo,
+              report.technical_opinion AS parecer,report.attestation_text AS declaracao,
+              report.digital_signature_storage_key AS assinatura_digital,
+              report.approved_at AS aprovada_em,report.content_hash_sha256 AS hash,
+              signature.id AS assinatura_referencia,signature.signed_at AS assinado_em,
+              work_order.code AS os_codigo,work_order.title AS os_titulo,
+              signer.name AS assinante,'ASSINADO'::text AS status
+       FROM workflow.technical_validation_reports report
+       JOIN maintenance.work_orders work_order
+         ON work_order.tenant_id=report.tenant_id AND work_order.id=report.work_order_id
+       JOIN workflow.technical_signatures signature
+         ON signature.tenant_id=report.tenant_id AND signature.id=report.technical_signature_id
+       JOIN iam.users signer ON signer.tenant_id=signature.tenant_id AND signer.id=signature.user_id
+       WHERE report.report_type=$1 ORDER BY report.approved_at DESC`,
+      [reportType],
+    );
+    return result.rows;
   }
 
   async demandApprovalState(client: PoolClient, demandId: string): Promise<OperationsRow> {
@@ -1406,7 +1478,7 @@ export class OperationsRepository {
         classification,
         executionId,
         userId,
-        String(value),
+        value.toString(),
       ],
     );
   }
@@ -1565,7 +1637,7 @@ export class OperationsRepository {
         LIMIT 1`,
       [assetTag],
     );
-    return result.rows[0]?.id ? String(result.rows[0].id) : null;
+    return result.rows[0]?.id ?? null;
   }
 
   async ensurePublishedCorrectivePlanContext(
@@ -1592,7 +1664,8 @@ export class OperationsRepository {
     const planId = randomUUID();
     const planVersionId = randomUUID();
     const suffix = randomUUID().slice(0, 8).toUpperCase();
-    const assetTag = String(row.tag ?? assetId.slice(0, 8)).toUpperCase();
+    const assetTag = (nonEmptyText(row.tag) ?? assetId.slice(0, 8)).toUpperCase();
+    const assetName = nonEmptyText(row.name) ?? assetTag;
     const hash = createHash('sha256')
       .update(`auto-corrective:${tenantId}:${assetId}:${planVersionId}`, 'utf8')
       .digest('hex');
@@ -1601,7 +1674,7 @@ export class OperationsRepository {
       `INSERT INTO maintenance.checklist_templates (
          id,tenant_id,code,name,asset_id,checklist_type,criticality,lifecycle_status,created_by
        ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','MEDIUM','ACTIVE',$6)`,
-      [checklistId, tenantId, `CHK-COR-${assetTag}-${suffix}`, `Checklist corretivo · ${row.name}`, assetId, userId],
+       [checklistId, tenantId, `CHK-COR-${assetTag}-${suffix}`, `Checklist corretivo · ${assetName}`, assetId, userId],
     );
     await client.query(
       `INSERT INTO maintenance.checklist_template_versions (
@@ -1646,7 +1719,7 @@ export class OperationsRepository {
       `INSERT INTO maintenance.maintenance_plans (
          id,tenant_id,code,name,asset_id,plan_type,lifecycle_status,created_by
        ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','ACTIVE',$6)`,
-      [planId, tenantId, `PLN-COR-${assetTag}-${suffix}`, `Corretiva sob demanda · ${row.name}`, assetId, userId],
+       [planId, tenantId, `PLN-COR-${assetTag}-${suffix}`, `Corretiva sob demanda · ${assetName}`, assetId, userId],
     );
     await client.query(
       `INSERT INTO maintenance.maintenance_plan_versions (
@@ -1807,7 +1880,7 @@ export class OperationsRepository {
       [
         execution.work_order_id,
         createHash('sha256')
-          .update(JSON.stringify(await this.getExecutionDetail(client, String(execution.id))))
+          .update(JSON.stringify(await this.getExecutionDetail(client, execution.id)))
           .digest('hex'),
       ],
     );

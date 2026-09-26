@@ -1,9 +1,16 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import type { AnalyticsQuery } from './monitoring.types.js';
 
+interface PcmDashboardRow extends QueryResultRow {
+  readonly dashboard: unknown;
+}
+
 /** Runs inside the caller's read-only tenant transaction (including RLS). */
-export async function loadPcmDashboard(client: PoolClient, query: AnalyticsQuery) {
-  const result = await client.query(
+export async function loadPcmDashboard(
+  client: PoolClient,
+  query: AnalyticsQuery,
+): Promise<unknown> {
+  const result = await client.query<PcmDashboardRow>(
     `WITH bounds AS (
        SELECT $1::timestamptz AS start_at, LEAST($2::timestamptz,now()) AS end_at,
          GREATEST(0,EXTRACT(EPOCH FROM (LEAST($2::timestamptz,now())-$1::timestamptz))) AS seconds

@@ -19,6 +19,7 @@ import {
   getGestorStops,
   getGestorTechnicalContext,
   getGestorTechnicalDemands,
+  getGestorTechnicalReports,
   isGestorAuthenticationError,
 } from '../services/api/gestor'
 import type {
@@ -30,6 +31,7 @@ import type {
   GestorStop,
   GestorTechnicalContext,
   GestorTechnicalDemand,
+  GestorTechnicalReport,
   GestorWorkView,
 } from '../types/gestor'
 
@@ -88,6 +90,14 @@ function includesSearch(values: unknown[], search: string): boolean {
   )
 }
 
+function isInReportPeriod(value: string, period: string): boolean {
+  if (!period || period === 'ALL') return true
+  const approvedAt = new Date(value).getTime()
+  if (Number.isNaN(approvedAt)) return false
+  const days = period === 'TODAY' ? 1 : period === '7D' ? 7 : 30
+  return approvedAt >= Date.now() - days * 24 * 60 * 60 * 1000
+}
+
 export function ValidationsPage({
   initialView,
   onQueueCountChange,
@@ -95,6 +105,7 @@ export function ValidationsPage({
 }: ValidationsPageProps) {
   const [tab, setTab] = useState<GestorWorkView>(initialView)
   const [demands, setDemands] = useState<GestorTechnicalDemand[]>([])
+  const [reports, setReports] = useState<GestorTechnicalReport[]>([])
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
   const [actions, setActions] = useState<GestorAction[]>([])
@@ -110,6 +121,9 @@ export function ValidationsPage({
     useState<GestorOccurrence | null>(null)
   const [search, setSearch] = useState('')
   const [priority, setPriority] = useState('')
+  const [reportPeriod, setReportPeriod] = useState('ALL')
+  const [reportSigner, setReportSigner] = useState('')
+  const [reportStatus, setReportStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
@@ -140,12 +154,18 @@ export function ValidationsPage({
         const validationActions = actionData.filter(
           (action) => upper(action.status) === 'AGUARDANDO_VALIDACAO',
         )
+        const reportData = ['QUALITY', 'SAFETY'].includes(
+          upper(contextData.identidade.area_codigo),
+        )
+          ? await getGestorTechnicalReports(signal)
+          : []
         setActions(validationActions)
         setModels(modelData)
         setStops(stopData)
         setOccurrences(occurrenceData)
         setDemands(demandData)
         setTechnicalContext(contextData)
+        setReports(reportData)
         onQueueCountChange(
           demandData.length +
           validationActions.length +
@@ -248,6 +268,26 @@ export function ValidationsPage({
       )
     }),
     [occurrences, priority, search],
+  )
+
+  const reportsEnabled = ['QUALITY', 'SAFETY'].includes(
+    upper(technicalContext?.identidade.area_codigo),
+  )
+  const reportSigners = useMemo(
+    () => Array.from(new Set(reports.map((report) => report.assinante))).sort(),
+    [reports],
+  )
+  const filteredReports = useMemo(
+    () => reports.filter((report) => {
+      if (reportSigner && report.assinante !== reportSigner) return false
+      if (reportStatus && upper(report.status) !== reportStatus) return false
+      if (!isInReportPeriod(report.aprovada_em, reportPeriod)) return false
+      return includesSearch(
+        [report.codigo, report.os_codigo, report.os_titulo, report.assinante, report.tipo],
+        search,
+      )
+    }),
+    [reportPeriod, reportSigner, reportStatus, reports, search],
   )
 
   async function handleActionDecision(result: GestorDecisionResult) {
@@ -423,6 +463,17 @@ export function ValidationsPage({
           >
             <AlertIcon /> Operação <span>{occurrences.length + stops.length}</span>
           </button>
+          {reportsEnabled ? (
+            <button
+              className={tab === 'reports' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={tab === 'reports'}
+              onClick={() => setTab('reports')}
+            >
+              <CheckIcon /> Relatórios Técnicos <span>{reports.length}</span>
+            </button>
+          ) : null}
         </div>
 
         <section className="filter-bar" aria-label="Filtros da central">
@@ -430,21 +481,24 @@ export function ValidationsPage({
             <SearchIcon />
             <input
               value={search}
-              placeholder="Buscar por ID, ativo, área, cargo ou título"
+              placeholder={tab === 'reports' ? 'Buscar por OS, relatório ou responsável' : 'Buscar por ID, ativo, área, cargo ou título'}
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <label>
-            <span>Prioridade</span>
-            <select value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="">Todas</option>
-              <option value="CRITICA">Crítica</option>
-              <option value="ALTA">Alta</option>
-              <option value="MEDIA">Média</option>
-              <option value="NORMAL">Normal</option>
-              <option value="BAIXA">Baixa</option>
-            </select>
-          </label>
+          {tab === 'reports' ? (
+            <>
+              <label><span>Período</span><select value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}><option value="ALL">Todo o período</option><option value="TODAY">Hoje</option><option value="7D">Últimos 7 dias</option><option value="30D">Últimos 30 dias</option></select></label>
+              <label><span>Responsável</span><select value={reportSigner} onChange={(event) => setReportSigner(event.target.value)}><option value="">Todos</option>{reportSigners.map((signer) => <option key={signer} value={signer}>{signer}</option>)}</select></label>
+              <label><span>Status</span><select value={reportStatus} onChange={(event) => setReportStatus(event.target.value)}><option value="">Todos</option><option value="ASSINADO">Assinado</option></select></label>
+            </>
+          ) : (
+            <label>
+              <span>Prioridade</span>
+              <select value={priority} onChange={(event) => setPriority(event.target.value)}>
+                <option value="">Todas</option><option value="CRITICA">Crítica</option><option value="ALTA">Alta</option><option value="MEDIA">Média</option><option value="NORMAL">Normal</option><option value="BAIXA">Baixa</option>
+              </select>
+            </label>
+          )}
         </section>
 
         {tab === 'demands' ? (
@@ -603,6 +657,35 @@ export function ValidationsPage({
                 >
                   Revisar checklist
                 </button>
+              </article>
+            ))}
+          </section>
+        ) : null}
+
+        {tab === 'reports' && reportsEnabled ? (
+          <section className="validation-grid" role="tabpanel" aria-label="Relatórios técnicos arquivados">
+            {loading ? <p className="panel-state">Carregando relatórios técnicos assinados…</p> : null}
+            {!loading && filteredReports.length === 0 ? (
+              <div className="manager-work-empty">
+                <CheckIcon />
+                <span><strong>Nenhum relatório técnico encontrado</strong><small>Os relatórios assinados pela sua área aparecerão aqui, respeitando o acesso definido no backend.</small></span>
+              </div>
+            ) : null}
+            {filteredReports.map((report) => (
+              <article className="validation-card technical-report-card" key={report.id}>
+                <div className="validation-card__topline">
+                  <span className="status-pill status-pill--blue">{report.codigo}</span>
+                  <span className="priority-chip">{humanize(report.status)}</span>
+                </div>
+                <h2>{report.os_codigo} · {report.os_titulo}</h2>
+                <p>{humanize(report.tipo)} · Registro de liberação pós-intervenção</p>
+                <dl>
+                  <div><dt>Assinante</dt><dd title={report.assinante}>{report.assinante}</dd></div>
+                  <div><dt>Assinado em</dt><dd>{formatDate(report.aprovada_em)}</dd></div>
+                  <div><dt>Status</dt><dd>{humanize(report.status)}</dd></div>
+                </dl>
+                <div className="technical-report-card__opinion"><strong>Parecer técnico</strong><p>{report.parecer || 'Sem parecer registrado.'}</p></div>
+                <div className="technical-report-card__trace"><strong>Rastreabilidade da assinatura digital</strong><span>Referência: <code>{report.assinatura_digital || 'Registro interno da assinatura'}</code></span><span>Hash imutável: <code>{report.hash}</code></span></div>
               </article>
             ))}
           </section>

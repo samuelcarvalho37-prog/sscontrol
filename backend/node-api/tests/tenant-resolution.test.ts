@@ -18,7 +18,8 @@ function environment(overrides: Partial<Environment> = {}): Environment {
 function resolver(activeSlugs: readonly string[], env = environment()) {
   const database = {
     query: async (_text: string, values: readonly unknown[] = []) => {
-      const slug = String(values[0] ?? '');
+      const requestedSlug = values[0];
+      const slug = typeof requestedSlug === 'string' ? requestedSlug : '';
       return {
         rows: activeSlugs.includes(slug)
           ? [{ tenant_id: `tenant-${slug}`, tenant_slug: slug }]

@@ -56,6 +56,56 @@ interface SeededIdentities extends Identities {
   readonly tenantSlug: string;
 }
 
+interface PendingExecutionItem {
+  readonly item_id: string;
+  readonly tipo: string;
+}
+
+interface ExecutionChecklistItem {
+  readonly id: string;
+  readonly resposta_opcao: string | null;
+  readonly observacao: string | null;
+}
+
+interface ExecutionValidationResponse {
+  readonly data: {
+    readonly pode_concluir: boolean;
+    readonly evidencias_pendentes: number;
+    readonly pendencias: readonly PendingExecutionItem[];
+  };
+}
+
+interface ExecutionDetailResponse {
+  readonly data: {
+    readonly quantidade_salva?: number;
+    readonly execucao: {
+      readonly itens: readonly ExecutionChecklistItem[];
+    };
+  };
+}
+
+interface OperatorActionQueueResponse {
+  readonly data: {
+    readonly itens: readonly { readonly id: string; readonly ordem_id: string }[];
+  };
+}
+
+interface TechnicalReportListResponse {
+  readonly data: {
+    readonly total: number;
+    readonly relatorios: readonly {
+      readonly os_titulo: string;
+      readonly tipo: 'QUALITY' | 'SAFETY';
+      readonly assinante: string;
+      readonly aprovada_em: string;
+      readonly assinado_em: string;
+      readonly assinatura_referencia: string;
+      readonly hash: string;
+      readonly status: 'ASSINADO';
+    }[];
+  };
+}
+
 function token(): { readonly raw: string; readonly hash: string } {
   const raw = `fcs_${randomBytes(32).toString('base64url')}`;
   return { raw, hash: createHash('sha256').update(raw, 'utf8').digest('hex') };
@@ -566,9 +616,9 @@ test(
       headers: bearer(identities.admin),
     });
     assert.equal(workOrderList.statusCode, 200, workOrderList.body);
-    const workOrderListBody: {
+    const workOrderListBody = workOrderList.json<{
       data: { itens: (Record<string, unknown> & { id: string })[] };
-    } = workOrderList.json();
+    }>();
     const listedWorkOrder = workOrderListBody.data.itens.find((item) => item.id === workOrderId);
     assert.ok(listedWorkOrder);
     assert.equal(listedWorkOrder.plano_id, ids.plan);
@@ -673,10 +723,11 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(validationBeforeInspection.statusCode, 200, validationBeforeInspection.body);
-    assert.equal(validationBeforeInspection.json().data.pode_concluir, false);
+    const validationBeforeInspectionBody = validationBeforeInspection.json<ExecutionValidationResponse>();
+    assert.equal(validationBeforeInspectionBody.data.pode_concluir, false);
     assert.equal(
-      validationBeforeInspection.json().data.pendencias.some(
-        (item: { item_id: string; tipo: string }) =>
+      validationBeforeInspectionBody.data.pendencias.some(
+        (item) =>
           item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
       ),
       true,
@@ -710,10 +761,10 @@ test(
       },
     });
     assert.equal(answered.statusCode, 200, answered.body);
-    assert.equal(answered.json().data.quantidade_salva, 3);
-    const savedInspection = answered.json().data.execucao.itens.find(
-      (item: { id: string }) => item.id === inspection.id,
-    );
+    const answeredBody = answered.json<ExecutionDetailResponse>();
+    assert.equal(answeredBody.data.quantidade_salva, 3);
+    const savedInspection = answeredBody.data.execucao.itens.find((item) => item.id === inspection.id);
+    assert.ok(savedInspection);
     assert.equal(savedInspection.resposta_opcao, 'OK');
     assert.equal(savedInspection.observacao, 'Sem anormalidades.');
 
@@ -723,9 +774,9 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(reloadedAction.statusCode, 200, reloadedAction.body);
-    const reloadedInspection = reloadedAction.json().data.execucao.itens.find(
-      (item: { id: string }) => item.id === inspection.id,
-    );
+    const reloadedBody = reloadedAction.json<ExecutionDetailResponse>();
+    const reloadedInspection = reloadedBody.data.execucao.itens.find((item) => item.id === inspection.id);
+    assert.ok(reloadedInspection);
     assert.equal(reloadedInspection.resposta_opcao, 'OK');
     assert.equal(reloadedInspection.observacao, 'Sem anormalidades.');
 
@@ -748,17 +799,18 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(blockedValidation.statusCode, 200, blockedValidation.body);
-    assert.equal(blockedValidation.json().data.pode_concluir, false);
-    assert.equal(blockedValidation.json().data.evidencias_pendentes, 1);
+    const blockedValidationBody = blockedValidation.json<ExecutionValidationResponse>();
+    assert.equal(blockedValidationBody.data.pode_concluir, false);
+    assert.equal(blockedValidationBody.data.evidencias_pendentes, 1);
     assert.equal(
-      blockedValidation.json().data.pendencias.some(
-        (item: { item_id: string; tipo: string }) =>
+      blockedValidationBody.data.pendencias.some(
+        (item) =>
           item.item_id === inspection.id && item.tipo === 'RESPOSTA_OBRIGATORIA',
       ),
       false,
     );
-    const evidenceBlocker = blockedValidation.json().data.pendencias.find(
-      (item: { item_id: string; tipo: string }) =>
+    const evidenceBlocker = blockedValidationBody.data.pendencias.find(
+      (item) =>
         item.item_id === evidence.id && item.tipo === 'EVIDENCIA_OBRIGATORIA',
     );
     assert.deepEqual(evidenceBlocker, {
@@ -781,11 +833,15 @@ test(
       },
     });
     assert.equal(evidenced.statusCode, 200, evidenced.body);
-    const evidenceItems = evidenced.json().data.itens as readonly {
-      readonly id: string;
-      readonly quantidade_evidencias: number;
-      readonly evidencias: readonly { readonly nome_arquivo: string }[];
-    }[];
+    const evidenceItems = evidenced.json<{
+      data: {
+        itens: readonly {
+          readonly id: string;
+          readonly quantidade_evidencias: number;
+          readonly evidencias: readonly { readonly nome_arquivo: string }[];
+        }[];
+      };
+    }>().data.itens;
     const evidenceDetails = evidenceItems.find((item) => item.id === evidence.id);
     assert.ok(evidenceDetails);
     assert.equal(evidenceDetails.quantidade_evidencias, 1);
@@ -820,15 +876,19 @@ test(
       payload: validPhoto.body,
     });
     assert.equal(uploaded.statusCode, 200, uploaded.body);
-    const uploadedItems = uploaded.json().data.itens as readonly {
-      readonly id: string;
-      readonly quantidade_evidencias: number;
-      readonly evidencias: readonly {
-        readonly objeto_armazenamento_id: string;
-        readonly nome_arquivo: string;
-        readonly url: string;
-      }[];
-    }[];
+    const uploadedItems = uploaded.json<{
+      data: {
+        itens: readonly {
+          readonly id: string;
+          readonly quantidade_evidencias: number;
+          readonly evidencias: readonly {
+            readonly objeto_armazenamento_id: string;
+            readonly nome_arquivo: string;
+            readonly url: string;
+          }[];
+        }[];
+      };
+    }>().data.itens;
     const uploadedEvidence = uploadedItems
       .find((item) => item.id === evidence.id)
       ?.evidencias.at(-1);
@@ -924,6 +984,47 @@ test(
       );
     }
 
+    const qualityReports = await app.inject({
+      method: 'GET',
+      url: '/v1/workflow/technical-reports',
+      headers: bearer(identities.quality),
+    });
+    assert.equal(qualityReports.statusCode, 200, qualityReports.body);
+    const qualityReport = qualityReports
+      .json<TechnicalReportListResponse>()
+      .data.relatorios.find(
+        (report) => report.os_titulo === 'Preventiva integral da prensa',
+      );
+    assert.ok(qualityReport);
+    assert.equal(qualityReport.tipo, 'QUALITY');
+    assert.equal(qualityReport.status, 'ASSINADO');
+    assert.ok(qualityReport.assinante.length > 0);
+    assert.ok(Number.isFinite(Date.parse(qualityReport.aprovada_em)));
+    assert.ok(Number.isFinite(Date.parse(qualityReport.assinado_em)));
+    assert.match(qualityReport.assinatura_referencia, /^[0-9a-f]{8}-/iu);
+    assert.match(qualityReport.hash, /^[0-9a-f]{64}$/iu);
+
+    const safetyReports = await app.inject({
+      method: 'GET',
+      url: '/v1/workflow/technical-reports',
+      headers: bearer(identities.safety),
+    });
+    assert.equal(safetyReports.statusCode, 200, safetyReports.body);
+    const safetyReport = safetyReports
+      .json<TechnicalReportListResponse>()
+      .data.relatorios.find(
+        (report) => report.os_titulo === 'Preventiva integral da prensa',
+      );
+    assert.ok(safetyReport);
+    assert.equal(safetyReport.tipo, 'SAFETY');
+
+    const nonTechnicalReports = await app.inject({
+      method: 'GET',
+      url: '/v1/workflow/technical-reports',
+      headers: bearer(identities.admin),
+    });
+    assert.equal(nonTechnicalReports.statusCode, 403, nonTechnicalReports.body);
+
     await transaction(pool, async client => {
       assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),false);
     });
@@ -983,10 +1084,10 @@ test(
       assert.equal(persisted.rows[0]!.work_order_status, 'COMPLETED');
     });
     for (const scenario of [
-      { type: 'CORRECTIVE', scheduled: true, release: true },
-      { type: 'INSPECTION', scheduled: true, release: true },
+      { type: 'CORRECTIVE', scheduled: true, release: false },
+      { type: 'INSPECTION', scheduled: true, release: false },
       { type: 'PREVENTIVE', scheduled: true, release: false },
-      { type: 'PREVENTIVE', scheduled: false, release: true },
+      { type: 'PREVENTIVE', scheduled: false, release: false },
     ]) {
       const ordinary = await app.inject({
         method: 'POST',
@@ -1090,9 +1191,8 @@ test(
 
     const normalQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.operator) });
     assert.equal(normalQueue.statusCode, 200, normalQueue.body);
-    const normalAction = normalQueue.json().data.itens.find(
-      (item: { ordem_id: string }) => item.ordem_id === normalWorkOrderId,
-    );
+    const normalQueueBody = normalQueue.json<OperatorActionQueueResponse>();
+    const normalAction = normalQueueBody.data.itens.find((item) => item.ordem_id === normalWorkOrderId);
     assert.ok(normalAction);
     const normalActionId: string = normalAction.id;
     const normalStarted = await app.inject({
