@@ -49,10 +49,15 @@ function nullableText(value: string | null): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function nullableRowText(row: OperationsRow, key: string): string | null {
+  const value = row[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value !== null && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
+    return `{${Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, child]) => `${JSON.stringify(key)}:${stable(child)}`)
       .join(',')}}`;
@@ -77,6 +82,10 @@ function numberOrNull(value: unknown): number | null {
   return null;
 }
 
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function codeForWorkOrder(): string {
   const now = new Date();
   const timestamp = now
@@ -92,14 +101,28 @@ function eligibleArea(policy: SignaturePolicy, areaCode: string): boolean {
   return areaCode === 'QUALITY' || areaCode === 'SAFETY';
 }
 
+function signaturePolicy(row: OperationsRow, key: string): SignaturePolicy {
+  const value = text(row, key);
+  if (
+    value === 'QUALIDADE_OU_SEGURANCA' ||
+    value === 'QUALIDADE' ||
+    value === 'SEGURANCA' ||
+    value === 'QUALIDADE_E_SEGURANCA'
+  ) {
+    return value;
+  }
+  throw new Error(`Política de assinatura inválida no campo ${key}.`);
+}
+
 function normalizedWorkOrder(input: WorkOrderInput): WorkOrderInput {
+  const assetTag = input.assetTag?.trim().toUpperCase();
   return {
     ...input,
     originType: input.originType.trim().toUpperCase(),
     workType: input.workType.trim().toUpperCase(),
     title: input.title.trim(),
     description: input.description.trim(),
-    assetTag: input.assetTag?.trim().toUpperCase() || null,
+    assetTag: assetTag === undefined || assetTag === '' ? null : assetTag,
     scheduledFor: input.scheduledFor,
   };
 }
@@ -220,6 +243,21 @@ export class OperationsService {
     );
   }
 
+  async listTechnicalValidationReports(user: AuthenticatedUser) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => {
+        const context = await this.repository.validatorContext(client, user.id);
+        const areaCode = context ? text(context, 'area_code') : '';
+        if (!['QUALITY', 'SAFETY'].includes(areaCode)) {
+          throw error('TECHNICAL_REPORTS_NOT_ALLOWED', 'Seu perfil não possui relatórios técnicos.', 403);
+        }
+        const reports = await this.repository.listTechnicalValidationReports(client, areaCode);
+        return { total: reports.length, relatorios: reports };
+      },
+    );
+  }
+
   async assumeTechnicalDemand(
     user: AuthenticatedUser,
     demandId: string,
@@ -321,13 +359,13 @@ export class OperationsService {
           generatedCorrectivePlan = generated.created;
           input = { ...input, planVersionId: text(context, 'id') };
         }
+        const totalChecklistItems = context ? integer(context, 'total_items') : 0;
         if (
-          !context ||
-          context.status !== 'PUBLISHED' ||
+          context?.status !== 'PUBLISHED' ||
           context.checklist_status !== 'PUBLISHED' ||
           context.lifecycle_status !== 'ACTIVE' ||
           context.asset_status !== 'ACTIVE' ||
-          integer(context, 'total_items') < 1
+          totalChecklistItems < 1
         ) {
           throw error(
             'WORK_ORDER_PLAN_NOT_EXECUTABLE',
@@ -432,7 +470,7 @@ export class OperationsService {
           assetId: text(workOrder, 'asset_id'),
           assetTag: null,
           originType: text(workOrder, 'origin_type'),
-          originEntityId: workOrder.origin_entity_id as string | null,
+          originEntityId: nullableRowText(workOrder, 'origin_entity_id'),
           workType: text(workOrder, 'work_type'),
           title: input.title,
           description: input.description,
@@ -558,7 +596,7 @@ export class OperationsService {
             'QUALITY_OR_SAFETY',
             null,
           );
-        } else if (input.signaturePolicy === 'QUALIDADE_E_SEGURANCA') {
+        } else {
           await this.repository.createRequirement(
             client,
             user.tenantId,
@@ -634,7 +672,7 @@ export class OperationsService {
         const areaCode = context ? text(context, 'area_code') : '';
         if (
           context?.can_sign !== true ||
-          !eligibleArea(text(demand, 'signature_policy') as SignaturePolicy, areaCode)
+          !eligibleArea(signaturePolicy(demand, 'signature_policy'), areaCode)
         ) {
           throw error(
             'TECHNICAL_SIGNATURE_NOT_ALLOWED',
@@ -665,7 +703,7 @@ export class OperationsService {
           meaning,
           nonce: randomUUID(),
         });
-        await this.repository.insertSignature(
+        const signatureId = await this.repository.insertSignature(
           client,
           user.tenantId,
           demand,
@@ -673,11 +711,22 @@ export class OperationsService {
           user.id,
           audit.roleSnapshot,
           text(context, 'technical_area_id'),
-          context.technical_role_id as string | null,
+          nullableRowText(context, 'technical_role_id'),
           meaning,
           declaration,
           signatureHash,
         );
+        if (demand.demand_type === 'POST_INTERVENTION_RELEASE' && areaCode) {
+          await this.repository.createTechnicalValidationReport(client, {
+            tenantId: user.tenantId,
+            signatureId,
+            workOrderId: text(demand, 'entity_id'),
+            reportType: areaCode === 'QUALITY' ? 'QUALITY' : 'SAFETY',
+            technicalOpinion: declaration,
+            attestationText: meaning,
+            contentHash: signatureHash,
+          });
+        }
         const state = await this.repository.demandApprovalState(client, demandId);
         const approved =
           integer(state, 'completed_signature_count') >=
@@ -762,7 +811,7 @@ export class OperationsService {
         if (
           !context ||
           !eligibleArea(
-            text(demand, 'signature_policy') as SignaturePolicy,
+            signaturePolicy(demand, 'signature_policy'),
             text(context, 'area_code'),
           )
         ) {
@@ -1025,7 +1074,7 @@ export class OperationsService {
               client,
               user.tenantId,
               user.id,
-              String(execution.id),
+              execution.id,
             );
           }
         } else if (!alreadyStarted) {
@@ -1195,7 +1244,7 @@ export class OperationsService {
           user.id,
           audit.roleSnapshot,
           'MATERIAL_CONSUMED',
-          `Saída de material ${String(consumed.sku_snapshot)} registrada na execução.`,
+          `Saída de material ${text(consumed, 'sku_snapshot')} registrada na execução.`,
           {
             material_usage_id: consumed.id,
             material_id: consumed.material_id,
@@ -1266,7 +1315,7 @@ export class OperationsService {
           observation: nullableText(input.observation),
         });
         if (text(execution, 'execution_stop_mode') === 'STOPPED') {
-          await this.repository.completeEquipmentStopForExecution(client, String(execution.id), user.id);
+          await this.repository.completeEquipmentStopForExecution(client, execution.id, user.id);
         }
         const detail = await this.requiredExecutionDetail(client, execution.id);
         await this.repository.writeAudit(
@@ -1981,8 +2030,8 @@ export class OperationsService {
         noncompliant === 0,
       total: items.length,
       respondidos: items.filter((item) => {
-        if (item === null || typeof item !== 'object') return false;
-        const status = (item as Record<string, unknown>).status;
+        if (!isRecord(item)) return false;
+        const status = item.status;
         return status === 'ANSWERED' || status === 'NOT_APPLICABLE';
       }).length,
       respostas_pendentes: pending,

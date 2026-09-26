@@ -16,7 +16,11 @@ import type {
 
 export type MonitoringRow = Record<string, unknown>;
 
-function first(rows: readonly MonitoringRow[]): MonitoringRow | null {
+interface OpenStopRow extends MonitoringRow {
+  readonly id: string;
+}
+
+function first<T extends MonitoringRow>(rows: readonly T[]): T | null {
   return rows[0] ?? null;
 }
 
@@ -390,8 +394,8 @@ export class MonitoringRepository {
     client: PoolClient,
     assetId: string,
     lock = false,
-  ): Promise<MonitoringRow | null> {
-    const result = await client.query<MonitoringRow>(
+  ): Promise<OpenStopRow | null> {
+    const result = await client.query<OpenStopRow>(
       `SELECT *
        FROM maintenance.equipment_stops
        WHERE asset_id=$1 AND status NOT IN ('COMPLETED','CANCELLED')
@@ -690,8 +694,8 @@ export class MonitoringRepository {
        ), stop_metrics AS (
          SELECT count(*)::integer AS failure_count,
                 COALESCE(sum(GREATEST(0,EXTRACT(EPOCH FROM (effective_end-effective_start)))),0)::bigint AS downtime_seconds,
-                COALESCE(avg(GREATEST(0,EXTRACT(EPOCH FROM (effective_end-effective_start))))
-                  FILTER (WHERE status='COMPLETED'),0)::numeric AS mttr_seconds
+                avg(GREATEST(0,EXTRACT(EPOCH FROM (effective_end-effective_start))))
+                  FILTER (WHERE status='COMPLETED') AS mttr_seconds
          FROM stops
        ), occurrence_metrics AS (
          SELECT count(*)::integer AS occurrence_count,

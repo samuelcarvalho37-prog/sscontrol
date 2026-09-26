@@ -30,7 +30,6 @@ export interface AdminIntervention {
   status: string
   planejada_para?: string
   modo_parada_manutencao?: string
-  ativo_tag?: string
   ativo_nome?: string
   linha_id?: string
   linha_tag?: string
@@ -66,6 +65,7 @@ export interface AdminInterventionInput {
   exige_liberacao_pos_intervencao?: boolean
   id?: string
   ativo_id?: string
+  ativo_tag?: string
   componente_id?: string
   plano_id?: string
   plano_versao_id?: string

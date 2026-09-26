@@ -51,6 +51,11 @@ export function createOperationsRoutes(
       },
       handler: controller.listTechnicalDemands,
     });
+    app.get('/v1/workflow/technical-reports', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      schema: { ...secured, summary: 'Consulta relatórios auditáveis da área técnica atual.' },
+      handler: controller.listTechnicalValidationReports,
+    });
     app.post('/v1/workflow/technical-demands/:demandId/assume', {
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.review'),
       schema: {

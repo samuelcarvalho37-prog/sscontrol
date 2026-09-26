@@ -30,7 +30,7 @@ function normalizeSlug(value: string | undefined): string | null {
 function normalizedHost(value: string | undefined): string | null {
   const raw = value?.trim().toLowerCase() ?? '';
   if (!raw || raw.includes('/') || raw.includes('\\') || raw.includes('@')) return null;
-  const bracketedIpv6 = raw.match(/^\[([^\]]+)\](?::\d{1,5})?$/u);
+  const bracketedIpv6 = /^\[([^\]]+)\](?::\d{1,5})?$/u.exec(raw);
   if (bracketedIpv6) return bracketedIpv6[1] ?? null;
   const host = raw.replace(/:\d{1,5}$/u, '').replace(/\.+$/u, '');
   return host || null;

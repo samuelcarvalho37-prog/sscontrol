@@ -124,6 +124,7 @@ export function App() {
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
+  const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
   const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
 
@@ -274,6 +275,14 @@ export function App() {
     }
     if (entityType === 'OS_ACOES') {
       handleOpenDecision('actions', { kind: 'action', id: entityId })
+      return
+    }
+    if (
+      entityType === 'WORK_ORDER' ||
+      entityType === 'ORDEM_SERVICO' ||
+      entityType === 'MAINTENANCE_WORK_ORDER'
+    ) {
+      handleOpenDecision('demands', { kind: 'workOrder', id: entityId })
       return
     }
     if (
@@ -432,7 +441,7 @@ export function App() {
                 >
                   {profileExperience.primary}
                 </button>
-                {canReadAnalytics ? (
+                {canViewPcmDashboard ? (
                   <button className="secondary-button" type="button" onClick={() => handleNavigate('validations')}>
                     Ver indicadores
                   </button>
@@ -463,7 +472,7 @@ export function App() {
               <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
               <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
             </div>}
-            {usesNodeApi() && !detailedAnalytics ? <PcmDashboard onSessionExpired={expireSession} /> :
+            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}

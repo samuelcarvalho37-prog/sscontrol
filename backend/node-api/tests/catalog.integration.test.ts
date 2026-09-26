@@ -9,7 +9,7 @@ import { createTestEnvironment } from './helpers/environment.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const integrationEnabled = Boolean(databaseUrl);
-const tenantId = '00000000-0000-4000-8000-000000000002';
+const tenantId = randomUUID();
 
 async function inTenantTransaction<T>(
   pool: Pool,
@@ -34,11 +34,13 @@ async function seedAuthorizedSession(pool: Pool): Promise<{
   readonly token: string;
   readonly userId: string;
   readonly roleId: string;
+  readonly tenantSlug: string;
 }> {
   const userId = randomUUID();
   const roleId = randomUUID();
   const token = `fcs_${randomBytes(32).toString('base64url')}`;
   const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
+  const tenantSlug = `catalog-tests-${randomUUID()}`;
 
   await inTenantTransaction(pool, async (client) => {
     await client.query(
@@ -48,7 +50,7 @@ async function seedAuthorizedSession(pool: Pool): Promise<{
         )
         VALUES ($1, 'Catálogo Testes', 'Catálogo Testes', $2, 'DEVELOPMENT', 'ACTIVE')
       `,
-      [tenantId, `catalog-tests-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `
@@ -115,7 +117,7 @@ async function seedAuthorizedSession(pool: Pool): Promise<{
     );
   });
 
-  return { token, userId, roleId };
+  return { token, userId, roleId, tenantSlug };
 }
 
 test(
@@ -126,7 +128,7 @@ test(
     const pool = new Pool({ connectionString: databaseUrl, max: 2 });
     const identity = await seedAuthorizedSession(pool);
     const app = await buildApp({
-      environment: createTestEnvironment(databaseUrl, tenantId),
+      environment: createTestEnvironment(databaseUrl, tenantId, identity.tenantSlug),
       logger: false,
     });
     const authorization = { authorization: `Bearer ${identity.token}` };

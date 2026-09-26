@@ -1,13 +1,20 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import type { AnalyticsQuery } from './monitoring.types.js';
+
+interface PcmReportsRow extends QueryResultRow {
+  readonly relatorios: unknown;
+}
 
 /**
  * Consolidated report data for the PCM view.  This query deliberately reads the
  * same time window chosen in the dashboard; it never manufactures an MTTR for
  * a month without completed failures.
  */
-export async function loadPcmReports(client: PoolClient, query: AnalyticsQuery) {
-  const result = await client.query(
+export async function loadPcmReports(
+  client: PoolClient,
+  query: AnalyticsQuery,
+): Promise<unknown> {
+  const result = await client.query<PcmReportsRow>(
     `WITH bounds AS (
        SELECT $1::timestamptz AS start_at, LEAST($2::timestamptz, now()) AS end_at
      ), scoped_orders AS (

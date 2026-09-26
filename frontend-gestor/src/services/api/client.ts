@@ -1029,6 +1029,8 @@ function nodeActionRequest(
       };
     case "gestor.contexto_tecnico":
       return { method: "GET", path: "/v1/workflow/technical-context", token };
+    case "gestor.relatorios-tecnicos.listar":
+      return { method: "GET", path: "/v1/workflow/technical-reports", token };
     case "gestor.demandas.listar":
       return {
         method: "GET",
@@ -1157,6 +1159,9 @@ function nodeActionRequest(
       return {
         method: "POST",
         path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/release`,
+        // A rota não exige parâmetros, mas o corpo JSON explícito evita que
+        // intermediários interpretem o POST vazio como mídia não suportada.
+        body: {},
         token,
       };
     case "gestor.detalhe_acao":

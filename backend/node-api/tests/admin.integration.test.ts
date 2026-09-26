@@ -40,13 +40,14 @@ async function transaction<T>(
   }
 }
 
-async function seed(pool: Pool): Promise<string> {
+async function seed(pool: Pool): Promise<{ readonly token: string; readonly tenantSlug: string }> {
   const session = sessionToken();
+  const tenantSlug = `admin-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
        VALUES ($1,'Admin Testes','Admin Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `admin-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected)
@@ -86,7 +87,7 @@ async function seed(pool: Pool): Promise<string> {
       [tenantId, adminId, session.hash],
     );
   });
-  return session.raw;
+  return { token: session.raw, tenantSlug };
 }
 
 function bearer(token: string) {
@@ -99,9 +100,10 @@ test(
   async (context) => {
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 3 });
-    const token = await seed(pool);
+    const identity = await seed(pool);
+    const token = identity.token;
     const app = await buildApp({
-      environment: createTestEnvironment(databaseUrl, tenantId),
+      environment: createTestEnvironment(databaseUrl, tenantId, identity.tenantSlug),
       logger: false,
     });
     context.after(async () => {
@@ -112,7 +114,7 @@ test(
     const initialState = await app.inject({
       method: 'GET',
       url: '/v1/admin/configuration',
-      headers: bearer(token),
+      headers: bearer(identity.token),
     });
     assert.equal(initialState.statusCode, 200, initialState.body);
     assert.equal(initialState.json().data.ativa.numero, 0);

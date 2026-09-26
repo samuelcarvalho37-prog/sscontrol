@@ -35,14 +35,15 @@ async function transaction<T>(
   }
 }
 
-async function seed(pool: Pool): Promise<string> {
+async function seed(pool: Pool): Promise<{ readonly token: string; readonly tenantSlug: string }> {
   const raw = `fcs_${randomBytes(32).toString('base64url')}`;
   const hash = createHash('sha256').update(raw, 'utf8').digest('hex');
+  const tenantSlug = `imports-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
        VALUES ($1,'Importação Testes','Importação Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `imports-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected)
@@ -72,7 +73,7 @@ async function seed(pool: Pool): Promise<string> {
       [tenantId, adminId, hash],
     );
   });
-  return raw;
+  return { token: raw, tenantSlug };
 }
 
 function bearer(token: string) {
@@ -95,9 +96,10 @@ test(
   async (context) => {
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 3 });
-    const token = await seed(pool);
+    const identity = await seed(pool);
+    const token = identity.token;
     const app = await buildApp({
-      environment: createTestEnvironment(databaseUrl, tenantId),
+      environment: createTestEnvironment(databaseUrl, tenantId, identity.tenantSlug),
       logger: false,
     });
     context.after(async () => {
@@ -111,7 +113,19 @@ test(
       headers: bearer(token),
     });
     assert.equal(catalog.statusCode, 200, catalog.body);
-    assert.equal(catalog.json().data.modelos.length, 6);
+    const modelTypes = (catalog.json().data.modelos as readonly { tipo: string }[])
+      .map((model) => model.tipo)
+      .sort();
+    assert.deepEqual(modelTypes, [
+      'ativos',
+      'componentes',
+      'fontes_valores',
+      'linhas',
+      'materiais',
+      'plantas',
+      'setores',
+      'valores_componentes',
+    ]);
 
     const invalid = await app.inject({
       method: 'POST',

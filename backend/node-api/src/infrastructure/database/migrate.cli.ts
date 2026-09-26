@@ -1,5 +1,5 @@
 import { loadEnvironment } from '../../config/environment.js';
-import { AppError, normalizeError } from '../../core/errors/app-error.js';
+import { normalizeError, type AppError } from '../../core/errors/app-error.js';
 import { migrateDatabase } from './migrator.js';
 
 interface ErrorWithCode extends Error {
@@ -23,7 +23,7 @@ function rootCause(error: unknown): ErrorWithCode | undefined {
 
   while (current instanceof Error && !visited.has(current)) {
     visited.add(current);
-    latest = current as ErrorWithCode;
+    latest = current;
     current = 'cause' in current ? current.cause : undefined;
   }
 

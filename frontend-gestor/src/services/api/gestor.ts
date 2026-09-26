@@ -19,6 +19,7 @@ import type {
   GestorTechnicalBrief,
   GestorTechnicalAnalysisInput,
   GestorTechnicalContext,
+  GestorTechnicalReport,
   GestorTechnicalDemand,
   GestorTechnicalKpis,
   GestorOccurrence,
@@ -52,6 +53,11 @@ interface ChecklistModelListData {
 interface TechnicalDemandListData {
   total: number;
   demandas: GestorTechnicalDemand[];
+}
+
+interface TechnicalReportListData {
+  total: number
+  relatorios: GestorTechnicalReport[]
 }
 
 interface NotificationListData {
@@ -433,6 +439,17 @@ export async function getGestorTechnicalDemands(
           !FINAL_TECHNICAL_DEMAND_STATUSES.has(normalizedStatus(demand.status)),
       )
     : [];
+}
+
+export async function getGestorTechnicalReports(
+  signal?: AbortSignal,
+): Promise<GestorTechnicalReport[]> {
+  const data = await readGestorData<TechnicalReportListData>(
+    'gestor.relatorios-tecnicos.listar',
+    {},
+    signal,
+  )
+  return Array.isArray(data.relatorios) ? data.relatorios : []
 }
 
 export function assumeGestorTechnicalDemand(

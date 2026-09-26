@@ -40,14 +40,15 @@ async function transaction<T>(
   }
 }
 
-async function seed(pool: Pool): Promise<string> {
+async function seed(pool: Pool): Promise<{ readonly token: string; readonly tenantSlug: string }> {
   const raw = `fcs_${randomBytes(32).toString('base64url')}`;
   const hash = createHash('sha256').update(raw, 'utf8').digest('hex');
+  const tenantSlug = `backup-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
       `INSERT INTO platform.tenants (id,legal_name,display_name,slug,environment,status)
        VALUES ($1,'Backup Testes','Backup Testes',$2,'DEVELOPMENT','ACTIVE')`,
-      [tenantId, `backup-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected)
@@ -82,7 +83,7 @@ async function seed(pool: Pool): Promise<string> {
       [plantId, tenantId],
     );
   });
-  return raw;
+  return { token: raw, tenantSlug };
 }
 
 function bearer(token: string) {
@@ -95,10 +96,11 @@ test(
   async (context) => {
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 3 });
-    const token = await seed(pool);
+    const identity = await seed(pool);
+    const token = identity.token;
     const storageRoot = await mkdtemp(join(tmpdir(), 'fab-control-backup-'));
     const app = await buildApp({
-      environment: createTestEnvironment(databaseUrl, tenantId),
+      environment: createTestEnvironment(databaseUrl, tenantId, identity.tenantSlug),
       objectStorage: new LocalObjectStorage(storageRoot, 6_291_456),
       logger: false,
     });
@@ -111,7 +113,7 @@ test(
     const created = await app.inject({
       method: 'POST',
       url: '/v1/admin/backups',
-      headers: bearer(token),
+      headers: bearer(identity.token),
       payload: { motivo: 'Ponto anterior à homologação.', confirmacao: 'CRIAR BACKUP' },
     });
     assert.equal(created.statusCode, 200, created.body);

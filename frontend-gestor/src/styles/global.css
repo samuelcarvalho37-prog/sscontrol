@@ -902,6 +902,125 @@ p {
   text-overflow: ellipsis;
 }
 
+.technical-report-card__opinion,
+.technical-report-card__trace {
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.technical-report-card__opinion strong,
+.technical-report-card__trace strong {
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+
+.technical-report-card__opinion p,
+.technical-report-card__trace span {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.technical-report-card__trace {
+  background: #f3f8ff;
+}
+
+.technical-report-card__trace code {
+  font-size: 10px;
+  color: #235f9e;
+  word-break: break-all;
+}
+
+.technical-reports-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.technical-reports-workspace__filters {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.technical-reports-workspace__filters label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.technical-reports-workspace__filters input,
+.technical-reports-workspace__filters select {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.technical-reports-workspace__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.technical-report-card {
+  display: grid;
+  gap: 11px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 8px 22px rgba(28, 45, 72, .045);
+}
+
+.technical-report-card > header,
+.technical-report-card dl {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.technical-report-card > header span,
+.technical-report-card > header b {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.technical-report-card > header span { color: #125fc5; background: #e7f0ff; }
+.technical-report-card > header b { color: #21734f; background: #e4f6eb; }
+.technical-report-card h2 { margin: 0; font-size: 16px; }
+.technical-report-card dl div { min-width: 0; }
+.technical-report-card dt { color: var(--muted); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.technical-report-card dd { margin: 4px 0 0; overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.technical-report-card > section { display: grid; gap: 5px; padding: 10px; border-radius: 11px; background: var(--surface-soft); }
+.technical-report-card > section strong { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.technical-report-card > section p, .technical-report-card > section span { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .technical-reports-workspace__filters,
+  .technical-reports-workspace__grid { grid-template-columns: 1fr; }
+}
+
 .review-button {
   min-height: 40px;
   border-radius: 12px;

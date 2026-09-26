@@ -206,6 +206,13 @@ export class OperationsController {
       }),
     );
 
+  listTechnicalValidationReports = async (request: FastifyRequest) =>
+    successEnvelope(
+      request,
+      'workflow.technical-reports.list',
+      await this.service.listTechnicalValidationReports(user(request)),
+    );
+
   assumeTechnicalDemand = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(
       request,

@@ -712,7 +712,7 @@ export class MonitoringService {
         await this.requireActiveAssetContext(client, input.assetId, input.componentId);
         const existing = await this.repository.findOpenStopForAsset(client, input.assetId, true);
         if (existing) {
-          const detail = await this.requiredStopDetail(client, String(existing.id));
+          const detail = await this.requiredStopDetail(client, existing.id);
           return { ...detail, ja_aberta: true };
         }
         const stopId = randomUUID();
