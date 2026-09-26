@@ -41,6 +41,59 @@ interface Tokens {
   readonly operator: string;
 }
 
+interface PcmDashboardPayload {
+  readonly atual: {
+    readonly ativos_parados: number;
+    readonly ordens_abertas: number;
+  };
+  readonly confiabilidade: {
+    readonly ativos_considerados: number;
+    readonly falhas: number;
+    readonly mttr_segundos: number | null;
+    readonly mtbf_segundos: number | null;
+    readonly disponibilidade_percentual: number | null;
+    readonly reincidencias: number;
+  };
+  readonly falhas_por_ativo: readonly { readonly ativo_id: string }[];
+  readonly falhas_por_setor: readonly { readonly falhas: number }[];
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNumberOrNull(value: unknown): value is number | null {
+  return value === null || typeof value === 'number';
+}
+
+function isPcmDashboardPayload(value: unknown): value is PcmDashboardPayload {
+  if (!isRecord(value) || !isRecord(value.atual) || !isRecord(value.confiabilidade)) return false;
+  const { atual, confiabilidade } = value;
+  return (
+    typeof atual.ativos_parados === 'number' &&
+    typeof atual.ordens_abertas === 'number' &&
+    typeof confiabilidade.ativos_considerados === 'number' &&
+    typeof confiabilidade.falhas === 'number' &&
+    isNumberOrNull(confiabilidade.mttr_segundos) &&
+    isNumberOrNull(confiabilidade.mtbf_segundos) &&
+    isNumberOrNull(confiabilidade.disponibilidade_percentual) &&
+    typeof confiabilidade.reincidencias === 'number' &&
+    Array.isArray(value.falhas_por_ativo) &&
+    value.falhas_por_ativo.every(
+      (item) => isRecord(item) && typeof item.ativo_id === 'string',
+    ) &&
+    Array.isArray(value.falhas_por_setor) &&
+    value.falhas_por_setor.every(
+      (item) => isRecord(item) && typeof item.falhas === 'number',
+    )
+  );
+}
+
+function pcmDashboardPayload(value: unknown): PcmDashboardPayload {
+  assert.ok(isPcmDashboardPayload(value), 'Payload do Dashboard PCM fora do contrato esperado.');
+  return value;
+}
+
 function sessionToken(): { readonly raw: string; readonly hash: string } {
   const raw = `fcs_${randomBytes(32).toString('base64url')}`;
   return { raw, hash: createHash('sha256').update(raw, 'utf8').digest('hex') };
@@ -524,17 +577,21 @@ test(
           [id,new Date(end.getTime()-offset*60_000),new Date(end.getTime()-(offset-30)*60_000)]);
       }
       const query = {startAt:start.toISOString(),endAt:end.toISOString(),assetId:null,rankingLimit:10};
-      const pcm = await loadPcmDashboard(client,query);
+       const pcm = pcmDashboardPayload(await loadPcmDashboard(client,query));
       assert.equal(pcm.confiabilidade.falhas,2);
       assert.equal(pcm.confiabilidade.mttr_segundos,1800);
       assert.equal(pcm.confiabilidade.mtbf_segundos,5400);
       assert.equal(pcm.confiabilidade.disponibilidade_percentual,75);
       assert.equal(pcm.confiabilidade.reincidencias,1);
-      assert.equal(pcm.falhas_por_ativo[0].ativo_id,ids.asset);
-      assert.equal(pcm.falhas_por_setor[0].falhas,2);
+       const firstFailureByAsset = pcm.falhas_por_ativo[0];
+       assert.ok(firstFailureByAsset, 'O Dashboard PCM deve listar a falha do ativo de teste.');
+       assert.equal(firstFailureByAsset.ativo_id,ids.asset);
+       const firstFailureBySector = pcm.falhas_por_setor[0];
+       assert.ok(firstFailureBySector, 'O Dashboard PCM deve listar a falha do setor de teste.');
+       assert.equal(firstFailureBySector.falhas,2);
       assert.equal(pcm.atual.ativos_parados,0);
       await client.query("SELECT set_config('app.tenant_id',$1,true)",[randomUUID()]);
-      const otherTenant = await loadPcmDashboard(client,query);
+       const otherTenant = pcmDashboardPayload(await loadPcmDashboard(client,query));
       assert.equal(otherTenant.confiabilidade.ativos_considerados,0);
       assert.equal(otherTenant.confiabilidade.disponibilidade_percentual,null);
       assert.equal(otherTenant.atual.ordens_abertas,0);

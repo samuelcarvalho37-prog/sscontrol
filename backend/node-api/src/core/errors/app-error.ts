@@ -29,12 +29,28 @@ interface PostgreSqlError extends Error {
   readonly detail?: string;
 }
 
+interface FastifyContentTypeError extends Error {
+  readonly code?: string;
+}
+
 function isPostgreSqlError(error: unknown): error is PostgreSqlError {
   return error instanceof Error && 'code' in error;
 }
 
 export function normalizeError(error: unknown): AppError {
   if (error instanceof AppError) return error;
+
+  if (
+    error instanceof Error &&
+    (error as FastifyContentTypeError).code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE'
+  ) {
+    return new AppError({
+      code: 'UNSUPPORTED_MEDIA_TYPE',
+      message: 'O tipo de conteúdo da requisição não é suportado.',
+      statusCode: 415,
+      cause: error,
+    });
+  }
 
   if (isPostgreSqlError(error)) {
     if (error.code === '23505') {

@@ -10,33 +10,20 @@ import { createTestEnvironment } from './helpers/environment.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const integrationEnabled = Boolean(databaseUrl);
-const tenantId = '00000000-0000-4000-8000-000000000004';
+const tenantId = randomUUID();
 
 const ids = {
-  admin: '00000000-0000-4000-8000-000000003001',
-  quality: '00000000-0000-4000-8000-000000003002',
-  safety: '00000000-0000-4000-8000-000000003003',
-  maintenance: '00000000-0000-4000-8000-000000003004',
-  adminRole: '00000000-0000-4000-8000-000000003011',
-  validatorRole: '00000000-0000-4000-8000-000000003012',
-  qualityArea: '00000000-0000-4000-8000-000000003021',
-  safetyArea: '00000000-0000-4000-8000-000000003022',
-  maintenanceArea: '00000000-0000-4000-8000-000000003023',
-  qualityTechnicalRole: '00000000-0000-4000-8000-000000003031',
-  safetyTechnicalRole: '00000000-0000-4000-8000-000000003032',
-  maintenanceTechnicalRole: '00000000-0000-4000-8000-000000003033',
-  plant: '00000000-0000-4000-8000-000000003041',
-  sector: '00000000-0000-4000-8000-000000003042',
-  line: '00000000-0000-4000-8000-000000003043',
-  asset: '00000000-0000-4000-8000-000000003051',
-  component: '00000000-0000-4000-8000-000000003052',
-  parameter: '00000000-0000-4000-8000-000000003053',
+  admin: randomUUID(), quality: randomUUID(), safety: randomUUID(), maintenance: randomUUID(),
+  adminRole: randomUUID(), validatorRole: randomUUID(), qualityArea: randomUUID(), safetyArea: randomUUID(), maintenanceArea: randomUUID(),
+  qualityTechnicalRole: randomUUID(), safetyTechnicalRole: randomUUID(), maintenanceTechnicalRole: randomUUID(),
+  plant: randomUUID(), sector: randomUUID(), line: randomUUID(), asset: randomUUID(), component: randomUUID(), parameter: randomUUID(),
 } as const;
 
 interface TestIdentities {
   readonly adminToken: string;
   readonly qualityToken: string;
   readonly safetyToken: string;
+  readonly tenantSlug: string;
 }
 
 function bearer(token: string): { readonly authorization: string } {
@@ -77,6 +64,7 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
   const admin = sessionToken();
   const quality = sessionToken();
   const safety = sessionToken();
+  const tenantSlug = `planning-tests-${randomUUID()}`;
 
   await inTenantTransaction(pool, async (client) => {
     await client.query(
@@ -86,7 +74,7 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
         )
         VALUES ($1, 'Planejamento Testes', 'Planejamento Testes', $2, 'DEVELOPMENT', 'ACTIVE')
       `,
-      [tenantId, `planning-tests-${randomUUID()}`],
+      [tenantId, tenantSlug],
     );
     await client.query(
       `
@@ -323,6 +311,7 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
     adminToken: admin.raw,
     qualityToken: quality.raw,
     safetyToken: safety.raw,
+    tenantSlug,
   };
 }
 
@@ -359,7 +348,7 @@ test(
     const pool = new Pool({ connectionString: databaseUrl, max: 3 });
     const identities = await seedPlanningScenario(pool);
     const app = await buildApp({
-      environment: createTestEnvironment(databaseUrl, tenantId),
+      environment: createTestEnvironment(databaseUrl, tenantId, identities.tenantSlug),
       logger: false,
     });
     const adminHeaders = bearer(identities.adminToken);

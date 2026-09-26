@@ -13,6 +13,15 @@ backend/node-api/var/
 Thumbs.db
 *.log
 *.tsbuildinfo
+.chart-data-*/
+.codex-chart-*/
+*.bak
+*.bak.*
+tmp/release-http-*.log
+backend/node-api/tmp-release-*.mts
+/output/
+/outputs/
+/tmp/
 .clasp.json
 
 # Mockups HTML são a fonte versionável; pacotes ZIP permanecem locais.

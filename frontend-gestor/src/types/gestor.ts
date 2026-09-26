@@ -164,6 +164,23 @@ export interface GestorTechnicalDemand {
   atualizado_em?: string
 }
 
+export interface GestorTechnicalReport {
+  id: string
+  codigo: string
+  tipo: 'QUALITY' | 'SAFETY'
+  status: string
+  parecer: string
+  declaracao: string
+  assinatura_digital?: string | null
+  assinatura_referencia: string
+  assinado_em: string
+  aprovada_em: string
+  hash: string
+  os_codigo: string
+  os_titulo: string
+  assinante: string
+}
+
 export interface GestorTechnicalAnalysisInput {
   id?: string
   ocorrencia_id: string
@@ -340,7 +357,7 @@ export interface GestorOverview {
   }
 }
 
-export type GestorWorkView = 'demands' | 'actions' | 'models' | 'operations'
+export type GestorWorkView = 'demands' | 'actions' | 'models' | 'operations' | 'reports'
 
 export interface GestorChecklistModel {
   id: string

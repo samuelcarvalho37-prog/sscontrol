@@ -14,6 +14,7 @@ import {
   getGestorChecklistModels,
   getGestorTechnicalContext,
   getGestorTechnicalDemands,
+  getGestorTechnicalReports,
   isGestorAuthenticationError,
 } from '../services/api/gestor'
 import type {
@@ -23,11 +24,12 @@ import type {
   GestorDecisionResult,
   GestorTechnicalContext,
   GestorTechnicalDemand,
+  GestorTechnicalReport,
   GestorWorkView,
 } from '../types/gestor'
 
 export interface GestorDecisionFocus {
-  kind?: 'demand' | 'action' | 'model'
+  kind?: 'demand' | 'action' | 'model' | 'workOrder'
   id?: string
 }
 
@@ -117,6 +119,14 @@ function formatDate(value?: string): string {
   }).format(date)
 }
 
+function isInReportPeriod(value: string, period: string): boolean {
+  if (!period || period === 'ALL') return true
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return false
+  const days = period === 'TODAY' ? 1 : period === '7D' ? 7 : 30
+  return timestamp >= Date.now() - days * 86_400_000
+}
+
 function demandNextStep(demand: GestorTechnicalDemand) {
   const pending = Math.max(
     0,
@@ -177,6 +187,7 @@ export function GestorDecisionWorkspace({
   const [demands, setDemands] = useState<GestorTechnicalDemand[]>([])
   const [actions, setActions] = useState<GestorAction[]>([])
   const [models, setModels] = useState<GestorChecklistModel[]>([])
+  const [reports, setReports] = useState<GestorTechnicalReport[]>([])
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
   const [activeView, setActiveView] = useState<QueueFilter>('all')
@@ -184,6 +195,10 @@ export function GestorDecisionWorkspace({
   const [search, setSearch] = useState('')
   const [priority, setPriority] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [showReports, setShowReports] = useState(false)
+  const [reportPeriod, setReportPeriod] = useState('ALL')
+  const [reportSigner, setReportSigner] = useState('')
+  const [reportStatus, setReportStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
@@ -222,10 +237,16 @@ export function GestorDecisionWorkspace({
       const standaloneModels = modelData.filter(
         (model) => !routedChecklistIds.has(String(model.id)),
       )
+      const reportData = ['QUALITY', 'SAFETY'].includes(
+        upper(contextData.identidade.area_codigo),
+      )
+        ? await getGestorTechnicalReports(signal)
+        : []
       setActions(validationActions)
       setModels(standaloneModels)
       setDemands(demandData)
       setTechnicalContext(contextData)
+      setReports(reportData)
       onQueueCountChange(
         demandData.length +
         validationActions.length +
@@ -364,9 +385,9 @@ export function GestorDecisionWorkspace({
 
   useEffect(() => {
     if (focus?.kind && focus.id) {
-      const focused = items.find(
-        (item) => item.kind === focus.kind && item.id === focus.id,
-      )
+      const focused = focus.kind === 'workOrder'
+        ? items.find((item) => item.kind === 'demand' && item.raw.entidade_id === focus.id)
+        : items.find((item) => item.kind === focus.kind && item.id === focus.id)
       if (focused) {
         setActiveView('all')
         setSelectedId(focused.id)
@@ -388,6 +409,24 @@ export function GestorDecisionWorkspace({
   const criticalCount = items.filter(
     (item) => item.overdue || ['CRITICA', 'CRÍTICA'].includes(item.priority),
   ).length
+  const reportsEnabled = ['QUALITY', 'SAFETY'].includes(
+    upper(technicalContext?.identidade.area_codigo),
+  )
+  const reportSigners = useMemo(
+    () => Array.from(new Set(reports.map((report) => report.assinante))).sort(),
+    [reports],
+  )
+  const filteredReports = useMemo(
+    () => reports.filter((report) => {
+      if (reportSigner && report.assinante !== reportSigner) return false
+      if (reportStatus && upper(report.status) !== reportStatus) return false
+      if (!isInReportPeriod(report.aprovada_em, reportPeriod)) return false
+      const normalized = search.trim().toLocaleLowerCase('pt-BR')
+      return !normalized || [report.codigo, report.os_codigo, report.os_titulo, report.assinante]
+        .some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(normalized))
+    }),
+    [reportPeriod, reportSigner, reportStatus, reports, search],
+  )
 
   if (technicalContext && !technicalContext.pode_validar) {
     return (
@@ -427,9 +466,19 @@ export function GestorDecisionWorkspace({
       <main className="content manager-decision-workspace">
         <section className="manager-workspace-heading manager-decision-heading">
           <div>
-            <h1>Validar</h1>
+            <h1>{showReports ? 'Relatórios Técnicos' : 'Validar'}</h1>
           </div>
           <div className="manager-decision-heading__controls">
+            {reportsEnabled ? (
+              <button
+                className={showReports ? 'is-active' : ''}
+                type="button"
+                aria-pressed={showReports}
+                onClick={() => setShowReports((current) => !current)}
+              >
+                {showReports ? 'Voltar às validações' : `Relatórios técnicos (${reports.length})`}
+              </button>
+            ) : null}
             <div className="manager-workspace-heading__status">
             <button
               type="button"
@@ -543,6 +592,27 @@ export function GestorDecisionWorkspace({
           </div>
         ) : null}
 
+        {showReports ? (
+          <section className="technical-reports-workspace" aria-label="Relatórios técnicos arquivados">
+            <section className="technical-reports-workspace__filters" aria-label="Filtros dos relatórios técnicos">
+              <label><span>OS ou relatório</span><input value={search} placeholder="Buscar código, OS ou título" onChange={(event) => setSearch(event.target.value)} /></label>
+              <label><span>Período</span><select value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}><option value="ALL">Todo o período</option><option value="TODAY">Hoje</option><option value="7D">Últimos 7 dias</option><option value="30D">Últimos 30 dias</option></select></label>
+              <label><span>Responsável</span><select value={reportSigner} onChange={(event) => setReportSigner(event.target.value)}><option value="">Todos</option>{reportSigners.map((signer) => <option key={signer} value={signer}>{signer}</option>)}</select></label>
+              <label><span>Status</span><select value={reportStatus} onChange={(event) => setReportStatus(event.target.value)}><option value="">Todos</option><option value="ASSINADO">Assinado</option></select></label>
+            </section>
+            {loading ? <p className="panel-state">Carregando relatórios técnicos assinados…</p> : null}
+            {!loading && filteredReports.length === 0 ? <div className="manager-decision-empty"><CheckIcon /><strong>Nenhum relatório técnico encontrado</strong><span>Relatórios assinados pela sua área aparecerão aqui com a rastreabilidade da assinatura.</span></div> : null}
+            <div className="technical-reports-workspace__grid">
+              {filteredReports.map((report) => <article className="technical-report-card" key={report.id}>
+                <header><span>{report.codigo}</span><b>{humanize(report.status)}</b></header>
+                <h2>{report.os_codigo} · {report.os_titulo}</h2>
+                <dl><div><dt>Assinante</dt><dd>{report.assinante}</dd></div><div><dt>Data e hora</dt><dd>{formatDate(report.assinado_em)}</dd></div><div><dt>Área</dt><dd>{humanize(report.tipo)}</dd></div></dl>
+                <section><strong>Parecer técnico</strong><p>{report.parecer || 'Sem parecer registrado.'}</p></section>
+                <section className="technical-report-card__trace"><strong>Assinatura digital</strong><span>Referência: <code>{report.assinatura_referencia}</code></span>{report.assinatura_digital ? <span>Arquivo: <code>{report.assinatura_digital}</code></span> : null}<span>Hash imutável: <code>{report.hash}</code></span></section>
+              </article>)}
+            </div>
+          </section>
+        ) : (
         <section
           className={`manager-simple-decision-stage${remainingItems.length ? '' : ' is-single'}`}
         >
@@ -640,6 +710,7 @@ export function GestorDecisionWorkspace({
             </aside>
           ) : null}
         </section>
+        )}
       </main>
 
       {selectedAction ? (
