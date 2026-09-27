@@ -18,6 +18,11 @@ const ids = {
   adminRole: '00000000-0000-4000-8000-000000000201',
   managerRole: '00000000-0000-4000-8000-000000000202',
   operatorRole: '00000000-0000-4000-8000-000000000203',
+  qualityRole: '00000000-0000-4000-8000-000000000204',
+  safetyRole: '00000000-0000-4000-8000-000000000205',
+  maintenanceRole: '00000000-0000-4000-8000-000000000206',
+  pcmRole: '00000000-0000-4000-8000-000000000207',
+  productionRole: '00000000-0000-4000-8000-000000000208',
   qualityArea: '00000000-0000-4000-8000-000000000301',
   safetyArea: '00000000-0000-4000-8000-000000000302',
   maintenanceArea: '00000000-0000-4000-8000-000000000303',
@@ -151,6 +156,11 @@ async function seedIdentities(
     [ids.adminRole, 'ADMIN', 'Administrador', 'ADMIN'],
     [ids.managerRole, 'GESTOR_TECNICO', 'Gestor técnico', 'MANAGER'],
     [ids.operatorRole, 'OPERADOR', 'Operador', 'OPERATOR'],
+    [ids.qualityRole, 'QUALIDADE', 'Especialista de Qualidade', 'MANAGER'],
+    [ids.safetyRole, 'SEGURANCA', 'Especialista de Segurança', 'MANAGER'],
+    [ids.maintenanceRole, 'TECNICO', 'Técnico de Manutenção', 'OPERATOR'],
+    [ids.pcmRole, 'PCM', 'Planejador PCM', 'MANAGER'],
+    [ids.productionRole, 'PRODUCAO', 'Produção', 'OPERATOR'],
   ] as const;
 
   for (const [id, code, name, roleType] of roles) {

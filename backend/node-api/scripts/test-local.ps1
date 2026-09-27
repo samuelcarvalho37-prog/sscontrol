@@ -247,6 +247,8 @@ $$;
   $env:DEMO_SAFETY_PASSWORD = "Test!$([Guid]::NewGuid().ToString('N'))"
   $env:DEMO_MAINTENANCE_PASSWORD = "Test!$([Guid]::NewGuid().ToString('N'))"
   $env:DEMO_OPERATOR_PASSWORD = "Test!$([Guid]::NewGuid().ToString('N'))"
+  $env:DEMO_PCM_PASSWORD = "Test!$([Guid]::NewGuid().ToString('N'))"
+  $env:DEMO_PRODUCAO_PASSWORD = "Test!$([Guid]::NewGuid().ToString('N'))"
 
   Write-Host '[6/6] Validando seed idempotente em duas execucoes...'
   1..2 | ForEach-Object {
@@ -273,7 +275,9 @@ finally {
     'DEMO_QUALITY_PASSWORD',
     'DEMO_SAFETY_PASSWORD',
     'DEMO_MAINTENANCE_PASSWORD',
-    'DEMO_OPERATOR_PASSWORD'
+    'DEMO_OPERATOR_PASSWORD',
+    'DEMO_PCM_PASSWORD',
+    'DEMO_PRODUCAO_PASSWORD'
   ) | ForEach-Object {
     Remove-Item "Env:$_" -ErrorAction SilentlyContinue
   }
