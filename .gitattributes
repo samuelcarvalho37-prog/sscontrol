@@ -1,0 +1,2 @@
+# Migration checksums are calculated from canonical repository bytes.
+database/postgres/migrations/*.sql text eol=lf
