@@ -82,6 +82,21 @@ jobs:
           cache: npm
           cache-dependency-path: backend/node-api/package-lock.json
       - run: npm ci
+      - name: Prepare migration runtime principal
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'vorqix_api'
+            ) THEN
+              CREATE ROLE vorqix_api NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+            END IF;
+          END;
+          $$;
+          SQL
       - name: Apply official migrations to a disposable database
         run: npm run db:migrate
       - name: Prepare restricted runtime account
