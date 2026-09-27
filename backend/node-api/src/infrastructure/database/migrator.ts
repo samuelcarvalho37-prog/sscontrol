@@ -20,6 +20,19 @@ interface MigrationFile {
   readonly sql: string;
 }
 
+const approvedLegacyChecksums: Readonly<Record<string, readonly string[]>> = {
+  // Recorded by the audited incomplete 0033 rollout in vorqix_dev. This exact
+  // historical hash is accepted only so that forward-only migration 0034 can
+  // restore the missing RLS controls; the stored ledger value is never changed.
+  '0033_technical_validation_reports.sql': [
+    'fbbcce6dfa199285797bba00a1539808020de152360bc4599ab2d53e1a7b3cd8',
+  ],
+};
+
+export function isApprovedLegacyMigrationChecksum(version: string, checksum: string): boolean {
+  return approvedLegacyChecksums[version]?.includes(checksum) ?? false;
+}
+
 function defaultMigrationsDirectory(): string {
   const currentDirectory = dirname(fileURLToPath(import.meta.url));
   return resolve(currentDirectory, '../../../../../database/postgres/migrations');
@@ -169,6 +182,17 @@ export async function migrateDatabase(environment: Environment): Promise<Migrati
       const recordedChecksum = appliedByVersion.get(migration.version);
 
       if (recordedChecksum && recordedChecksum !== migration.checksum) {
+        if (isApprovedLegacyMigrationChecksum(migration.version, recordedChecksum)) {
+          process.emitWarning(
+            `Checksum legado aprovado reconhecido para ${migration.version}; o ledger será preservado e as migrations posteriores continuarão forward-only.`,
+            {
+              code: 'MIGRATION_LEGACY_CHECKSUM_ACCEPTED',
+              detail: `version=${migration.version}`,
+            },
+          );
+          continue;
+        }
+
         throw new AppError({
           code: 'MIGRATION_CHECKSUM_MISMATCH',
           message: `A migração aplicada ${migration.version} foi alterada.`,
