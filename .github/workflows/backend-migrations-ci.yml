@@ -121,7 +121,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 -f ../../../database/postgres/tests/001_schema_contract.sql
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 -f ../../database/postgres/tests/001_schema_contract.sql
           psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 <<'SQL'
           DO $$
           BEGIN
