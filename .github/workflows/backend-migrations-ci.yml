@@ -67,13 +67,13 @@ jobs:
       TEST_DATABASE_URL: postgresql://fab_control_api_local:ci-runtime-password@127.0.0.1:5432/fab_control_node_test_ci
       TEST_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/fab_control_node_test_ci
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/fab_control_node_test_ci
-      DEMO_ADMIN_PASSWORD: Test!ci-admin-password
-      DEMO_QUALITY_PASSWORD: Test!ci-quality-password
-      DEMO_SAFETY_PASSWORD: Test!ci-safety-password
-      DEMO_MAINTENANCE_PASSWORD: Test!ci-maintenance-password
-      DEMO_OPERATOR_PASSWORD: Test!ci-operator-password
-      DEMO_PCM_PASSWORD: Test!ci-pcm-password
-      DEMO_PRODUCAO_PASSWORD: Test!ci-production-password
+      DEMO_ADMIN_PASSWORD: Ci!Admin2026-Seed
+      DEMO_QUALITY_PASSWORD: Ci!Quality2026-Seed
+      DEMO_SAFETY_PASSWORD: Ci!Safety2026-Seed
+      DEMO_MAINTENANCE_PASSWORD: Ci!Maintenance2026-Seed
+      DEMO_OPERATOR_PASSWORD: Ci!Operator2026-Seed
+      DEMO_PCM_PASSWORD: Ci!Pcm2026-Seed
+      DEMO_PRODUCAO_PASSWORD: Ci!Producao2026-Seed
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,6 +81,15 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: backend/node-api/package-lock.json
+      - name: Mask disposable seed credentials
+        run: |
+          echo "::add-mask::$DEMO_ADMIN_PASSWORD"
+          echo "::add-mask::$DEMO_QUALITY_PASSWORD"
+          echo "::add-mask::$DEMO_SAFETY_PASSWORD"
+          echo "::add-mask::$DEMO_MAINTENANCE_PASSWORD"
+          echo "::add-mask::$DEMO_OPERATOR_PASSWORD"
+          echo "::add-mask::$DEMO_PCM_PASSWORD"
+          echo "::add-mask::$DEMO_PRODUCAO_PASSWORD"
       - run: npm ci
       - name: Prepare migration runtime principal
         env:
