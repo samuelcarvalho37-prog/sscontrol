@@ -1,0 +1,160 @@
+name: Backend and migrations CI
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "backend/node-api/**"
+      - "database/postgres/**"
+      - ".github/workflows/backend-migrations-ci.yml"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "backend/node-api/**"
+      - "database/postgres/**"
+      - ".github/workflows/backend-migrations-ci.yml"
+
+jobs:
+  backend-and-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fab_control_node_test_ci
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    defaults:
+      run:
+        working-directory: backend/node-api
+    env:
+      NODE_ENV: test
+      HOST: 127.0.0.1
+      PORT: "3333"
+      LOG_LEVEL: silent
+      TRUST_PROXY: "false"
+      BODY_LIMIT_BYTES: "1048576"
+      CORS_ALLOWED_ORIGINS: http://127.0.0.1:5173
+      OPENAPI_ENABLED: "false"
+      DATABASE_SSL_MODE: disable
+      DATABASE_POOL_MAX: "4"
+      DATABASE_IDLE_TIMEOUT_MS: "5000"
+      DATABASE_CONNECTION_TIMEOUT_MS: "5000"
+      DATABASE_STATEMENT_TIMEOUT_MS: "15000"
+      DEFAULT_TENANT_ID: 00000000-0000-4000-8000-000000000001
+      APP_ENVIRONMENT: DEVELOPMENT
+      APP_RELEASE_VERSION: 1.4.0
+      API_VERSION: 2.0.0
+      SCHEMA_VERSION: postgres-0017
+      CONTRACT_VERSION: 2.0.0
+      FRONTEND_VERSION: 1.4.0
+      AUTH_SESSION_HOURS: "8"
+      AUTH_FIRST_ACCESS_MINUTES: "15"
+      AUTH_MAINTENANCE_SESSION_MINUTES: "30"
+      AUTH_MAX_FAILED_ATTEMPTS: "5"
+      AUTH_LOCK_MINUTES: "15"
+      AUTH_RECOVERY_COOLDOWN_MINUTES: "10"
+      AUTH_PASSWORD_PEPPER: ci-test-password-pepper-never-used-in-production
+      AUTH_RECOVERY_HMAC_SECRET: ci-test-recovery-secret-never-used-in-production
+      AUTH_MAINTENANCE_HMAC_SECRET: ci-test-maintenance-secret-never-used-in-production
+      TEST_DATABASE_URL: postgresql://fab_control_api_local:ci-runtime-password@127.0.0.1:5432/fab_control_node_test_ci
+      TEST_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/fab_control_node_test_ci
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/fab_control_node_test_ci
+      DEMO_ADMIN_PASSWORD: Ci!Admin2026-Seed
+      DEMO_QUALITY_PASSWORD: Ci!Quality2026-Seed
+      DEMO_SAFETY_PASSWORD: Ci!Safety2026-Seed
+      DEMO_MAINTENANCE_PASSWORD: Ci!Maintenance2026-Seed
+      DEMO_OPERATOR_PASSWORD: Ci!Operator2026-Seed
+      DEMO_PCM_PASSWORD: Ci!Pcm2026-Seed
+      DEMO_PRODUCAO_PASSWORD: Ci!Producao2026-Seed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/node-api/package-lock.json
+      - name: Mask disposable seed credentials
+        run: |
+          echo "::add-mask::$DEMO_ADMIN_PASSWORD"
+          echo "::add-mask::$DEMO_QUALITY_PASSWORD"
+          echo "::add-mask::$DEMO_SAFETY_PASSWORD"
+          echo "::add-mask::$DEMO_MAINTENANCE_PASSWORD"
+          echo "::add-mask::$DEMO_OPERATOR_PASSWORD"
+          echo "::add-mask::$DEMO_PCM_PASSWORD"
+          echo "::add-mask::$DEMO_PRODUCAO_PASSWORD"
+      - run: npm ci
+      - name: Prepare migration runtime principal
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'vorqix_api'
+            ) THEN
+              CREATE ROLE vorqix_api NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+            END IF;
+          END;
+          $$;
+          SQL
+      - name: Apply official migrations to a disposable database
+        run: npm run db:migrate
+      - name: Prepare restricted runtime account
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'fab_control_api_local'
+            ) THEN
+              CREATE ROLE fab_control_api_local LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+            END IF;
+          END;
+          $$;
+          ALTER ROLE fab_control_api_local PASSWORD 'ci-runtime-password';
+          GRANT fab_control_runtime TO fab_control_api_local;
+          GRANT EXECUTE ON FUNCTION platform.resolve_active_tenant_by_slug(text, text) TO fab_control_api_local;
+          SQL
+      - name: Validate relational contract and runtime privileges
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 -f ../../database/postgres/tests/001_schema_contract.sql
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d fab_control_node_test_ci -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_catalog.pg_roles WHERE rolname = 'fab_control_api_local') THEN
+              RAISE EXCEPTION 'restricted runtime has an administrative or BYPASSRLS privilege';
+            END IF;
+            IF NOT has_function_privilege('fab_control_api_local', 'platform.resolve_active_tenant_by_slug(text, text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'restricted runtime cannot resolve the pre-auth tenant';
+            END IF;
+            IF has_function_privilege('fab_control_runtime', 'platform.resolve_active_tenant_by_slug(text, text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'runtime group received unexpected pre-auth access';
+            END IF;
+            IF has_function_privilege('public', 'platform.resolve_active_tenant_by_slug(text, text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'PUBLIC received unexpected pre-auth access';
+            END IF;
+          END;
+          $$;
+          SQL
+      - run: npm test
+      - name: Validate idempotent homologation seed
+        run: |
+          npm run seed:homologation
+          npm run seed:homologation
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev
