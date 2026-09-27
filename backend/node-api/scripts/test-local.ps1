@@ -139,6 +139,8 @@ $$;
   $runtimeGrantSql = @"
 ALTER ROLE fab_control_api_local PASSWORD '$escapedRuntimePassword';
 GRANT fab_control_runtime TO fab_control_api_local;
+GRANT EXECUTE ON FUNCTION platform.resolve_active_tenant_by_slug(text, text)
+  TO fab_control_api_local;
 "@
 
   $runtimeGrantSql | & $psql `
@@ -153,6 +155,59 @@ GRANT fab_control_runtime TO fab_control_api_local;
 
   if ($LASTEXITCODE -ne 0) {
     throw 'Falha ao proteger o usuario restrito da API.'
+  }
+
+  $runtimeSecuritySql = @'
+DO $$
+BEGIN
+  IF (SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls
+      FROM pg_catalog.pg_roles
+      WHERE rolname = 'fab_control_api_local') THEN
+    RAISE EXCEPTION 'O runtime isolado possui privilegios administrativos ou BYPASSRLS.';
+  END IF;
+
+  IF NOT has_function_privilege(
+    'fab_control_api_local',
+    'platform.resolve_active_tenant_by_slug(text, text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'O runtime isolado nao possui EXECUTE no resolvedor pre-auth.';
+  END IF;
+
+  IF has_function_privilege(
+    'fab_control_runtime',
+    'platform.resolve_active_tenant_by_slug(text, text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'fab_control_runtime recebeu EXECUTE indevido no resolvedor pre-auth.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.routine_privileges
+    WHERE specific_schema = 'platform'
+      AND routine_name = 'resolve_active_tenant_by_slug'
+      AND grantee = 'PUBLIC'
+      AND privilege_type = 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'PUBLIC recebeu EXECUTE indevido no resolvedor pre-auth.';
+  END IF;
+END;
+$$;
+'@
+
+  $runtimeSecuritySql | & $psql `
+    -X `
+    -q `
+    -h $HostName `
+    -p $Port `
+    -U $DatabaseAdminUser `
+    -d $databaseName `
+    -v ON_ERROR_STOP=1 `
+    -f -
+
+  if ($LASTEXITCODE -ne 0) {
+    throw 'O contrato de seguranca do runtime isolado foi reprovado.'
   }
 
   Write-Host '[4/6] Validando contrato relacional...'
