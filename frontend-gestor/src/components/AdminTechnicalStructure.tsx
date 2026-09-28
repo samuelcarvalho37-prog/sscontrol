@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   listAllTechnicalAreas,
   listAllTechnicalRoles,
@@ -61,6 +61,7 @@ export function AdminTechnicalStructure({ onSessionExpired }: AdminTechnicalStru
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const requestSequence = useRef(0)
 
   const handleFailure = useCallback((cause: unknown, fallback: string) => {
     if (isGestorAuthenticationError(cause)) {
@@ -71,13 +72,23 @@ export function AdminTechnicalStructure({ onSessionExpired }: AdminTechnicalStru
   }, [onSessionExpired])
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
-    const [nextAreas, nextRoles] = await Promise.all([
-      listAllTechnicalAreas(signal),
-      listAllTechnicalRoles('', signal),
-    ])
-    setAreas(nextAreas)
-    setRoles(nextRoles)
-    setSelectedAreaId((current) => current && nextAreas.some((area) => area.id === current) ? current : (nextAreas[0]?.id ?? ''))
+    const sequence = ++requestSequence.current
+    try {
+      const [nextAreas, nextRoles] = await Promise.all([
+        listAllTechnicalAreas(signal),
+        listAllTechnicalRoles('', signal),
+      ])
+      if (signal?.aborted || sequence !== requestSequence.current) return false
+
+      setAreas(nextAreas)
+      setRoles(nextRoles)
+      setSelectedAreaId((current) => current && nextAreas.some((area) => area.id === current) ? current : (nextAreas[0]?.id ?? ''))
+      setError('')
+      return true
+    } catch (cause) {
+      if (signal?.aborted || sequence !== requestSequence.current) return false
+      throw cause
+    }
   }, [])
 
   useEffect(() => {
