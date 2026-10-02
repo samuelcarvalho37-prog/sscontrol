@@ -1248,6 +1248,14 @@ export class OperationsRepository {
                   AND history.event_type='EXECUTION_TECHNICAL_REPORT'
                 ORDER BY history.occurred_at DESC LIMIT 1) AS relatorio_tecnico,
                execution.execution_stop_mode AS modo_parada,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', support_user.id, 'nome', support_user.name
+               ) ORDER BY support.support_slot)
+               FROM maintenance.execution_support_technicians support
+               JOIN iam.users support_user
+                 ON support_user.tenant_id=support.tenant_id AND support_user.id=support.user_id
+               WHERE support.tenant_id=execution.tenant_id AND support.execution_id=execution.id),
+               '[]'::jsonb) AS tecnicos_auxiliares,
                work_order.code AS ordem_codigo,
                work_order.title AS titulo, asset.tag AS ativo_tag, asset.name AS ativo_nome,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
@@ -1308,6 +1316,27 @@ export class OperationsRepository {
       [id],
     );
     return result.rows[0] ?? null;
+  }
+
+  async replaceExecutionSupportTechnicians(
+    client: PoolClient,
+    tenantId: string,
+    executionId: string,
+    technicianIds: readonly string[],
+  ): Promise<void> {
+    await client.query(
+      `DELETE FROM maintenance.execution_support_technicians
+       WHERE tenant_id=$1 AND execution_id=$2`,
+      [tenantId, executionId],
+    );
+    for (const [index, technicianId] of technicianIds.entries()) {
+      await client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,$4)`,
+        [tenantId, executionId, technicianId, index + 1],
+      );
+    }
   }
 
   async findExecutionItem(

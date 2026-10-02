@@ -972,7 +972,7 @@ function mapActionDetail(value: JsonRecord): JsonRecord {
   };
 }
 
-function nodeActionRequest(
+export function nodeActionRequest(
   action: string,
   payload: Record<string, unknown>,
 ): NodeActionRequest | null {
@@ -1275,6 +1275,7 @@ function nodeActionRequest(
           resultado: payload.resultado,
           observacao: payload.observacao,
           modo_parada: payload.modo_parada,
+          tecnicos_auxiliares_ids: payload.tecnicos_auxiliares_ids,
         },
         token,
       };

@@ -19,6 +19,7 @@ const ids = {
   safety: randomUUID(),
   operator: randomUUID(),
   support: randomUUID(),
+  supportSecond: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
   operatorRole: randomUUID(),
@@ -81,6 +82,16 @@ interface ExecutionDetailResponse {
     readonly execucao: {
       readonly itens: readonly ExecutionChecklistItem[];
     };
+  };
+}
+
+interface ExecutionSupportDetailResponse {
+  readonly data: {
+    readonly operador_id: string;
+    readonly tecnicos_auxiliares: readonly {
+      readonly id: string;
+      readonly nome: string;
+    }[];
   };
 }
 
@@ -154,6 +165,32 @@ async function transaction<T>(
   }
 }
 
+async function expectDatabaseRejection(
+  client: PoolClient,
+  operation: () => Promise<unknown>,
+  expected: {
+    readonly code: string;
+    readonly constraint?: string;
+    readonly messageIncludes?: string;
+  },
+): Promise<void> {
+  await client.query('SAVEPOINT expected_database_rejection');
+  let rejection: unknown;
+  try {
+    await operation();
+  } catch (cause) {
+    rejection = cause;
+  } finally {
+    await client.query('ROLLBACK TO SAVEPOINT expected_database_rejection');
+    await client.query('RELEASE SAVEPOINT expected_database_rejection');
+  }
+  assert.ok(rejection instanceof Error, 'A operação deveria ter sido rejeitada pelo PostgreSQL.');
+  const databaseError = rejection as Error & { readonly code?: string; readonly constraint?: string };
+  assert.equal(databaseError.code, expected.code);
+  if (expected.constraint) assert.equal(databaseError.constraint, expected.constraint);
+  if (expected.messageIncludes) assert.match(databaseError.message, new RegExp(expected.messageIncludes, 'u'));
+}
+
 async function seed(pool: Pool): Promise<SeededIdentities> {
   const admin = token();
   const quality = token();
@@ -171,21 +208,22 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
       ($1,$4,'OPS_ADMIN','Administrador','Administra o fluxo.','ADMIN',true),
       ($2,$4,'OPS_VALIDATOR','Validador','Valida o fluxo.','MANAGER',true),
-      ($3,$4,'OPS_OPERATOR','Operador','Executa o fluxo.','OPERATOR',true)`,
+      ($3,$4,'TECNICO','Operador','Executa o fluxo.','OPERATOR',true)`,
       [ids.adminRole, ids.validatorRole, ids.operatorRole, tenantId],
     );
     await client.query(
       `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
-      ($1,$6,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
-      ($2,$6,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
-      ($3,$6,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
-      ($4,$6,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false),
-      ($5,$6,'USR-OPS-SUP','Apoio Operações','ops.support@fabcontrol.local',false)`,
-      [ids.admin, ids.quality, ids.safety, ids.operator, ids.support, tenantId],
+      ($1,$7,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
+      ($2,$7,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
+      ($3,$7,'USR-OPS-SEG','Segurança Operações','ops.safety@fabcontrol.local',false),
+      ($4,$7,'USR-OPS-OPE','Operador Operações','ops.operator@fabcontrol.local',false),
+      ($5,$7,'USR-OPS-SUP','Apoio Operações','ops.support@fabcontrol.local',false),
+      ($6,$7,'USR-OPS-SUP-02','Apoio Operações Dois','ops.support-2@fabcontrol.local',false)`,
+      [ids.admin, ids.quality, ids.safety, ids.operator, ids.support, ids.supportSecond, tenantId],
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
-      ($1,$2,$7),($1,$3,$8),($1,$4,$8),($1,$5,$9),($1,$6,$9)`,
+      ($1,$2,$8),($1,$3,$9),($1,$4,$9),($1,$5,$10),($1,$6,$10),($1,$7,$10)`,
       [
         tenantId,
         ids.admin,
@@ -193,6 +231,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
         ids.safety,
         ids.operator,
         ids.support,
+        ids.supportSecond,
         ids.adminRole,
         ids.validatorRole,
         ids.operatorRole,
@@ -1222,10 +1261,30 @@ test(
     });
     assert.equal(normalEvidenceSaved.statusCode, 200, normalEvidenceSaved.body);
     const normalCompleted = await app.inject({
-      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/complete`, headers: bearer(identities.operator),
-      payload: { resultado: 'Preventiva normal concluída.', observacao: null, modo_parada: 'NO_STOP' },
+      method: 'POST', url: `/v1/maintenance/executions/${normalExecutionId}/complete`, headers: bearer(identities.operator),
+      payload: {
+        resultado: 'Preventiva normal concluída.', observacao: null, modo_parada: 'NO_STOP',
+        tecnicos_auxiliares_ids: [ids.support, ids.supportSecond],
+      },
     });
     assert.equal(normalCompleted.statusCode, 200, normalCompleted.body);
+    assert.deepEqual(normalCompleted.json().data.tecnicos_auxiliares, [
+      { id: ids.support, nome: 'Apoio Operações' },
+      { id: ids.supportSecond, nome: 'Apoio Operações Dois' },
+    ]);
+    assert.equal(normalCompleted.json().data.operador_id, ids.operator);
+    const normalExecutionDetail = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/executions/${normalExecutionId}`,
+      headers: bearer(identities.quality),
+    });
+    assert.equal(normalExecutionDetail.statusCode, 200, normalExecutionDetail.body);
+    const normalExecutionDetailBody = normalExecutionDetail.json<ExecutionSupportDetailResponse>();
+    assert.equal(normalExecutionDetailBody.data.operador_id, ids.operator);
+    assert.deepEqual(
+      normalExecutionDetailBody.data.tecnicos_auxiliares.map((technician) => technician.id),
+      [ids.support, ids.supportSecond],
+    );
     const normalClosed = await app.inject({
       method: 'GET', url: `/v1/maintenance/work-orders/${normalWorkOrderId}`, headers: bearer(identities.admin),
     });
@@ -1233,6 +1292,105 @@ test(
     assert.equal(normalClosed.json().data.status, 'COMPLETED');
     assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
     await transaction(pool, async (client) => {
+      const supportTeam = await client.query(
+        `SELECT tenant_id, execution_id, user_id, support_slot
+           FROM maintenance.execution_support_technicians
+          WHERE execution_id=$1
+          ORDER BY support_slot`,
+        [normalExecutionId],
+      );
+      assert.deepEqual(supportTeam.rows, [
+        { tenant_id: tenantId, execution_id: normalExecutionId, user_id: ids.support, support_slot: 1 },
+        { tenant_id: tenantId, execution_id: normalExecutionId, user_id: ids.supportSecond, support_slot: 2 },
+      ]);
+      const supportHistory = await client.query<{
+        readonly tenant_id: string;
+        readonly execution_id: string;
+        readonly payload: {
+          readonly tecnico_principal_id: string;
+          readonly tecnicos_auxiliares_ids: readonly string[];
+        };
+      }>(
+        `SELECT tenant_id, execution_id, payload
+           FROM maintenance.history_events
+          WHERE execution_id=$1
+            AND event_type='EXECUTION_SUPPORT_TECHNICIANS_RECORDED'`,
+        [normalExecutionId],
+      );
+      assert.deepEqual(supportHistory.rows, [{
+        tenant_id: tenantId,
+        execution_id: normalExecutionId,
+        payload: {
+          tecnico_principal_id: ids.operator,
+          tecnicos_auxiliares_ids: [ids.support, ids.supportSecond],
+        },
+      }]);
+      const directExecution = await client.query<{ readonly id: string }>(
+        `SELECT id FROM maintenance.executions WHERE work_order_action_id=$1`,
+        [actionId],
+      );
+      const directExecutionId = directExecution.rows[0]?.id;
+      assert.ok(directExecutionId);
+      const executionWithoutSupport = await client.query<{ readonly total: number }>(
+        `SELECT count(*)::integer AS total
+           FROM maintenance.execution_support_technicians
+          WHERE execution_id=$1`,
+        [directExecutionId],
+      );
+      assert.equal(executionWithoutSupport.rows[0]?.total, 0);
+      await expectDatabaseRejection(client, () => client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,3)`,
+        [tenantId, directExecutionId, ids.support],
+      ), { code: '23514', constraint: 'execution_support_technicians_slot_check' });
+      await expectDatabaseRejection(client, () => client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,1)`,
+        [tenantId, directExecutionId, ids.operator],
+      ), { code: '23514', messageIncludes: 'principal não pode ser registrado como auxiliar' });
+      await client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,1)`,
+        [tenantId, directExecutionId, ids.support],
+      );
+      const directSupportTeam = await client.query(
+        `SELECT user_id, support_slot
+           FROM maintenance.execution_support_technicians
+          WHERE execution_id=$1
+          ORDER BY support_slot`,
+        [directExecutionId],
+      );
+      assert.deepEqual(
+        directSupportTeam.rows,
+        [
+          { user_id: ids.support, support_slot: 1 },
+        ],
+      );
+      await expectDatabaseRejection(client, () => client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,1)`,
+        [tenantId, directExecutionId, ids.supportSecond],
+      ), { code: '23505', constraint: 'execution_support_technicians_unique_slot' });
+      await expectDatabaseRejection(client, () => client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,2)`,
+        [tenantId, directExecutionId, ids.support],
+      ), { code: '23505', constraint: 'execution_support_technicians_unique_member' });
+      await expectDatabaseRejection(client, () => client.query(
+        `UPDATE maintenance.executions SET operator_id=$2 WHERE id=$1`,
+        [directExecutionId, ids.support],
+      ), { code: '23514', messageIncludes: 'principal não pode coincidir com um auxiliar registrado' });
+      await expectDatabaseRejection(client, () => client.query(
+        `INSERT INTO maintenance.execution_support_technicians
+           (tenant_id, execution_id, user_id, support_slot)
+         VALUES ($1,$2,$3,1)`,
+        [randomUUID(), directExecutionId, ids.supportSecond],
+      ), { code: '42501' });
       const isolatedSignatureRequirement = await client.query(
         `SELECT demand.demand_type, requirement.requirement_code
          FROM maintenance.work_orders work_order

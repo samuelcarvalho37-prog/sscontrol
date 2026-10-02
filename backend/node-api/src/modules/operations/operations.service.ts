@@ -994,7 +994,10 @@ export class OperationsService {
         const execution = executionId
           ? await this.requiredExecutionDetail(client, executionId)
           : null;
-        return { acao: action, execucao: execution };
+        const technicians = execution?.operador_id === user.id
+          ? await this.repository.listActiveTechnicians(client)
+          : [];
+        return { acao: action, execucao: execution, tecnicos_elegiveis: technicians };
       },
     );
   }
@@ -1309,6 +1312,10 @@ export class OperationsService {
             state,
           );
         }
+        await this.saveExecutionSupportTechnicians(client, user, execution, input.supportTechnicianIds ?? []);
+        await this.recordExecutionSupportTechnicians(
+          client, user, execution, input.supportTechnicianIds ?? [], audit.roleSnapshot,
+        );
         await this.repository.completeExecution(client, execution, {
           ...input,
           result: input.result.trim(),
@@ -1818,6 +1825,10 @@ export class OperationsService {
             },
           );
         }
+        await this.saveExecutionSupportTechnicians(client, user, execution, input.supportTechnicianIds ?? []);
+        await this.recordExecutionSupportTechnicians(
+          client, user, execution, input.supportTechnicianIds ?? [], audit.roleSnapshot,
+        );
         await this.repository.completeExecution(client, execution, {
           ...input,
           result: input.result.trim(),
@@ -1862,6 +1873,53 @@ export class OperationsService {
         422,
       );
     }
+  }
+
+  private async saveExecutionSupportTechnicians(
+    client: import('pg').PoolClient,
+    user: AuthenticatedUser,
+    execution: OperationsRow,
+    supportTechnicianIds: readonly string[],
+  ): Promise<void> {
+    if (supportTechnicianIds.length > 2) {
+      throw error('EXECUTION_SUPPORT_TECHNICIANS_LIMIT_EXCEEDED', 'Informe no máximo dois técnicos auxiliares.', 422);
+    }
+    if (new Set(supportTechnicianIds).size !== supportTechnicianIds.length) {
+      throw error('EXECUTION_SUPPORT_TECHNICIANS_DUPLICATE', 'O mesmo técnico auxiliar não pode ser informado mais de uma vez.', 422);
+    }
+    if (supportTechnicianIds.includes(user.id)) {
+      throw error('EXECUTION_SUPPORT_TECHNICIAN_IS_OPERATOR', 'O técnico principal não pode ser informado como auxiliar.', 422);
+    }
+    for (const technicianId of supportTechnicianIds) {
+      if (!(await this.repository.activeTechnicianExists(client, technicianId))) {
+        throw error('EXECUTION_SUPPORT_TECHNICIAN_INVALID', 'Cada técnico auxiliar deve ser ativo, elegível e pertencer ao mesmo tenant.', 422);
+      }
+    }
+    await this.repository.replaceExecutionSupportTechnicians(
+      client,
+      user.tenantId,
+      text(execution, 'id'),
+      supportTechnicianIds,
+    );
+  }
+
+  private async recordExecutionSupportTechnicians(
+    client: import('pg').PoolClient,
+    user: AuthenticatedUser,
+    execution: OperationsRow,
+    supportTechnicianIds: readonly string[],
+    roleSnapshot: string,
+  ): Promise<void> {
+    if (supportTechnicianIds.length === 0) return;
+    const action = await this.repository.findAction(client, text(execution, 'work_order_action_id'));
+    if (!action) {
+      throw error('EXECUTION_ACTION_NOT_FOUND', 'A ação da execução não foi encontrada.', 409);
+    }
+    await this.repository.writeHistory(
+      client, user.tenantId, action, text(execution, 'id'), user.id, roleSnapshot,
+      'EXECUTION_SUPPORT_TECHNICIANS_RECORDED', 'Técnicos auxiliares registrados na execução.',
+      { tecnico_principal_id: user.id, tecnicos_auxiliares_ids: supportTechnicianIds },
+    );
   }
 
   private validateResponse(
