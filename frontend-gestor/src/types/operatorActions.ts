@@ -83,6 +83,7 @@ export interface Execution {
   resultado: string | null
   observacao: string | null
   modo_parada: StopMode | null
+  tecnicos_auxiliares?: Array<{ id: string; nome: string }>
   materiais?: Array<{
     id: string
     material_id: string
@@ -151,4 +152,11 @@ export interface TechnicalCompletionInput {
   resultado: string
   observacao: string | null
   modo_parada: StopMode
+  tecnicos_auxiliares_ids?: string[]
+}
+
+export interface EligibleSupportTechnician {
+  id: string
+  nome: string
+  matricula: string | null
 }

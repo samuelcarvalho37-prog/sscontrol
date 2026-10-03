@@ -215,6 +215,7 @@ export const completeExecutionBodySchema = Type.Object(
     ),
     resultado: Type.String({ minLength: 3, maxLength: 2_000 }),
     observacao: nullableText,
+    tecnicos_auxiliares_ids: Type.Optional(Type.Array(uuid, { maxItems: 2, uniqueItems: true })),
     modo_parada: Type.Union([
       Type.Literal('NO_STOP'),
       Type.Literal('STOPPED'),

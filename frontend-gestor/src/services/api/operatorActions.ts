@@ -9,6 +9,7 @@ import type {
   OperatorActionDetail,
   StopMode,
   TechnicalCompletionInput,
+  EligibleSupportTechnician,
 } from '../../types/operatorActions'
 import type { AdminEntityRecord } from '../../types/catalog'
 
@@ -40,9 +41,10 @@ export async function listTechnicianPlans(signal?: AbortSignal): Promise<AdminEn
   return requireData(response.data, 'maintenance.plans.list').rows ?? []
 }
 
-export async function getOperatorAction(actionId: string, signal?: AbortSignal): Promise<{ acao: OperatorActionDetail; execucao: Execution | null }> {
-  const response = await callApi<{ acao: OperatorActionDetail; execucao: Execution | null }>('operator-actions.get', { token: token(), acao_id: actionId }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
-  return requireData(response.data, 'operator-actions.get')
+export async function getOperatorAction(actionId: string, signal?: AbortSignal): Promise<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis: EligibleSupportTechnician[] }> {
+  const response = await callApi<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis?: EligibleSupportTechnician[] }>('operator-actions.get', { token: token(), acao_id: actionId }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
+  const data = requireData(response.data, 'operator-actions.get')
+  return { ...data, tecnicos_elegiveis: data.tecnicos_elegiveis ?? [] }
 }
 
 export async function startOperatorAction(actionId: string, modoParada: StopMode): Promise<Execution> {

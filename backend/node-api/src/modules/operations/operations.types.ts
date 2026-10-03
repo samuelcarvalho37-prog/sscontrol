@@ -117,6 +117,7 @@ export interface CompletionInput {
   readonly result: string;
   readonly observation: string | null;
   readonly stopMode: ExecutionStopMode;
+  readonly supportTechnicianIds?: readonly string[];
 }
 
 export interface ActionReviewInput {
