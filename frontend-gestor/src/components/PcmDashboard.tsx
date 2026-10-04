@@ -9,6 +9,7 @@ import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
 import type { GestorActionDetail, GestorNotification } from '../types/gestor'
+import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction } from './pcmOccurrenceAssetResolver'
 import './PcmDashboard.css'
 
 interface PcmData {
@@ -351,13 +352,15 @@ function normalize(value: string) {
   return value.trim().toLocaleUpperCase('pt-BR')
 }
 
-function humanStatus(value: string) {
+export function humanStatus(value: string) {
   const source = normalize(value)
   const labels: Record<string, string> = {
     DRAFT: 'Rascunho',
     RASCUNHO: 'Rascunho',
     OPEN: 'Aberta',
     ABERTA: 'Aberta',
+    RELEASED: 'Liberada para execução',
+    LIBERADA: 'Liberada para execução',
     READY: 'Pronta para execução',
     IN_PROGRESS: 'Em execução',
     EM_EXECUCAO: 'Em execução',
@@ -375,11 +378,12 @@ function humanStatus(value: string) {
   return readable ? readable.charAt(0).toLocaleUpperCase('pt-BR') + readable.slice(1) : 'Não informado'
 }
 
-function humanAuditAction(value: string) {
+export function humanAuditAction(value: string) {
   const labels: Record<string, string> = {
     WORK_ORDER_CREATED: 'OS criada',
     WORK_ORDER_SUBMITTED: 'OS enviada para aprovação',
     WORK_ORDER_RELEASED: 'OS liberada para execução',
+    WORK_ORDER_APPROVED_WITHOUT_EXCEPTION: 'OS aprovada sem necessidade de validação adicional',
     OPERATOR_ACTION_STARTED: 'Execução iniciada',
     EXECUTION_RESPONSES_SAVED: 'Checklist registrado',
     OPERATOR_ACTION_COMPLETED: 'Execução concluída',
@@ -584,8 +588,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [orderResponsible, setOrderResponsible] = useState('')
   const [orderType, setOrderType] = useState('')
   const [createOrderOpen, setCreateOrderOpen] = useState(false)
+  const createOccurrenceAssetResolverRef = useRef<ReturnType<typeof createPcmOccurrenceAssetResolver> | null>(null)
+  createOccurrenceAssetResolverRef.current ??= createPcmOccurrenceAssetResolver()
   const [createOrderMode, setCreateOrderMode] = useState<'WORK_ORDER' | 'PREVENTIVE'>('WORK_ORDER')
   const [createOrderBusy, setCreateOrderBusy] = useState(false)
+  const [createOriginLoading, setCreateOriginLoading] = useState(false)
   const [createOrderError, setCreateOrderError] = useState('')
   const [createOrderSuccess, setCreateOrderSuccess] = useState('')
   const [createPlansLoading, setCreatePlansLoading] = useState(false)
@@ -605,6 +612,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [createOriginEntityId, setCreateOriginEntityId] = useState('')
   const [createOriginAssetId, setCreateOriginAssetId] = useState('')
   const [createOriginAssetTag, setCreateOriginAssetTag] = useState('')
+  const [createOriginAssetName, setCreateOriginAssetName] = useState('')
+  const [createOriginType, setCreateOriginType] = useState('')
   const [createRequiresPostIntervention, setCreateRequiresPostIntervention] = useState(false)
   const [todayNotifications, setTodayNotifications] = useState<GestorNotification[]>([])
   const [notificationsError, setNotificationsError] = useState('')
@@ -987,7 +996,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     return items.slice(0, 5)
   }, [activeCriticalOrders, data])
 
-  async function openOperationalOrder(order: OperationalOrder) {
+  async function openWorkOrderById(workOrderId: string) {
     const requestId = detailRequestRef.current + 1
     detailRequestRef.current = requestId
     setSelectedOrderLoading(true)
@@ -996,7 +1005,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setReleaseError('')
     setPrepareError('')
     try {
-      const detail = await getAdminIntervention(order.raw.id)
+      const detail = await getAdminIntervention(workOrderId)
       let actionDetail: GestorActionDetail | null = null
       if (detail.acao_id) {
         try { actionDetail = await getGestorActionDetail(detail.acao_id) } catch { /* A OS continua acessível mesmo sem histórico de execução. */ }
@@ -1015,6 +1024,10 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     } finally {
       if (detailRequestRef.current === requestId) setSelectedOrderLoading(false)
     }
+  }
+
+  async function openOperationalOrder(order: OperationalOrder) {
+    await openWorkOrderById(order.raw.id)
   }
 
   function closeOperationalOrder() {
@@ -1084,33 +1097,45 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateOriginEntityId('')
     setCreateOriginAssetId('')
     setCreateOriginAssetTag('')
+    setCreateOriginAssetName('')
+    setCreateOriginType('')
+    setCreateOriginLoading(false)
     setCreateOrderError('')
   }
 
+  function closeCreateOrder() {
+    createOccurrenceAssetResolverRef.current?.cancel()
+    setCreateOrderOpen(false)
+    resetCreateOrderForm()
+  }
+
   async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' = 'WORK_ORDER', notification?: GestorNotification) {
+    createOccurrenceAssetResolverRef.current?.cancel()
     resetCreateOrderForm()
     setCreateOrderMode(mode)
     setCreateOrderOpen(true)
     setCreateOrderError('')
     setCreateOrderSuccess('')
     if (notification) {
-      const assetTag = notification.titulo.match(/—\s*([A-Za-z]+\d+)\b/u)?.[1] ?? ''
-      const matchingAsset = assetTag
-        ? assetCatalog.find(asset => recordText(asset.tag).toLocaleUpperCase('pt-BR') === assetTag.toLocaleUpperCase('pt-BR'))
-        : null
-      const matchingPlan = matchingAsset
-        ? executablePlans.find(plan => plan.assetId === matchingAsset.id)
-        : assetTag
-          ? executablePlans.find(plan => plan.asset.startsWith(`${assetTag} ·`))
-          : null
       setCreateTitle(notification.titulo)
       setCreateDescription(notification.mensagem || `OS originada da notificação: ${notification.titulo}.`)
       setCreatePriority(normalize(notification.prioridade || 'MEDIUM'))
       setCreateOriginEntityId(notification.entidade_id || '')
-      setCreateOriginAssetTag(assetTag)
-      setCreateOriginAssetId(matchingAsset?.id || '')
-      if (matchingPlan) setCreatePlanVersionId(matchingPlan.versionId)
-      else if (!matchingAsset) setCreateOrderError(assetTag ? `Não foi possível identificar o ativo ${assetTag} da ocorrência.` : 'Não foi possível identificar o ativo da ocorrência.')
+      setCreateOriginLoading(true)
+      const resolution = await createOccurrenceAssetResolverRef.current!.resolve(notification.entidade_id ?? '')
+      if (resolution.status === 'stale') return
+      setCreateOriginLoading(false)
+      if (resolution.status === 'error') {
+        setCreateOrderError(resolution.message)
+      } else {
+        const { context } = resolution
+        const matchingPlan = executablePlans.find(plan => plan.assetId === context.assetId)
+        setCreateOriginAssetId(context.assetId)
+        setCreateOriginAssetTag(context.assetTag)
+        setCreateOriginAssetName(context.assetName)
+        setCreateOriginType(context.occurrenceType)
+        if (matchingPlan) setCreatePlanVersionId(matchingPlan.versionId)
+      }
     }
     if (createPlans.length > 0) return
     setCreatePlansLoading(true)
@@ -1133,7 +1158,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   }
 
   async function createWorkOrder() {
-    const canBootstrapCorrective = createOrderMode === 'WORK_ORDER' && Boolean(createOriginEntityId && (createOriginAssetId || createOriginAssetTag))
+    const canBootstrapCorrective = createOrderMode === 'WORK_ORDER' && Boolean(createOriginEntityId && createOriginAssetId)
     if ((!selectedCreatePlan && !canBootstrapCorrective) || createTitle.trim().length < 3 || createDescription.trim().length < 3) {
       setCreateOrderError('Informe título e descrição com pelo menos 3 caracteres e confirme o ativo da ocorrência.')
       return
@@ -1147,7 +1172,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     try {
       const releaseForMaintenance = Boolean(createOriginEntityId)
       const created = await saveAdminIntervention({
-        origem: createOrderMode === 'PREVENTIVE' ? 'PCM_PREVENTIVE_SCHEDULE' : 'PCM',
+        origem: createOrderMode === 'PREVENTIVE'
+          ? 'PCM_PREVENTIVE_SCHEDULE'
+          : createOriginEntityId
+            ? 'OCCURRENCE'
+            : 'PCM',
         entidade_origem_id: createOriginEntityId || undefined,
         ...(selectedCreatePlan ? { plano_versao_id: selectedCreatePlan.versionId } : {}),
         ativo_id: selectedCreatePlan ? undefined : createOriginAssetId || undefined,
@@ -1171,8 +1200,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         // mas nunca deve impedir a equipe de iniciar a execução da OS.
         await releaseMaintenanceWorkOrder(created.id)
       }
-      setCreateOrderOpen(false)
-      resetCreateOrderForm()
+      closeCreateOrder()
       setCreateOrderSuccess(releaseForMaintenance
         ? `OS ${created.codigo} criada e liberada para a equipe de Manutenção. O primeiro técnico a iniciá-la será registrado como executor.${createRequiresPostIntervention ? ' Qualidade ou Segurança validará a conclusão após a execução.' : ''}`
         : createOrderMode === 'PREVENTIVE'
@@ -1355,18 +1383,21 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         {notificationsError ? <p className="pcm-today-notifications__error" role="alert">{notificationsError}</p> : null}
         {pendingTodayNotifications.length ? (
           <ul>
-            {pendingTodayNotifications.slice(0, 5).map(notification => (
-              <li key={notification.id} className={`is-${normalize(notification.prioridade || 'MEDIA').toLowerCase()}`}>
-                <button type="button" onClick={() => void openCreateOrder('WORK_ORDER', notification)}>
+            {pendingTodayNotifications.slice(0, 5).map(notification => {
+              const action = pcmOccurrenceNotificationAction(notification)
+              return <li key={notification.id} className={`is-${normalize(notification.prioridade || 'MEDIA').toLowerCase()}`}>
+                <button type="button" onClick={() => action.kind === 'follow'
+                  ? void openWorkOrderById(action.workOrderId)
+                  : void openCreateOrder('WORK_ORDER', notification)}>
                   <div>
                     <strong>{notification.titulo}</strong>
                     <span>{notification.mensagem || 'Nova atualização operacional requer atenção do PCM.'}</span>
-                    <em>Criar OS e direcionar técnico →</em>
+                    <em>{action.kind === 'follow' ? `Acompanhar OS ${action.label} →` : 'Criar ordem de serviço →'}</em>
                   </div>
                   <small>{humanPriority(notification.prioridade || 'MEDIA')}</small>
                 </button>
               </li>
-            ))}
+            })}
           </ul>
         ) : <p className="pcm-empty">Nenhuma notificação recebida hoje.</p>}
       </section>
@@ -1783,38 +1814,62 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
               </div>
             </section>
           </div>
-          {createOrderOpen ? <div className="pcm-assignment-modal" role="dialog" aria-modal="true" aria-labelledby="pcm-create-order-title">
-            <div className="pcm-assignment-modal__card pcm-create-order-modal">
-              <h2 id="pcm-create-order-title">{createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</h2>
-              <p>{createOriginEntityId ? 'A ocorrência já definiu o ativo. Revise as informações e crie a OS corretiva.' : createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : 'Selecione um plano publicado. O equipamento e o tipo de manutenção são definidos pelo plano.'}</p>
-              {createOriginEntityId ? (
-                <div className="pcm-create-order-modal__origin">
-                  <span>DEMANDA DE ORIGEM</span>
-                  <strong>{createOriginAssetTag || 'Ativo informado na ocorrência'}</strong>
-                  <small>{selectedCreatePlan ? `${selectedCreatePlan.code} · ${selectedCreatePlan.name}` : createOriginAssetTag ? 'Sem plano publicado: será criado um checklist corretivo padrão, auditado e vinculado a este ativo.' : 'Ativo da ocorrência não localizado.'}</small>
+          {createOrderOpen ? <div className="pcm-assignment-modal">
+            <section className="pcm-assignment-modal__card pcm-create-order-modal" role="dialog" aria-modal="true" aria-labelledby="pcm-create-order-title" aria-describedby="pcm-create-order-description">
+              <header className="pcm-create-order-modal__header">
+                <div>
+                  <span className="pcm-section-kicker">ORDEM DE SERVIÇO</span>
+                  <h2 id="pcm-create-order-title">{createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</h2>
+                  <p id="pcm-create-order-description">{createOriginEntityId ? 'Revise os dados da ocorrência antes de criar a OS.' : createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : 'Escolha um plano publicado para definir o equipamento e o tipo de manutenção.'}</p>
                 </div>
-              ) : <label>Plano e equipamento
-                <select value={createPlanVersionId} onChange={event => selectCreatePlan(event.target.value)} disabled={createOrderBusy || createPlansLoading}>
-                  <option value="">{createPlansLoading ? 'Carregando planos…' : createOrderMode === 'PREVENTIVE' ? 'Selecione um plano preventivo' : 'Selecione um plano publicado'}</option>
-                  {executablePlans.map(plan => <option key={plan.versionId} value={plan.versionId}>{plan.code} · {plan.name} · {plan.asset}</option>)}
-                </select>
-              </label>}
-              {selectedCreatePlan ? <p className="pcm-create-order-modal__context">Equipamento: <strong>{selectedCreatePlan.asset}</strong> · Tipo: <strong>{humanWorkType(selectedCreatePlan.workType)}</strong>{createOrderMode === 'PREVENTIVE' && selectedCreatePlan.recurrenceDays ? <> · Recorrência: <strong>{selectedCreatePlan.recurrenceDays} dias</strong></> : null}</p> : null}
-              {!createOriginEntityId && !createPlansLoading && createPlans.length > 0 && executablePlans.length === 0 ? <p className="pcm-order-detail__error">{createOrderMode === 'PREVENTIVE' ? 'Não há plano preventivo ativo e publicado com checklist disponível.' : 'Não há plano ativo e publicado com checklist disponível.'}</p> : null}
-              <label>Título<input value={createTitle} onChange={event => setCreateTitle(event.target.value)} maxLength={240} disabled={createOrderBusy} /></label>
-              <label>Descrição<textarea value={createDescription} onChange={event => setCreateDescription(event.target.value)} maxLength={8000} rows={4} disabled={createOrderBusy} /></label>
-              <label>Prioridade
-                <select value={createPriority} onChange={event => setCreatePriority(event.target.value)} disabled={createOrderBusy}>
-                  <option value="LOW">Baixa</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option>
-                </select>
-              </label>
-              <label className="pcm-create-order-modal__post-intervention"><input type="checkbox" checked={createRequiresPostIntervention} onChange={event => setCreateRequiresPostIntervention(event.target.checked)} disabled={createOrderBusy} />
-                <span><strong>Exige confirmação pós-execução de Qualidade ou Segurança?</strong><small>Não bloqueia a execução. Após a conclusão técnica, uma dessas áreas confirma que a OS foi executada corretamente antes do encerramento oficial.</small></span>
-              </label>
-              <label>Programada para{createOrderMode === 'PREVENTIVE' ? '' : ' (opcional)'}<input type="datetime-local" value={createScheduledFor} onChange={event => setCreateScheduledFor(event.target.value)} disabled={createOrderBusy} required={createOrderMode === 'PREVENTIVE'} /></label>
-              {createOrderError ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}
-              <div><button type="button" onClick={() => { setCreateOrderOpen(false); resetCreateOrderForm() }} disabled={createOrderBusy}>Cancelar</button><button type="button" onClick={() => void createWorkOrder()} disabled={createOrderBusy || createPlansLoading || (!selectedCreatePlan && !(createOrderMode === 'WORK_ORDER' && createOriginEntityId && (createOriginAssetId || createOriginAssetTag)))}>{createOrderBusy ? 'Criando…' : createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar OS'}</button></div>
-            </div>
+                <button className="pcm-create-order-modal__close" type="button" aria-label="Fechar criação da ordem de serviço" onClick={closeCreateOrder} disabled={createOrderBusy}>×</button>
+              </header>
+
+              <div className="pcm-create-order-modal__body">
+                {createOriginEntityId ? <section className="pcm-create-order-modal__section pcm-create-order-modal__origin" aria-labelledby="pcm-origin-title">
+                  <div className="pcm-create-order-modal__section-heading">
+                    <span>ORIGEM DA SOLICITAÇÃO</span>
+                    <h3 id="pcm-origin-title">Ocorrência operacional</h3>
+                  </div>
+                  {createOriginLoading ? <p className="pcm-create-order-modal__loading" role="status">Carregando equipamento da ocorrência…</p> : createOriginAssetId ? <dl className="pcm-create-order-modal__origin-grid">
+                    <div><dt>Equipamento</dt><dd>{createOriginAssetName || 'Nome não informado'}</dd></div>
+                    <div><dt>Código</dt><dd>{createOriginAssetTag || 'Não informado'}</dd></div>
+                    <div><dt>Tipo</dt><dd>{createOriginType ? humanStatus(createOriginType) : 'Não informado'}</dd></div>
+                    <div><dt>Prioridade</dt><dd><span className={`pcm-create-order-modal__priority is-${normalize(createPriority).toLowerCase()}`}>{humanPriority(createPriority)}</span></dd></div>
+                  </dl> : <p className="pcm-create-order-modal__empty">O equipamento da ocorrência ainda não foi localizado.</p>}
+                  {selectedCreatePlan ? <p className="pcm-create-order-modal__plan">Plano aplicável: <strong>{selectedCreatePlan.code} · {selectedCreatePlan.name}</strong></p> : createOriginAssetId ? <p className="pcm-create-order-modal__plan">Será criado um checklist corretivo padrão, auditado e vinculado a este equipamento.</p> : null}
+                </section> : <section className="pcm-create-order-modal__section" aria-labelledby="pcm-plan-title">
+                  <div className="pcm-create-order-modal__section-heading"><span>ORIGEM DA SOLICITAÇÃO</span><h3 id="pcm-plan-title">Plano e equipamento</h3></div>
+                  <label>Plano publicado
+                    <select value={createPlanVersionId} onChange={event => selectCreatePlan(event.target.value)} disabled={createOrderBusy || createPlansLoading}>
+                      <option value="">{createPlansLoading ? 'Carregando planos…' : createOrderMode === 'PREVENTIVE' ? 'Selecione um plano preventivo' : 'Selecione um plano publicado'}</option>
+                      {executablePlans.map(plan => <option key={plan.versionId} value={plan.versionId}>{plan.code} · {plan.name} · {plan.asset}</option>)}
+                    </select>
+                  </label>
+                  {selectedCreatePlan ? <p className="pcm-create-order-modal__context">Equipamento: <strong>{selectedCreatePlan.asset}</strong> · Tipo: <strong>{humanWorkType(selectedCreatePlan.workType)}</strong>{createOrderMode === 'PREVENTIVE' && selectedCreatePlan.recurrenceDays ? <> · Recorrência: <strong>{selectedCreatePlan.recurrenceDays} dias</strong></> : null}</p> : null}
+                  {!createPlansLoading && createPlans.length > 0 && executablePlans.length === 0 ? <p className="pcm-order-detail__error">{createOrderMode === 'PREVENTIVE' ? 'Não há plano preventivo ativo e publicado com checklist disponível.' : 'Não há plano ativo e publicado com checklist disponível.'}</p> : null}
+                </section>}
+
+                <section className="pcm-create-order-modal__section" aria-labelledby="pcm-order-data-title">
+                  <div className="pcm-create-order-modal__section-heading"><span>DADOS DA ORDEM DE SERVIÇO</span><h3 id="pcm-order-data-title">Informações para execução</h3></div>
+                  <div className="pcm-create-order-modal__fields">
+                    <label className="is-wide">Título<input value={createTitle} onChange={event => setCreateTitle(event.target.value)} maxLength={240} disabled={createOrderBusy} /></label>
+                    <label className="is-wide">Descrição<textarea value={createDescription} onChange={event => setCreateDescription(event.target.value)} maxLength={8000} rows={4} disabled={createOrderBusy} /></label>
+                    <label>Prioridade<select value={createPriority} onChange={event => setCreatePriority(event.target.value)} disabled={createOrderBusy}><option value="LOW">Baixa</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select></label>
+                    <label>Programada para{createOrderMode === 'PREVENTIVE' ? '' : ' (opcional)'}<input type="datetime-local" value={createScheduledFor} onChange={event => setCreateScheduledFor(event.target.value)} disabled={createOrderBusy} required={createOrderMode === 'PREVENTIVE'} /></label>
+                  </div>
+                </section>
+
+                <section className="pcm-create-order-modal__section" aria-labelledby="pcm-post-intervention-title">
+                  <div className="pcm-create-order-modal__section-heading"><span>VALIDAÇÃO PÓS-INTERVENÇÃO</span><h3 id="pcm-post-intervention-title">Liberação formal</h3></div>
+                  <label className="pcm-create-order-modal__post-intervention"><input type="checkbox" checked={createRequiresPostIntervention} onChange={event => setCreateRequiresPostIntervention(event.target.checked)} disabled={createOrderBusy} /><span><strong>Exigir liberação de Qualidade ou Segurança</strong><small>Use quando a manutenção exigir validação formal antes da liberação final do equipamento.</small></span></label>
+                </section>
+
+                {createOrderError ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}
+              </div>
+
+              <footer className="pcm-create-order-modal__footer"><button className="pcm-create-order-modal__cancel" type="button" onClick={closeCreateOrder} disabled={createOrderBusy}>Cancelar</button><button className="pcm-create-order-modal__submit" type="button" onClick={() => void createWorkOrder()} disabled={createOrderBusy || createOriginLoading || createPlansLoading || (!selectedCreatePlan && !(createOrderMode === 'WORK_ORDER' && createOriginEntityId && createOriginAssetId))}>{createOrderBusy ? 'Criando…' : createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</button></footer>
+            </section>
           </div> : null}
 
           <div className="pcm-tables">

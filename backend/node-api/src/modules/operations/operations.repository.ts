@@ -156,6 +156,78 @@ export class OperationsRepository {
     );
   }
 
+  async findOccurrenceForWorkOrderConversion(
+    client: PoolClient,
+    occurrenceId: string,
+  ): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT id,tenant_id,asset_id,component_id,status,treatment_status,
+              work_order_id,work_order_action_id
+       FROM maintenance.operational_occurrences
+       WHERE id=$1
+       FOR UPDATE`,
+      [occurrenceId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findWorkOrdersByOriginEntity(
+    client: PoolClient,
+    originEntityId: string,
+  ): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(
+      `SELECT *
+       FROM maintenance.work_orders
+       WHERE origin_entity_id=$1
+       ORDER BY created_at,id
+       FOR UPDATE`,
+      [originEntityId],
+    );
+    return result.rows;
+  }
+
+  async linkOccurrenceToWorkOrder(
+    client: PoolClient,
+    occurrenceId: string,
+    workOrderId: string,
+  ): Promise<void> {
+    const result = await client.query(
+      `UPDATE maintenance.operational_occurrences
+       SET work_order_id=$2,status='IN_TREATMENT',treatment_status='WORK_ORDER_CREATED',
+           updated_at=clock_timestamp()
+       WHERE id=$1 AND (work_order_id IS NULL OR work_order_id=$2)`,
+      [occurrenceId, workOrderId],
+    );
+    if ((result.rowCount ?? 0) !== 1) {
+      throw new Error('A ocorrência já está vinculada a outra ordem de serviço.');
+    }
+  }
+
+  async retractOccurrenceNotification(
+    client: PoolClient,
+    occurrenceId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE workflow.notifications
+       SET status='RETRACTED'
+       WHERE entity_type='OPERATIONAL_OCCURRENCE' AND entity_id=$1 AND status='ACTIVE'`,
+      [occurrenceId],
+    );
+  }
+
+  async linkOccurrenceReleaseAction(
+    client: PoolClient,
+    workOrderId: string,
+    actionId: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.operational_occurrences
+       SET work_order_action_id=$2,updated_at=clock_timestamp()
+       WHERE work_order_id=$1 AND (work_order_action_id IS NULL OR work_order_action_id=$2)`,
+      [workOrderId, actionId],
+    );
+  }
+
   async correctWorkOrder(
     client: PoolClient,
     workOrderId: string,
@@ -894,7 +966,10 @@ export class OperationsRepository {
 
   async releaseWorkOrder(client: PoolClient, workOrder: OperationsRow): Promise<string> {
     await client.query(
-      `UPDATE maintenance.work_orders SET status = 'RELEASED', opened_at = COALESCE(opened_at, clock_timestamp()) WHERE id = $1`,
+      `UPDATE maintenance.work_orders
+       SET status='RELEASED',opened_at=COALESCE(opened_at,clock_timestamp()),
+           released_at=COALESCE(released_at,clock_timestamp())
+       WHERE id=$1`,
       [workOrder.id],
     );
     if (workOrder.technical_demand_id) {

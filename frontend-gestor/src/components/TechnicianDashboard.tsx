@@ -11,6 +11,7 @@ import {
   validateOperatorActionCompletion,
 } from '../services/api/operatorActions'
 import { createOperatorActionDetailLoader } from './operatorActionDetailLoader'
+import { completionButtonLabel, completionErrorMessage, requiresPostInterventionRelease, submitTechnicalCompletion } from './technicianCompletion'
 import type { ConsumableMaterial, EligibleSupportTechnician, Execution, ExecutionCompletionBlocker, ExecutionItem, OperatorAction, OperatorActionDetail, StopMode, TechnicalCompletionInput } from '../types/operatorActions'
 
 const stopModeLabels: Record<StopMode, string> = {
@@ -277,18 +278,35 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
 
   async function validateAndComplete() {
     if (!selected) return
-    setBusy(true); setError(''); setBlockers([])
+    setError(''); setBlockers([])
+    const selectedSupports = hasSupportTechnicians ? supportTechnicianIds.filter(Boolean) : []
+    if (hasSupportTechnicians && selectedSupports.length === 0) {
+      setError('Selecione ao menos um técnico auxiliar ou desmarque a participação em equipe.')
+      return
+    }
+    if (new Set(selectedSupports).size !== selectedSupports.length) {
+      setError('O mesmo técnico não pode ser informado duas vezes.')
+      return
+    }
+    setBusy(true)
     try {
-      const validation = await validateOperatorActionCompletion(selected.id)
-      if (!validation.pode_concluir) {
-        setBlockers(validation.pendencias ?? [])
+      const submitted = await submitTechnicalCompletion(
+        { ...completion, modo_parada: mode, tecnicos_auxiliares_ids: selectedSupports },
+        async (normalized) => {
+          const validation = await validateOperatorActionCompletion(selected.id)
+          if (!validation.pode_concluir) {
+            setBlockers(validation.pendencias ?? [])
+            return null
+          }
+          return completeOperatorAction(selected.id, normalized)
+        },
+      )
+      if (!submitted.ok) {
+        setError(submitted.issues.map(issue => issue.message).join(' '))
         return
       }
-      if (completion.resultado.trim().length < 3) throw new Error('Informe o resultado da execução.')
-      const selectedSupports = hasSupportTechnicians ? supportTechnicianIds.filter(Boolean) : []
-      if (hasSupportTechnicians && selectedSupports.length === 0) throw new Error('Selecione ao menos um técnico auxiliar ou desmarque a participação em equipe.')
-      if (new Set(selectedSupports).size !== selectedSupports.length) throw new Error('O mesmo técnico não pode ser informado duas vezes.')
-      const completedExecution = await completeOperatorAction(selected.id, { ...completion, resultado: completion.resultado.trim(), observacao: completion.observacao?.trim() || null, modo_parada: mode, tecnicos_auxiliares_ids: selectedSupports })
+      const completedExecution = submitted.data
+      if (!completedExecution) return
       setExecution(completedExecution)
       setSelected(current => current ? {
         ...current,
@@ -297,12 +315,13 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
       } : current)
       setActions(current => current.filter(action => action.id !== selected.id))
       await reload()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível concluir a execução.') }
+    } catch (cause) { setError(completionErrorMessage(cause)) }
     finally { setBusy(false) }
   }
 
   const items = execution?.itens ?? selected?.checklist_itens ?? []
   const isSupportTechnician = selected?.papel_na_equipe === 'APOIO'
+  const requiresPostIntervention = requiresPostInterventionRelease(selected?.analise_tecnica ?? null)
   const selectedSchedule = selected ? scheduleIndicator(selected.programada_para, execution?.concluida_em ?? execution?.iniciada_em ?? selected.finalizada_em ?? selected.iniciada_em, selected.status) : null
   const itemGroups = useMemo(() => {
     const groups = new Map<string, ExecutionItem[]>()
@@ -331,7 +350,7 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONTROLE DE TEMPO</span><h2>Execução em andamento</h2><p>O tempo líquido da OS está sendo contabilizado. Se precisar interromper o trabalho, registre o motivo abaixo.</p><label className="technician-dashboard__pause"><span>Motivo da pausa</span><textarea value={pauseReason} onChange={event => setPauseReason(event.target.value)} placeholder="Ex.: aguardando liberação de segurança ou material" maxLength={500} /></label><button type="button" className="technician-dashboard__pause-button" onClick={() => void pause()} disabled={busy || pauseReason.trim().length < 3}>{busy ? 'Pausando…' : 'Pausar execução'}</button></section>
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MATERIAL E CUSTO</span><h2>Registrar saída de peça</h2><p>Ao confirmar, o estoque é baixado e o custo fica vinculado de forma permanente a esta OS.</p><div className="technician-dashboard__report"><label>Peça por SKU ou nome<select value={materialId} onChange={event => setMaterialId(event.target.value)} disabled={busy || materials.length === 0}>{materials.length === 0 ? <option value="">Nenhum material disponível em estoque</option> : materials.map(material => <option value={material.id} key={material.id}>{material.sku} · {material.nome_facil || material.nome} · {currency(material.valor_unitario)} · saldo {material.estoque_atual} {material.unidade}{material.situacao_estoque === 'LOW' ? ' · estoque baixo' : ''}</option>)}</select></label><label>Quantidade<input type="number" min="0.0001" step="0.0001" value={materialQuantity} onChange={event => setMaterialQuantity(event.target.value)} disabled={busy || materials.length === 0} /></label><label>Observação (opcional)<input value={materialObservation} onChange={event => setMaterialObservation(event.target.value)} maxLength={500} disabled={busy} /></label></div><button type="button" onClick={() => void consumeMaterial()} disabled={busy || !materialId}>{busy ? 'Registrando…' : 'Baixar material e registrar custo'}</button>{execution?.materiais?.length ? <div className="technician-dashboard__report"><strong>Materiais desta OS · total {currency(execution.custo_materiais_total)}</strong>{execution.materiais.map(material => <p key={material.id}>{material.sku} · {material.nome_facil || material.nome} — {material.quantidade} {material.unidade} · {currency(material.valor_unitario)} cada · <strong>{currency(material.custo_total)}</strong></p>)}</div> : <p>Nenhum material foi consumido nesta execução.</p>}</section>
         <section className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">CHECKLIST</span><h2>{selected.checklist_nome}</h2></div><span>{items.length} item(ns)</span></div>{itemGroups.map(([category, group]) => <section className="technician-checklist-group" key={category}><h3>{checklistCategoryLabel(category)}</h3>{group.map(item => <ChecklistItemBoundary key={item.id}><ChecklistItem item={item} disabled={busy} value={responses[item.id]} onChange={value => setResponses(current => ({ ...current, [item.id]: { ...(current[item.id] ?? { resposta: itemText(item), valor: item.resposta_numero?.toString() ?? '', observacao: item.observacao ?? '' }), ...value } }))} onSave={() => void save(item)} onUpload={file => void uploadEvidence(item, file)} /></ChecklistItemBoundary>)}</section>)}</section>
-        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUSÃO</span><h2>Relatório técnico</h2><section className="technician-dashboard__report" aria-label="Equipe da intervenção"><h3>Equipe da intervenção</h3><p><strong>Técnico principal:</strong> {execution.operador_nome}</p><label><input type="checkbox" checked={hasSupportTechnicians} disabled={busy} onChange={event => { setHasSupportTechnicians(event.target.checked); if (!event.target.checked) setSupportTechnicianIds(['', '']) }} /> Outros técnicos participaram?</label>{hasSupportTechnicians ? <><label>Técnico auxiliar 1<select value={supportTechnicianIds[0]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [event.target.value, current[1]])}><option value="">Selecione o auxiliar</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[1]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><label>Técnico auxiliar 2 (opcional)<select value={supportTechnicianIds[1]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [current[0], event.target.value])}><option value="">Nenhum</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[0]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label></> : null}</section><div className="technician-dashboard__report">{[['diagnostico_tecnico', 'Diagnóstico técnico'], ['acao_realizada', 'Ação realizada'], ['pecas_materiais', 'Peças / materiais'], ['medicoes', 'Medições']].map(([field, text]) => <label key={field}>{text}<textarea value={completion.relatorio_tecnico?.[field as keyof NonNullable<TechnicalCompletionInput['relatorio_tecnico']>] ?? ''} onChange={event => setCompletion(current => ({ ...current, relatorio_tecnico: { diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '', ...current.relatorio_tecnico, [field]: event.target.value } }))} /></label>)}<label>Resultado<textarea value={completion.resultado} onChange={event => setCompletion(current => ({ ...current, resultado: event.target.value }))} required /></label><label>Observação<textarea value={completion.observacao ?? ''} onChange={event => setCompletion(current => ({ ...current, observacao: event.target.value }))} /></label></div>{blockers.length > 0 && <div className="technician-dashboard__blockers" role="alert"><strong>Conclusão bloqueada</strong><ul>{blockers.map(blocker => <li key={`${blocker.item_id}-${blocker.tipo}`}>{blocker.sequencia}. {blocker.titulo} — {blocker.mensagem}</li>)}</ul></div>}<button type="button" onClick={() => void validateAndComplete()} disabled={busy}>{busy ? 'Validando…' : 'Validar e concluir'}</button></section>
+        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUSÃO</span><h2>Relatório técnico</h2><section className="technician-dashboard__report" aria-label="Equipe da intervenção"><h3>Equipe da intervenção</h3><p><strong>Técnico principal:</strong> {execution.operador_nome}</p><label><input type="checkbox" checked={hasSupportTechnicians} disabled={busy} onChange={event => { setHasSupportTechnicians(event.target.checked); if (!event.target.checked) setSupportTechnicianIds(['', '']) }} /> Outros técnicos participaram?</label>{hasSupportTechnicians ? <><label>Técnico auxiliar 1<select value={supportTechnicianIds[0]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [event.target.value, current[1]])}><option value="">Selecione o auxiliar</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[1]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><label>Técnico auxiliar 2 (opcional)<select value={supportTechnicianIds[1]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [current[0], event.target.value])}><option value="">Nenhum</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[0]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label></> : null}</section><div className="technician-dashboard__report">{[['diagnostico_tecnico', 'Diagnóstico técnico · Obrigatório'], ['acao_realizada', 'Ação realizada · Obrigatório'], ['pecas_materiais', 'Peças / materiais · Obrigatório'], ['medicoes', 'Medições · Obrigatório']].map(([field, text]) => <label key={field}>{text}<textarea required aria-required="true" value={completion.relatorio_tecnico?.[field as keyof NonNullable<TechnicalCompletionInput['relatorio_tecnico']>] ?? ''} onChange={event => setCompletion(current => ({ ...current, relatorio_tecnico: { diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '', ...current.relatorio_tecnico, [field]: event.target.value } }))} /></label>)}<label>Resultado · Obrigatório<textarea required aria-required="true" value={completion.resultado} onChange={event => setCompletion(current => ({ ...current, resultado: event.target.value }))} /></label><label>Observação · Obrigatório<textarea required aria-required="true" value={completion.observacao ?? ''} onChange={event => setCompletion(current => ({ ...current, observacao: event.target.value }))} /></label></div>{blockers.length > 0 && <div className="technician-dashboard__blockers" role="alert"><strong>Conclusão bloqueada</strong><ul>{blockers.map(blocker => <li key={`${blocker.item_id}-${blocker.tipo}`}>{blocker.sequencia}. {blocker.titulo} — {blocker.mensagem}</li>)}</ul></div>}<button type="button" onClick={() => void validateAndComplete()} disabled={busy}>{completionButtonLabel(requiresPostIntervention, busy)}</button></section>
       </>}
     </section>}
   </section>

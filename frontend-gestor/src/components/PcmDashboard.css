@@ -1431,11 +1431,198 @@
     grid-column: auto;
   }
 }
-.pcm-assignment-modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(5, 11, 22, .7); }
-.pcm-assignment-modal__card { width: min(560px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; display: grid; gap: 14px; padding: 24px; border: 1px solid #304362; border-radius: 14px; background: #111b2d; color: #edf3ff; box-shadow: 0 22px 60px rgba(0,0,0,.45); }
-.pcm-assignment-modal__card h2, .pcm-assignment-modal__card p { margin: 0; }
-.pcm-assignment-modal__card label { display: grid; gap: 6px; font-weight: 700; }.pcm-assignment-modal__card select { min-width: 0; padding: 10px; border: 1px solid #405170; border-radius: 8px; background: #0e1727; color: #fff; }
-.pcm-assignment-modal__card > div { display: flex; justify-content: flex-end; gap: 10px; }.pcm-assignment-modal__card button { padding: 10px 14px; border: 0; border-radius: 8px; cursor: pointer; }
+.pcm-assignment-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 34, 51, .58);
+  backdrop-filter: blur(3px);
+}
+
+.pcm-assignment-modal__card {
+  width: min(820px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+  border: 1px solid #cfdae4;
+  border-radius: 18px;
+  background: #f7f9fb;
+  color: var(--pcm-ink);
+  box-shadow: 0 24px 70px rgba(23, 41, 58, .28);
+}
+
+.pcm-assignment-modal__card h2,
+.pcm-assignment-modal__card h3,
+.pcm-assignment-modal__card p,
+.pcm-assignment-modal__card dl,
+.pcm-assignment-modal__card dd { margin: 0; }
+
+.pcm-create-order-modal {
+  width: min(820px, 100%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.pcm-create-order-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid #dce4eb;
+  background: #fff;
+}
+
+.pcm-create-order-modal__header > div { display: grid; gap: 5px; }
+.pcm-create-order-modal__header h2 { color: #102a43; font-size: clamp(21px, 3vw, 27px); }
+.pcm-create-order-modal__header p { max-width: 620px; color: #526b7f; font-size: 14px; line-height: 1.5; }
+
+.pcm-create-order-modal__close {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #c8d4de;
+  border-radius: 10px;
+  background: #fff;
+  color: #344e62;
+  cursor: pointer;
+  font: inherit;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.pcm-create-order-modal__body {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 26px 24px;
+  overscroll-behavior: contain;
+}
+
+.pcm-create-order-modal__section {
+  display: grid;
+  gap: 15px;
+  padding: 18px;
+  border: 1px solid #d9e3eb;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.pcm-create-order-modal__origin {
+  border-color: #b9d5ee;
+  background: linear-gradient(135deg, #f7fbff, #eef6ff);
+}
+
+.pcm-create-order-modal__section-heading { display: grid; gap: 3px; }
+.pcm-create-order-modal__section-heading > span { color: #1767c5; font-size: 11px; font-weight: 850; letter-spacing: .08em; }
+.pcm-create-order-modal__section-heading h3 { color: #18364d; font-size: 16px; }
+
+.pcm-create-order-modal__origin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pcm-create-order-modal__origin-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(162, 192, 217, .7);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .82);
+}
+
+.pcm-create-order-modal__origin-grid dt { color: #5f7485; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.pcm-create-order-modal__origin-grid dd { overflow-wrap: anywhere; color: #102a43; font-size: 15px; font-weight: 800; }
+
+.pcm-create-order-modal__priority { display: inline-flex; align-items: center; width: fit-content; padding: 4px 9px; border-radius: 999px; background: #edf2f7; color: #40566a; font-size: 12px; font-weight: 850; }
+.pcm-create-order-modal__priority.is-high { background: #fff0d7; color: #85510a; }
+.pcm-create-order-modal__priority.is-critical { background: #ffe3e6; color: #9b2836; }
+.pcm-create-order-modal__priority.is-low { background: #e7f6ed; color: #17613d; }
+.pcm-create-order-modal__origin .pcm-create-order-modal__priority { font-size: 12px; letter-spacing: normal; }
+
+.pcm-create-order-modal__loading,
+.pcm-create-order-modal__empty { padding: 12px 14px; border-radius: 9px; background: #fff; color: #526b7f; line-height: 1.5; }
+.pcm-create-order-modal__plan { color: #405d73; font-size: 13px; line-height: 1.5; }
+
+.pcm-create-order-modal label { display: grid; gap: 7px; color: #40586a; font-size: 13px; font-weight: 750; }
+.pcm-create-order-modal input,
+.pcm-create-order-modal select,
+.pcm-create-order-modal textarea {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #b9c8d4;
+  border-radius: 9px;
+  background: #fff;
+  color: #102a43;
+  font: inherit;
+}
+
+.pcm-create-order-modal textarea { min-height: 108px; resize: vertical; line-height: 1.5; }
+.pcm-create-order-modal__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.pcm-create-order-modal__fields .is-wide { grid-column: 1 / -1; }
+.pcm-create-order-modal__context { padding: 11px 13px; border-radius: 9px; background: #edf5fc; color: #29485f; line-height: 1.5; }
+
+.pcm-create-order-modal__post-intervention {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px !important;
+  padding: 14px;
+  border: 1px solid #cbd9e4;
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.pcm-create-order-modal__post-intervention input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #1767c5; }
+.pcm-create-order-modal__post-intervention span { display: grid; gap: 4px; color: #17334a; font-size: 14px; }
+.pcm-create-order-modal__post-intervention small { color: #5a7183; font-size: 13px; font-weight: 500; line-height: 1.45; }
+
+.pcm-create-order-modal__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 26px;
+  border-top: 1px solid #dce4eb;
+  background: #fff;
+  box-shadow: 0 -8px 22px rgba(25, 49, 70, .06);
+}
+
+.pcm-create-order-modal__footer button { min-height: 44px; padding: 10px 18px; border-radius: 9px; cursor: pointer; font: inherit; font-weight: 800; }
+.pcm-create-order-modal__cancel { border: 1px solid #aebfcb; background: #fff; color: #334e62; }
+.pcm-create-order-modal__submit { border: 1px solid #1767c5; background: #1767c5; color: #fff; box-shadow: 0 7px 16px rgba(23, 103, 197, .2); }
+.pcm-create-order-modal button:disabled { cursor: not-allowed; opacity: .58; }
+.pcm-create-order-modal button:hover:not(:disabled) { filter: brightness(.97); }
+.pcm-create-order-modal button:focus-visible,
+.pcm-create-order-modal input:focus-visible,
+.pcm-create-order-modal select:focus-visible,
+.pcm-create-order-modal textarea:focus-visible { outline: 3px solid rgba(23, 103, 197, .32); outline-offset: 2px; }
+
+@media (max-width: 700px) {
+  .pcm-assignment-modal { place-items: end center; padding: 10px; }
+  .pcm-assignment-modal__card { max-height: calc(100dvh - 20px); border-radius: 15px; }
+  .pcm-create-order-modal__header { padding: 19px 18px 16px; }
+  .pcm-create-order-modal__body { padding: 16px 18px 20px; }
+  .pcm-create-order-modal__section { padding: 15px; }
+  .pcm-create-order-modal__origin-grid,
+  .pcm-create-order-modal__fields { grid-template-columns: 1fr; }
+  .pcm-create-order-modal__fields .is-wide { grid-column: auto; }
+  .pcm-create-order-modal__footer { padding: 13px 18px; }
+}
+
+@media (max-width: 430px) {
+  .pcm-create-order-modal__footer { display: grid; grid-template-columns: 1fr; }
+  .pcm-create-order-modal__submit { grid-row: 1; }
+}
 .pcm-assignment-success { padding: 12px 14px; border-left: 4px solid #42c889; border-radius: 7px; background: #123727; color: #d8ffea; }
 .pcm-assignment-modal__notice { padding: 13px 14px; border: 1px solid #f1c36c; border-radius: 9px; background: #fff6e4; color: #704500; line-height: 1.5; }
 

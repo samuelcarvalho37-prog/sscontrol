@@ -607,8 +607,16 @@ export class MonitoringRepository {
               inbox.entity_id AS entidade_id,inbox.priority AS prioridade,
               inbox.action_route AS rota_acao,inbox.action_payload AS dados_acao,
               inbox.created_at AS criada_em,inbox.delivered_at AS entregue_em,
-              inbox.read_at AS lida_em,inbox.dismissed_at AS dispensada_em,inbox.unread AS nao_lida
+              inbox.read_at AS lida_em,inbox.dismissed_at AS dispensada_em,inbox.unread AS nao_lida,
+              occurrence.work_order_id AS ordem_servico_id,work_order.code AS ordem_servico_codigo
        FROM workflow.v_notification_inbox inbox
+       LEFT JOIN maintenance.operational_occurrences occurrence
+         ON occurrence.tenant_id=inbox.tenant_id
+        AND occurrence.id=inbox.entity_id
+        AND inbox.entity_type='OPERATIONAL_OCCURRENCE'
+       LEFT JOIN maintenance.work_orders work_order
+         ON work_order.tenant_id=occurrence.tenant_id
+        AND work_order.id=occurrence.work_order_id
        WHERE inbox.user_id=$1
          AND ($2='' OR inbox.title ILIKE '%'||$2||'%' OR inbox.message ILIKE '%'||$2||'%')
          AND (NOT $3::boolean OR inbox.unread)
