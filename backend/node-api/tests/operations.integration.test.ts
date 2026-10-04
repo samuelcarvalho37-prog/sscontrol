@@ -443,6 +443,170 @@ test(
       await rm('./var/test-private-storage', { recursive: true, force: true });
     });
 
+    const occurrenceId = randomUUID();
+    const occurrenceNotificationId = randomUUID();
+    await transaction(pool, async (client) => {
+      await client.query(
+        `INSERT INTO maintenance.operational_occurrences
+         (id,tenant_id,asset_id,occurrence_type,title,description,severity,reported_by,reporter_role_snapshot)
+         VALUES ($1,$2,$3,'MECHANICAL_FAILURE','Falha mecânica para conversão concorrente',
+           'Ocorrência isolada usada para validar conversão idempotente em OS.','HIGH',$4,'ADMIN:ADMIN')`,
+        [occurrenceId, tenantId, ids.asset, ids.admin],
+      );
+      await client.query(
+        `INSERT INTO workflow.notifications
+         (id,tenant_id,notification_type,title,message,entity_type,entity_id,priority,status,
+          action_payload,audience,deduplication_key)
+         VALUES ($1,$2,'OCCURRENCE_REPORTED','Falha mecânica para conversão concorrente',
+           'Ocorrência aguarda conversão.','OPERATIONAL_OCCURRENCE',$3::uuid,'HIGH','ACTIVE',
+           jsonb_build_object('entityId',$3::text),jsonb_build_object('roleTypes',jsonb_build_array('ADMIN')),$4)`,
+        [
+          occurrenceNotificationId,
+          tenantId,
+          occurrenceId,
+          `occurrence:${occurrenceId}:reported`,
+        ],
+      );
+      await client.query(
+        `INSERT INTO workflow.notification_recipients
+         (tenant_id,notification_id,user_id,delivery_status,delivered_at)
+         VALUES ($1,$2,$3,'DELIVERED',clock_timestamp())`,
+        [tenantId, occurrenceNotificationId, ids.admin],
+      );
+    });
+
+    await transaction(pool, async (client) => {
+      await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [randomUUID()]);
+      const crossTenantOccurrence = await client.query(
+        `SELECT id FROM maintenance.operational_occurrences WHERE id=$1`,
+        [occurrenceId],
+      );
+      assert.equal(crossTenantOccurrence.rowCount, 0);
+    });
+
+    const occurrenceWorkOrderPayload = {
+      plano_versao_id: ids.planVersion,
+      tipo_origem: 'OCCURRENCE',
+      entidade_origem_id: occurrenceId,
+      tipo_trabalho: 'CORRECTIVE',
+      titulo: 'Corretiva originada por ocorrência',
+      descricao: 'Conversão atômica e idempotente da ocorrência operacional.',
+      prioridade: 'HIGH',
+      responsavel_id: null,
+      programada_para: null,
+      analise_tecnica: { exige_liberacao_pos_intervencao: false },
+    };
+    const [firstOccurrenceConversion, concurrentOccurrenceConversion] = await Promise.all([
+      app.inject({
+        method: 'POST',url: '/v1/maintenance/work-orders',headers: bearer(identities.admin),
+        payload: occurrenceWorkOrderPayload,
+      }),
+      app.inject({
+        method: 'POST',url: '/v1/maintenance/work-orders',headers: bearer(identities.admin),
+        payload: occurrenceWorkOrderPayload,
+      }),
+    ]);
+    assert.equal(firstOccurrenceConversion.statusCode, 200, firstOccurrenceConversion.body);
+    assert.equal(concurrentOccurrenceConversion.statusCode, 200, concurrentOccurrenceConversion.body);
+    const occurrenceWorkOrderId: string = firstOccurrenceConversion.json().data.id;
+    assert.equal(concurrentOccurrenceConversion.json().data.id, occurrenceWorkOrderId);
+
+    const repeatedOccurrenceConversion = await app.inject({
+      method: 'POST',url: '/v1/maintenance/work-orders',headers: bearer(identities.admin),
+      payload: occurrenceWorkOrderPayload,
+    });
+    assert.equal(repeatedOccurrenceConversion.statusCode, 200, repeatedOccurrenceConversion.body);
+    assert.equal(repeatedOccurrenceConversion.json().data.id, occurrenceWorkOrderId);
+
+    await transaction(pool, async (client) => {
+      const occurrenceState = await client.query(
+        `SELECT status,treatment_status,work_order_id,work_order_action_id
+         FROM maintenance.operational_occurrences WHERE id=$1`,
+        [occurrenceId],
+      );
+      assert.deepEqual(occurrenceState.rows[0], {
+        status: 'IN_TREATMENT',
+        treatment_status: 'WORK_ORDER_CREATED',
+        work_order_id: occurrenceWorkOrderId,
+        work_order_action_id: null,
+      });
+      const workOrders = await client.query(
+        `SELECT id,asset_id,origin_type FROM maintenance.work_orders WHERE origin_entity_id=$1`,
+        [occurrenceId],
+      );
+      assert.equal(workOrders.rowCount, 1);
+      assert.deepEqual(workOrders.rows[0], {
+        id: occurrenceWorkOrderId,
+        asset_id: ids.asset,
+        origin_type: 'OCCURRENCE',
+      });
+      await expectDatabaseRejection(
+        client,
+        () => client.query(
+          `INSERT INTO maintenance.work_orders
+           (id,tenant_id,code,asset_id,component_id,maintenance_plan_version_id,
+            origin_type,origin_entity_id,work_type,title,description,priority,
+            requester_id,responsible_id,maintenance_stop_mode,technical_analysis,content_hash_sha256)
+           SELECT $2,tenant_id,$3,asset_id,component_id,maintenance_plan_version_id,
+                  'OCCURRENCE',origin_entity_id,work_type,title,description,priority,
+                  requester_id,responsible_id,maintenance_stop_mode,technical_analysis,content_hash_sha256
+           FROM maintenance.work_orders WHERE id=$1`,
+          [occurrenceWorkOrderId, randomUUID(), `OS-TEST-DUPLICATE-${randomUUID()}`],
+        ),
+        { code: '23505', constraint: 'work_orders_one_occurrence_idx' },
+      );
+      const notification = await client.query(
+        `SELECT status FROM workflow.notifications WHERE id=$1`,
+        [occurrenceNotificationId],
+      );
+      assert.equal(notification.rows[0].status, 'RETRACTED');
+    });
+
+    const missingOccurrenceConversion = await app.inject({
+      method: 'POST',url: '/v1/maintenance/work-orders',headers: bearer(identities.admin),
+      payload: { ...occurrenceWorkOrderPayload, entidade_origem_id: randomUUID() },
+    });
+    assert.equal(missingOccurrenceConversion.statusCode, 404, missingOccurrenceConversion.body);
+    assert.equal(missingOccurrenceConversion.json().error.code, 'OCCURRENCE_NOT_FOUND');
+
+    const occurrenceApproved = await app.inject({
+      method: 'POST',url: `/v1/maintenance/work-orders/${occurrenceWorkOrderId}/submit-review`,
+      headers: bearer(identities.admin),
+      payload: {
+        politica_assinatura: 'QUALIDADE',assinaturas_exigidas: 1,
+        primeira_resposta_ate: null,resolucao_ate: null,
+      },
+    });
+    assert.equal(occurrenceApproved.statusCode, 200, occurrenceApproved.body);
+    assert.equal(occurrenceApproved.json().data.status, 'APPROVED');
+    const occurrenceReleased = await app.inject({
+      method: 'POST',url: `/v1/maintenance/work-orders/${occurrenceWorkOrderId}/release`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(occurrenceReleased.statusCode, 200, occurrenceReleased.body);
+    assert.equal(occurrenceReleased.json().data.status, 'RELEASED');
+    assert.ok(occurrenceReleased.json().data.liberada_em);
+    await transaction(pool, async (client) => {
+      const releasedOccurrence = await client.query(
+        `SELECT occurrence.work_order_action_id,action.work_order_id
+         FROM maintenance.operational_occurrences occurrence
+         JOIN maintenance.work_order_actions action
+           ON action.tenant_id=occurrence.tenant_id AND action.id=occurrence.work_order_action_id
+         WHERE occurrence.id=$1`,
+        [occurrenceId],
+      );
+      assert.equal(releasedOccurrence.rowCount, 1);
+      assert.equal(releasedOccurrence.rows[0].work_order_id, occurrenceWorkOrderId);
+      await client.query(
+        `UPDATE maintenance.work_order_actions SET status='CANCELLED' WHERE work_order_id=$1`,
+        [occurrenceWorkOrderId],
+      );
+      await client.query(
+        `UPDATE maintenance.work_orders SET status='CANCELLED' WHERE id=$1`,
+        [occurrenceWorkOrderId],
+      );
+    });
+
     const correctionDraft = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/work-orders',

@@ -35,6 +35,12 @@ export interface GestorOccurrence {
   titulo?: string
   descricao?: string
   ativo_id?: string
+  ativo_tag?: string
+  ativo_nome?: string
+  tipo?: string
+  tratamento_status?: string
+  ordem_servico_id?: string
+  acao_ordem_servico_id?: string
   parada_id?: string
   criado_em?: string
   [key: string]: unknown
@@ -237,6 +243,8 @@ export interface GestorNotification {
   status: string
   lida_em?: string
   criado_em?: string
+  ordem_servico_id?: string
+  ordem_servico_codigo?: string
 }
 
 export interface GestorExecution {

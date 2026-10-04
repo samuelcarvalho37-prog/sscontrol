@@ -338,6 +338,57 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
+        let occurrence: OperationsRow | null = null;
+        if (input.originEntityId && input.originType === 'OCCURRENCE') {
+          occurrence = await this.repository.findOccurrenceForWorkOrderConversion(
+            client,
+            input.originEntityId,
+          );
+          if (!occurrence) {
+            throw error(
+              'OCCURRENCE_NOT_FOUND',
+              'A ocorrência operacional informada não foi encontrada neste tenant.',
+              404,
+            );
+          }
+          const reverseLinked = await this.repository.findWorkOrdersByOriginEntity(
+            client,
+            input.originEntityId,
+          );
+          const linkedIds = new Set(reverseLinked.map((workOrder) => text(workOrder, 'id')));
+          const directWorkOrderId = nullableRowText(occurrence, 'work_order_id');
+          if (directWorkOrderId) linkedIds.add(directWorkOrderId);
+          if (linkedIds.size > 1) {
+            throw error(
+              'OCCURRENCE_MULTIPLE_WORK_ORDERS',
+              'A ocorrência possui mais de uma ordem de serviço histórica e exige reconciliação administrativa.',
+              409,
+            );
+          }
+          const existingWorkOrderId = [...linkedIds][0];
+          if (existingWorkOrderId) {
+            const existing = await this.repository.findWorkOrder(client, existingWorkOrderId, true);
+            if (!existing) {
+              throw error(
+                'OCCURRENCE_WORK_ORDER_INCONSISTENT',
+                'O vínculo da ocorrência referencia uma ordem de serviço indisponível.',
+                409,
+              );
+            }
+            await this.repository.linkOccurrenceToWorkOrder(
+              client,
+              text(occurrence, 'id'),
+              existingWorkOrderId,
+            );
+            await this.repository.retractOccurrenceNotification(client, text(occurrence, 'id'));
+            return this.requiredWorkOrderDetail(client, existingWorkOrderId);
+          }
+          input = {
+            ...input,
+            originType: 'OCCURRENCE',
+            assetId: text(occurrence, 'asset_id'),
+          };
+        }
         const resolvedAssetId = input.assetId ?? (input.assetTag
           ? await this.repository.findActiveAssetIdByTag(client, input.assetTag)
           : null);
@@ -396,6 +447,10 @@ export class OperationsService {
           context,
           contentHash,
         );
+        if (occurrence) {
+          await this.repository.linkOccurrenceToWorkOrder(client, text(occurrence, 'id'), id);
+          await this.repository.retractOccurrenceNotification(client, text(occurrence, 'id'));
+        }
         const detail = await this.requiredWorkOrderDetail(client, id);
         if (generatedCorrectivePlan) {
           await this.repository.writeAudit(
@@ -878,6 +933,7 @@ export class OperationsService {
           );
         }
         const actionId = await this.repository.releaseWorkOrder(client, workOrder);
+        await this.repository.linkOccurrenceReleaseAction(client, workOrderId, actionId);
         const detail = await this.requiredWorkOrderDetail(client, workOrderId);
         await this.repository.writeAudit(
           client,
