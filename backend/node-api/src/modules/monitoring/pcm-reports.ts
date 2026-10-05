@@ -45,7 +45,8 @@ export async function loadPcmReports(
          AND execution.completed_at >= bounds.start_at AND execution.completed_at <= bounds.end_at
        GROUP BY execution.operator_id, person.name
      ), execution_details AS (
-       SELECT execution.id, person.name AS tecnico_nome, work_order.code AS ordem_codigo,
+       SELECT execution.id, person.name AS tecnico_nome, work_order.operational_code AS ordem_codigo,
+              work_order.code AS ordem_codigo_legado,
          work_order.title AS titulo, asset.tag AS ativo_tag,
          execution.started_at AS iniciada_em, execution.completed_at AS concluida_em,
          execution.duration_seconds AS duracao_segundos,

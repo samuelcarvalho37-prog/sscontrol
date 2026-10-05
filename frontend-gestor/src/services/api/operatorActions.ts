@@ -10,6 +10,7 @@ import type {
   StopMode,
   TechnicalCompletionInput,
   EligibleSupportTechnician,
+  ImprovementCategory,
 } from '../../types/operatorActions'
 import type { AdminEntityRecord } from '../../types/catalog'
 
@@ -80,6 +81,19 @@ export async function listOperatorMaterials(actionId: string): Promise<Consumabl
 export async function consumeOperatorMaterial(actionId: string, materialId: string, quantity: number, observation: string | null): Promise<Execution> {
   const response = await callApi<{ execucao: Execution }>('operator-actions.materials.consume', { token: token(), acao_id: actionId, material_id: materialId, quantidade: quantity, observacao: observation }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   return requireData(response.data, 'operator-actions.materials.consume').execucao
+}
+
+export async function createImprovementRequest(input: {
+  assetId: string
+  category: ImprovementCategory
+  suggestion: string
+  reason: string
+}): Promise<void> {
+  const response = await callApi<{ solicitacao?: { id: string } }>('improvement-requests.create', {
+    token: token(), ativo_id: input.assetId, categoria: input.category,
+    sugestao: input.suggestion, motivo: input.reason, objeto_evidencia_id: null,
+  }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  requireData(response.data, 'improvement-requests.create')
 }
 
 export async function completeOperatorAction(actionId: string, input: TechnicalCompletionInput): Promise<Execution> {

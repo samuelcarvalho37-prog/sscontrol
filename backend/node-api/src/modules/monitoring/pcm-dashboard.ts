@@ -65,7 +65,7 @@ export async function loadPcmDashboard(
      ), failures_by_sector AS (
        SELECT setor_id,setor_nome,sum(falhas)::integer AS falhas FROM failures_by_asset GROUP BY setor_id,setor_nome
      ), upcoming AS (
-       SELECT id,code AS codigo,asset_tag AS ativo_tag,scheduled_for AS programada_para
+       SELECT id,operational_code AS codigo,asset_tag AS ativo_tag,scheduled_for AS programada_para
        FROM orders WHERE work_type='PREVENTIVE' AND scheduled_for>=now() AND scheduled_for<now()+interval '7 days'
        ORDER BY scheduled_for,id
      )

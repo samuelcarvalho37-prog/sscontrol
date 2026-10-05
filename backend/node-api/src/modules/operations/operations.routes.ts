@@ -10,9 +10,12 @@ import {
   consumeMaterialBodySchema,
   createWorkOrderBodySchema,
   evidenceBodySchema,
+  externalServiceBodySchema,
   executionBatchResponseBodySchema,
   executionResponseBodySchema,
   maintenanceActionListQuerySchema,
+  materialCostBodySchema,
+  improvementRequestBodySchema,
   operatorActionListQuerySchema,
   operationsIdentifierParamsSchema,
   pauseExecutionBodySchema,
@@ -129,6 +132,31 @@ export function createOperationsRoutes(
         summary: 'Consulta OS, validação, assinaturas e ações.',
       },
       handler: controller.getWorkOrder,
+    });
+    app.get('/v1/maintenance/work-orders/:workOrderId/external-services', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Lista serviços externos e custos vinculados à OS.' },
+      handler: controller.listExternalServices,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/external-services', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: externalServiceBodySchema, summary: 'Registra serviço externo sem criar usuário técnico artificial.' },
+      handler: controller.createExternalService,
+    });
+    app.patch('/v1/maintenance/material-usage/:materialUsageId/cost', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: materialCostBodySchema, summary: 'Complementa custo desconhecido de material com auditoria.' },
+      handler: controller.updateMaterialCost,
+    });
+    app.get('/v1/maintenance/improvement-requests', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, summary: 'Lista solicitações de melhoria para avaliação do PCM.' },
+      handler: controller.listImprovementRequests,
+    });
+    app.post('/v1/maintenance/improvement-requests', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, body: improvementRequestBodySchema, summary: 'Registra oportunidade de melhoria identificada pelo técnico.' },
+      handler: controller.createImprovementRequest,
     });
     app.patch('/v1/maintenance/work-orders/:workOrderId', {
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),

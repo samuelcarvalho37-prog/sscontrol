@@ -608,7 +608,7 @@ export class MonitoringRepository {
               inbox.action_route AS rota_acao,inbox.action_payload AS dados_acao,
               inbox.created_at AS criada_em,inbox.delivered_at AS entregue_em,
               inbox.read_at AS lida_em,inbox.dismissed_at AS dispensada_em,inbox.unread AS nao_lida,
-              occurrence.work_order_id AS ordem_servico_id,work_order.code AS ordem_servico_codigo
+              occurrence.work_order_id AS ordem_servico_id,work_order.operational_code AS ordem_servico_codigo
        FROM workflow.v_notification_inbox inbox
        LEFT JOIN maintenance.operational_occurrences occurrence
          ON occurrence.tenant_id=inbox.tenant_id

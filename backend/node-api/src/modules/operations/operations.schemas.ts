@@ -16,6 +16,9 @@ export const operationsIdentifierParamsSchema = Type.Object(
     itemId: Type.Optional(uuid),
     objectId: Type.Optional(uuid),
     materialId: Type.Optional(uuid),
+    materialUsageId: Type.Optional(uuid),
+    serviceId: Type.Optional(uuid),
+    requestId: Type.Optional(uuid),
   },
   { additionalProperties: false },
 );
@@ -69,7 +72,25 @@ export const createWorkOrderBodySchema = Type.Object(
     ativo_tag: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     tipo_origem: Type.String({ minLength: 1, maxLength: 80 }),
     entidade_origem_id: nullableUuid,
-    tipo_trabalho: Type.String({ minLength: 1, maxLength: 80 }),
+    tipo_trabalho: Type.Union([
+      Type.Literal('CORRECTIVE'),
+      Type.Literal('PREVENTIVE'),
+      Type.Literal('PREDICTIVE'),
+      Type.Literal('IMPROVEMENT'),
+    ]),
+    modo_execucao: Type.Union([
+      Type.Literal('INTERNAL'),
+      Type.Literal('EXTERNAL'),
+      Type.Literal('MIXED'),
+    ]),
+    categoria_melhoria: Type.Optional(Type.Union([
+      Type.Null(),
+      Type.Literal('MODIFICATION'),
+      Type.Literal('MANUFACTURE'),
+      Type.Literal('INSTALLATION'),
+      Type.Literal('ADEQUACY'),
+      Type.Literal('OTHER'),
+    ])),
     titulo: Type.String({ minLength: 3, maxLength: 240 }),
     descricao: Type.String({ minLength: 3, maxLength: 8_000 }),
     prioridade: Type.Union([
@@ -81,6 +102,36 @@ export const createWorkOrderBodySchema = Type.Object(
     responsavel_id: nullableUuid,
     programada_para: nullableDateTime,
     analise_tecnica: Type.Record(Type.String({ minLength: 1, maxLength: 120 }), Type.Unknown()),
+  },
+  { additionalProperties: false },
+);
+
+export const externalServiceBodySchema = Type.Object(
+  {
+    prestador: Type.String({ minLength: 2, maxLength: 240 }),
+    descricao: Type.String({ minLength: 3, maxLength: 2_000 }),
+    valor: Type.Union([Type.Null(), Type.Number({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })]),
+    data_servico: Type.Union([Type.Null(), Type.String({ format: 'date' })]),
+    observacao: Type.Union([Type.Null(), Type.String({ maxLength: 4_000 })]),
+  },
+  { additionalProperties: false },
+);
+
+export const materialCostBodySchema = Type.Object(
+  { valor_unitario: Type.Number({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) },
+  { additionalProperties: false },
+);
+
+export const improvementRequestBodySchema = Type.Object(
+  {
+    ativo_id: uuid,
+    categoria: Type.Union([
+      Type.Literal('MODIFICATION'), Type.Literal('MANUFACTURE'),
+      Type.Literal('INSTALLATION'), Type.Literal('ADEQUACY'), Type.Literal('OTHER'),
+    ]),
+    sugestao: Type.String({ minLength: 3, maxLength: 4_000 }),
+    motivo: Type.String({ minLength: 3, maxLength: 4_000 }),
+    objeto_evidencia_id: Type.Optional(nullableUuid),
   },
   { additionalProperties: false },
 );
@@ -98,6 +149,13 @@ export const correctWorkOrderBodySchema = Type.Object(
     responsavel_id: nullableUuid,
     programada_para: nullableDateTime,
     analise_tecnica: Type.Record(Type.String({ minLength: 1, maxLength: 120 }), Type.Unknown()),
+    modo_execucao: Type.Union([
+      Type.Literal('INTERNAL'), Type.Literal('EXTERNAL'), Type.Literal('MIXED'),
+    ]),
+    categoria_melhoria: Type.Optional(Type.Union([
+      Type.Null(), Type.Literal('MODIFICATION'), Type.Literal('MANUFACTURE'),
+      Type.Literal('INSTALLATION'), Type.Literal('ADEQUACY'), Type.Literal('OTHER'),
+    ])),
   },
   { additionalProperties: false },
 );
