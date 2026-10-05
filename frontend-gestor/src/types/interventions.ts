@@ -16,6 +16,8 @@ export interface AdminIntervention {
   exige_liberacao_pos_intervencao?: boolean
   id: string
   codigo: string
+  codigo_legado?: string
+  numero_operacional?: number
   ativo_id?: string
   ativo_tag?: string
   componente_id?: string
@@ -24,6 +26,8 @@ export interface AdminIntervention {
   origem: string
   entidade_origem_id?: string
   tipo: string
+  modo_execucao?: 'INTERNAL' | 'EXTERNAL' | 'MIXED'
+  categoria_melhoria?: 'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER' | null
   titulo: string
   descricao: string
   prioridade: string
@@ -57,6 +61,22 @@ export interface AdminIntervention {
   }[]
   criado_em?: string
   atualizado_em?: string
+  custos?: {
+    materiais: number | string
+    servicos_externos: number | string
+    total_realizado: number | string
+    materiais_sem_preco: number
+    servicos_sem_preco: number
+    dados_financeiros_pendentes: boolean
+  }
+  servicos_externos?: Array<{
+    id: string
+    prestador: string
+    descricao: string
+    valor: number | string | null
+    data_servico: string | null
+    observacao: string | null
+  }>
 }
 
 export interface AdminInterventionInput {
@@ -70,6 +90,8 @@ export interface AdminInterventionInput {
   plano_id?: string
   plano_versao_id?: string
   tipo: string
+  modo_execucao?: 'INTERNAL' | 'EXTERNAL' | 'MIXED'
+  categoria_melhoria?: 'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER' | null
   titulo: string
   descricao: string
   prioridade: string

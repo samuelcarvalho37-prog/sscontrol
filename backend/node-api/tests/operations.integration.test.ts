@@ -18,11 +18,13 @@ const ids = {
   quality: randomUUID(),
   safety: randomUUID(),
   operator: randomUUID(),
+  production: randomUUID(),
   support: randomUUID(),
   supportSecond: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
   operatorRole: randomUUID(),
+  productionRole: randomUUID(),
   qualityArea: randomUUID(),
   safetyArea: randomUUID(),
   qualityTechnicalRole: randomUUID(),
@@ -50,6 +52,7 @@ interface Identities {
   readonly quality: string;
   readonly safety: string;
   readonly operator: string;
+  readonly production: string;
   readonly support: string;
 }
 
@@ -114,6 +117,12 @@ interface TechnicalReportListResponse {
       readonly hash: string;
       readonly status: 'ASSINADO';
     }[];
+  };
+}
+
+interface ImprovementRequestListResponse {
+  readonly data: {
+    readonly solicitacoes: readonly { readonly id: string }[];
   };
 }
 
@@ -196,6 +205,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
   const quality = token();
   const safety = token();
   const operator = token();
+  const production = token();
   const support = token();
   const tenantSlug = `operations-${randomUUID()}`;
   await transaction(pool, async (client) => {
@@ -212,6 +222,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       [ids.adminRole, ids.validatorRole, ids.operatorRole, tenantId],
     );
     await client.query(
+      `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected)
+       VALUES ($1,$2,'PRODUCAO','Produção','Relata ocorrências sem executar manutenção.','CUSTOM',true)`,
+      [ids.productionRole, tenantId],
+    );
+    await client.query(
       `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
       ($1,$7,'USR-OPS-ADM','Admin Operações','ops.admin@fabcontrol.local',false),
       ($2,$7,'USR-OPS-QUA','Qualidade Operações','ops.quality@fabcontrol.local',false),
@@ -220,6 +235,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       ($5,$7,'USR-OPS-SUP','Apoio Operações','ops.support@fabcontrol.local',false),
       ($6,$7,'USR-OPS-SUP-02','Apoio Operações Dois','ops.support-2@fabcontrol.local',false)`,
       [ids.admin, ids.quality, ids.safety, ids.operator, ids.support, ids.supportSecond, tenantId],
+    );
+    await client.query(
+      `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required)
+       VALUES ($1,$2,'USR-OPS-PRO','Produção Operações','ops.production@fabcontrol.local',false)`,
+      [ids.production, tenantId],
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
@@ -238,6 +258,10 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       ],
     );
     await client.query(
+      `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES ($1,$2,$3)`,
+      [tenantId, ids.production, ids.productionRole],
+    );
+    await client.query(
       `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
       SELECT $1,$2,id,'ALLOW' FROM iam.capabilities WHERE code=ANY($3::text[])`,
       [
@@ -251,6 +275,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
           'analytics.technical.read',
         ],
       ],
+    );
+    await client.query(
+      `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
+       SELECT $1,$2,id,'ALLOW' FROM iam.capabilities WHERE code='maintenance.occurrences.report'`,
+      [tenantId, ids.productionRole],
     );
     await client.query(
       `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
@@ -315,6 +344,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       [ids.quality, quality],
       [ids.safety, safety],
       [ids.operator, operator],
+      [ids.production, production],
       [ids.support, support],
     ] as const) {
       await client.query(
@@ -424,6 +454,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     quality: quality.raw,
     safety: safety.raw,
     operator: operator.raw,
+    production: production.raw,
     support: support.raw,
     tenantSlug,
   };
@@ -489,6 +520,7 @@ test(
       tipo_origem: 'OCCURRENCE',
       entidade_origem_id: occurrenceId,
       tipo_trabalho: 'CORRECTIVE',
+      modo_execucao: 'INTERNAL',
       titulo: 'Corretiva originada por ocorrência',
       descricao: 'Conversão atômica e idempotente da ocorrência operacional.',
       prioridade: 'HIGH',
@@ -616,6 +648,7 @@ test(
         tipo_origem: 'ADMIN',
         entidade_origem_id: null,
         tipo_trabalho: 'PREVENTIVE',
+        modo_execucao: 'INTERNAL',
         titulo: 'OS destinada ao teste de correção',
         descricao: 'Conteúdo inicial que será devolvido pela Qualidade.',
         prioridade: 'MEDIUM',
@@ -658,6 +691,7 @@ test(
         titulo: 'OS corrigida após revisão da Qualidade',
         descricao: 'Riscos, bloqueio e resultado técnico foram detalhados para nova validação.',
         prioridade: 'HIGH',
+        modo_execucao: 'INTERNAL',
         responsavel_id: null,
         programada_para: new Date(Date.now() - 60000).toISOString(),
         analise_tecnica: {
@@ -713,6 +747,7 @@ test(
         tipo_origem: 'ADMIN',
         entidade_origem_id: null,
         tipo_trabalho: 'PREVENTIVE',
+        modo_execucao: 'INTERNAL',
         titulo: 'Preventiva integral da prensa',
         descricao: 'Executar checklist validado.',
         prioridade: 'HIGH',
@@ -1288,7 +1323,7 @@ test(
     });
     for (const scenario of [
       { type: 'CORRECTIVE', scheduled: true, release: false },
-      { type: 'INSPECTION', scheduled: true, release: false },
+      { type: 'PREDICTIVE', scheduled: true, release: false },
       { type: 'PREVENTIVE', scheduled: true, release: false },
       { type: 'PREVENTIVE', scheduled: false, release: false },
     ]) {
@@ -1301,6 +1336,7 @@ test(
           tipo_origem: 'ADMIN',
           entidade_origem_id: null,
           tipo_trabalho: scenario.type,
+          modo_execucao: 'INTERNAL',
           titulo: 'Atividade sem validação obrigatória',
           descricao: 'Fluxo comum sem exigência de Qualidade/Segurança.',
           prioridade: scenario.type === 'CORRECTIVE' ? 'CRITICAL' : 'LOW',
@@ -1346,7 +1382,7 @@ test(
       method: 'POST', url: '/v1/maintenance/work-orders', headers: bearer(identities.admin),
       payload: {
         plano_versao_id: ids.planVersion, tipo_origem: 'ADMIN', entidade_origem_id: null,
-        tipo_trabalho: 'PREVENTIVE', titulo: 'Preventiva normal concluída pelo técnico',
+        tipo_trabalho: 'PREVENTIVE', modo_execucao: 'INTERNAL', titulo: 'Preventiva normal concluída pelo técnico',
         descricao: 'Fluxo normal sem validação posterior.', prioridade: 'MEDIUM',
         responsavel_id: null, programada_para: new Date(Date.now() + 86400000).toISOString(),
         analise_tecnica: { resultado_esperado: 'Equipamento liberado.' },
@@ -1405,6 +1441,59 @@ test(
     assert.equal(normalStarted.statusCode, 200, normalStarted.body);
     assert.equal(normalStarted.json().data.execucao.operador_id, ids.operator);
     const normalExecutionId: string = normalStarted.json().data.execucao.id;
+    const productionOccurrence = await app.inject({
+      method: 'POST', url: '/v1/maintenance/occurrences', headers: bearer(identities.production),
+      payload: {
+        ativo_id: ids.asset, componente_id: null, tipo: 'FALHA_OPERACIONAL',
+        titulo: 'Ocorrência registrada pela produção',
+        descricao: 'Produção relata o problema para avaliação posterior do PCM.',
+        severidade: 'MEDIUM', equipamento_parado: false, tipo_parada: null,
+        motivo_parada: null, ocorrida_em: null,
+      },
+    });
+    assert.equal(productionOccurrence.statusCode, 200, productionOccurrence.body);
+    const productionStart = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`,
+      headers: bearer(identities.production), payload: { modo_parada: 'NO_STOP' },
+    });
+    assert.equal(productionStart.statusCode, 403, productionStart.body);
+    const productionRecord = await app.inject({
+      method: 'PUT', url: `/v1/maintenance/operator-actions/${normalActionId}/responses`,
+      headers: bearer(identities.production), payload: { itens: [{ item_id: randomUUID(), resposta: 'SIM', valor: null, observacao: null }] },
+    });
+    assert.equal(productionRecord.statusCode, 403, productionRecord.body);
+    const productionComplete = await app.inject({
+      method: 'POST', url: `/v1/maintenance/executions/${normalExecutionId}/complete`,
+      headers: bearer(identities.production), payload: { resultado: 'Não autorizado.', observacao: null, modo_parada: 'NO_STOP' },
+    });
+    assert.equal(productionComplete.statusCode, 403, productionComplete.body);
+    const productionExternalService = await app.inject({
+      method: 'POST', url: `/v1/maintenance/work-orders/${normalWorkOrderId}/external-services`,
+      headers: bearer(identities.production),
+      payload: { prestador: 'Fornecedor teste', descricao: 'Tentativa não autorizada.', valor: null, data_servico: null, observacao: null },
+    });
+    assert.equal(productionExternalService.statusCode, 403, productionExternalService.body);
+    const pendingPriceMaterialId = randomUUID();
+    await transaction(pool, async (client) => {
+      await client.query(
+        `INSERT INTO cmms.materials (id,tenant_id,sku,name,unit,current_stock,minimum_stock,unit_cost)
+         VALUES ($1,$2,$3,'Componente sem preço conhecido','UN',4,0,NULL)`,
+        [pendingPriceMaterialId, tenantId, `MAT-PENDING-${randomUUID()}`],
+      );
+    });
+    const pendingConsumption = await app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/materials`,
+      headers: bearer(identities.operator), payload: { material_id: pendingPriceMaterialId, quantidade: 2, observacao: 'Custo ainda não informado.' },
+    });
+    assert.equal(pendingConsumption.statusCode, 200, pendingConsumption.body);
+    assert.equal(pendingConsumption.json().data.consumo.unit_cost, null);
+    assert.equal(pendingConsumption.json().data.consumo.total_cost, null);
+    const pendingUsageId: string = pendingConsumption.json().data.consumo.id;
+    const productionCost = await app.inject({
+      method: 'PATCH', url: `/v1/maintenance/material-usage/${pendingUsageId}/cost`,
+      headers: bearer(identities.production), payload: { valor_unitario: 99 },
+    });
+    assert.equal(productionCost.statusCode, 403, productionCost.body);
     const normalItems: readonly { id: string; tipo_resposta: string }[] = normalStarted.json().data.execucao.itens;
     const normalConfirmation = normalItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
     const normalInspection = normalItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
@@ -1455,6 +1544,58 @@ test(
     assert.equal(normalClosed.statusCode, 200, normalClosed.body);
     assert.equal(normalClosed.json().data.status, 'COMPLETED');
     assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
+    const pendingCostsAfterCompletion = await transaction(pool, (client) => client.query<{
+      readonly realized_total: string;
+      readonly materials_pending_price: number;
+      readonly financial_data_pending: boolean;
+    }>(
+      `SELECT realized_total::text,materials_pending_price,financial_data_pending
+         FROM maintenance.work_order_realized_costs WHERE work_order_id=$1`,
+      [normalWorkOrderId],
+    ));
+    assert.equal(pendingCostsAfterCompletion.rows.length, 1);
+    assert.equal(Number(pendingCostsAfterCompletion.rows[0]!.realized_total), 0);
+    assert.equal(pendingCostsAfterCompletion.rows[0]!.materials_pending_price, 1);
+    assert.equal(pendingCostsAfterCompletion.rows[0]!.financial_data_pending, true);
+    const technicianCannotCompleteCost = await app.inject({
+      method: 'PATCH', url: `/v1/maintenance/material-usage/${pendingUsageId}/cost`,
+      headers: bearer(identities.operator), payload: { valor_unitario: 42.5 },
+    });
+    assert.equal(technicianCannotCompleteCost.statusCode, 403, technicianCannotCompleteCost.body);
+    const costCompleted = await app.inject({
+      method: 'PATCH', url: `/v1/maintenance/material-usage/${pendingUsageId}/cost`,
+      headers: bearer(identities.admin), payload: { valor_unitario: 42.5 },
+    });
+    assert.equal(costCompleted.statusCode, 200, costCompleted.body);
+    assert.equal(Number(costCompleted.json().data.consumo.unit_cost), 42.5);
+    assert.equal(Number(costCompleted.json().data.consumo.total_cost), 85);
+    const recalculatedCosts = await transaction(pool, (client) => client.query<{
+      readonly material_cost: string;
+      readonly realized_total: string;
+      readonly materials_pending_price: number;
+      readonly financial_data_pending: boolean;
+    }>(
+      `SELECT material_cost::text,realized_total::text,materials_pending_price,financial_data_pending
+         FROM maintenance.work_order_realized_costs WHERE work_order_id=$1`,
+      [normalWorkOrderId],
+    ));
+    assert.equal(recalculatedCosts.rows.length, 1);
+    assert.equal(Number(recalculatedCosts.rows[0]!.material_cost), 85);
+    assert.equal(Number(recalculatedCosts.rows[0]!.realized_total), 85);
+    assert.equal(recalculatedCosts.rows[0]!.materials_pending_price, 0);
+    assert.equal(recalculatedCosts.rows[0]!.financial_data_pending, false);
+    const costAudit = await transaction(pool, (client) => client.query<{
+      readonly action: string;
+      readonly entity_id: string;
+      readonly after_data: { readonly unit_cost: number | string; readonly total_cost: number | string };
+    }>(
+      `SELECT action,entity_id,after_data FROM audit.events
+        WHERE tenant_id=$1 AND action='MATERIAL_USAGE_COST_COMPLETED' AND entity_id=$2`,
+      [tenantId, pendingUsageId],
+    ));
+    assert.equal(costAudit.rows.length, 1);
+    assert.equal(costAudit.rows[0]!.after_data.unit_cost, 42.5);
+    assert.equal(Number(costAudit.rows[0]!.after_data.total_cost), 85);
     await transaction(pool, async (client) => {
       const supportTeam = await client.query(
         `SELECT tenant_id, execution_id, user_id, support_slot
@@ -1567,6 +1708,211 @@ test(
         demand_type: 'WORK_ORDER_VALIDATION',
         requirement_code: 'QUALITY_SIGNATURE',
       });
+    });
+
+    const improvementRequest = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/improvement-requests',
+      headers: bearer(identities.operator),
+      payload: {
+        ativo_id: ids.asset,
+        categoria: 'MODIFICATION',
+        sugestao: 'Instalar proteção adicional no conjunto móvel',
+        motivo: 'Reduzir exposição e aumentar a confiabilidade do equipamento.',
+        objeto_evidencia_id: null,
+      },
+    });
+    assert.equal(improvementRequest.statusCode, 200, improvementRequest.body);
+    const improvementRequestId: string = improvementRequest.json().data.solicitacao.id;
+    const improvementQueue = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/improvement-requests',
+      headers: bearer(identities.admin),
+    });
+    assert.equal(improvementQueue.statusCode, 200, improvementQueue.body);
+    const improvementQueueBody = improvementQueue.json<ImprovementRequestListResponse>();
+    assert.ok(improvementQueueBody.data.solicitacoes.some((item) => item.id === improvementRequestId));
+
+    const improvementWorkOrder = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        ativo_id: ids.asset,
+        tipo_origem: 'IMPROVEMENT_REQUEST',
+        entidade_origem_id: improvementRequestId,
+        tipo_trabalho: 'IMPROVEMENT',
+        modo_execucao: 'MIXED',
+        categoria_melhoria: 'MODIFICATION',
+        titulo: 'Melhoria de proteção do conjunto móvel',
+        descricao: 'Executar adequação proposta pela equipe técnica.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: null,
+        analise_tecnica: { exige_liberacao_pos_intervencao: false },
+      },
+    });
+    assert.equal(improvementWorkOrder.statusCode, 200, improvementWorkOrder.body);
+    assert.match(improvementWorkOrder.json().data.codigo, /^OS-\d{8}$/u);
+    assert.match(improvementWorkOrder.json().data.codigo_legado, /^OS-\d{14}-[0-9A-F]{8}$/u);
+    assert.equal(improvementWorkOrder.json().data.tipo_trabalho, 'IMPROVEMENT');
+    assert.equal(improvementWorkOrder.json().data.modo_execucao, 'MIXED');
+    assert.equal(improvementWorkOrder.json().data.categoria_melhoria, 'MODIFICATION');
+    const improvementWorkOrderId: string = improvementWorkOrder.json().data.id;
+
+    const repeatedImprovementConversion = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        ativo_id: ids.asset,
+        tipo_origem: 'IMPROVEMENT_REQUEST',
+        entidade_origem_id: improvementRequestId,
+        tipo_trabalho: 'IMPROVEMENT',
+        modo_execucao: 'MIXED',
+        categoria_melhoria: 'MODIFICATION',
+        titulo: 'Reenvio da melhoria',
+        descricao: 'A conversão idempotente deve devolver a OS já criada.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: null,
+        analise_tecnica: {},
+      },
+    });
+    assert.equal(repeatedImprovementConversion.statusCode, 200, repeatedImprovementConversion.body);
+    assert.equal(repeatedImprovementConversion.json().data.id, improvementWorkOrderId);
+
+    for (const [provider, description, amount] of [
+      ['Oficina Alfa', 'Usinagem do eixo', 100],
+      ['Balanceamento Beta', 'Balanceamento dinâmico', 250],
+      ['Inspeção Gama', 'Laudo complementar com valor pendente', null],
+    ] as const) {
+      const service = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${improvementWorkOrderId}/external-services`,
+        headers: bearer(identities.admin),
+        payload: { prestador: provider, descricao: description, valor: amount, data_servico: null, observacao: null },
+      });
+      assert.equal(service.statusCode, 200, service.body);
+    }
+    const improvementDetail = await app.inject({
+      method: 'GET',
+      url: `/v1/maintenance/work-orders/${improvementWorkOrderId}`,
+      headers: bearer(identities.admin),
+    });
+    assert.equal(improvementDetail.statusCode, 200, improvementDetail.body);
+    assert.equal(Number(improvementDetail.json().data.custos.servicos_externos), 350);
+    assert.equal(Number(improvementDetail.json().data.custos.total_realizado), 350);
+    assert.equal(improvementDetail.json().data.custos.servicos_sem_preco, 1);
+    assert.equal(improvementDetail.json().data.custos.dados_financeiros_pendentes, true);
+
+    const invalidType = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion,
+        tipo_origem: 'ADMIN', entidade_origem_id: null, tipo_trabalho: 'INSPECTION',
+        modo_execucao: 'INTERNAL', titulo: 'Tipo inválido', descricao: 'Contrato deve rejeitar.',
+        prioridade: 'LOW', responsavel_id: null, programada_para: null, analise_tecnica: {},
+      },
+    });
+    assert.equal(invalidType.statusCode, 400, invalidType.body);
+
+    const concurrentCreates = await Promise.all(
+      Array.from({ length: 6 }, async (_, index) => app.inject({
+        method: 'POST',
+        url: '/v1/maintenance/work-orders',
+        headers: bearer(identities.admin),
+        payload: {
+          plano_versao_id: ids.planVersion,
+          tipo_origem: 'ADMIN', entidade_origem_id: null,
+          tipo_trabalho: index % 2 === 0 ? 'PREVENTIVE' : 'PREDICTIVE',
+          modo_execucao: (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3],
+          titulo: `OS concorrente ${index + 1}`,
+          descricao: 'Validação do contador operacional atômico por tenant.',
+          prioridade: 'LOW', responsavel_id: null, programada_para: null, analise_tecnica: {},
+        },
+      })),
+    );
+    for (const response of concurrentCreates) assert.equal(response.statusCode, 200, response.body);
+    const concurrentCodes = concurrentCreates.map(response => response.json().data.codigo as string);
+    assert.equal(new Set(concurrentCodes).size, concurrentCodes.length);
+    assert.ok(concurrentCodes.every(code => /^OS-\d{8}$/u.test(code)));
+
+    await transaction(pool, async (client) => {
+      const sequence = await client.query<{ operational_number: string; operational_code: string }>(
+        `SELECT operational_number::text,operational_code
+           FROM maintenance.work_orders
+          ORDER BY operational_number`,
+      );
+      assert.equal(sequence.rows[0]!.operational_number, '1');
+      assert.equal(sequence.rows[0]!.operational_code, 'OS-00000001');
+      assert.equal(new Set(sequence.rows.map(row => row.operational_number)).size, sequence.rows.length);
+
+      const originalCounter = await client.query<{ next_number: string }>(
+        `SELECT next_number::text FROM maintenance.work_order_number_counters WHERE tenant_id=$1`,
+        [tenantId],
+      );
+      await client.query('SAVEPOINT sequence_rollback');
+      await client.query(
+        `INSERT INTO maintenance.work_orders (
+           id,tenant_id,code,asset_id,component_id,maintenance_plan_version_id,origin_type,
+           work_type,title,description,priority,requester_id,content_hash_sha256
+         ) SELECT $1,$2,$3,asset_id,component_id,maintenance_plan_version_id,'ADMIN',
+                  'PREVENTIVE','Rollback do contador','A numeração deve voltar com a transação.',
+                  'LOW',$4,repeat('e',64)
+             FROM maintenance.work_orders WHERE id=$5`,
+        [randomUUID(), tenantId, `OS-ROLLBACK-${randomUUID()}`, ids.admin, improvementWorkOrderId],
+      );
+      await client.query('ROLLBACK TO SAVEPOINT sequence_rollback');
+      const afterRollback = await client.query<{ next_number: string }>(
+        `SELECT next_number::text FROM maintenance.work_order_number_counters WHERE tenant_id=$1`,
+        [tenantId],
+      );
+      assert.equal(afterRollback.rows[0]?.next_number, originalCounter.rows[0]?.next_number);
+
+      const retryCode = `OS-IDEMPOTENT-${randomUUID()}`;
+      const retryId = randomUUID();
+      await client.query(
+        `INSERT INTO maintenance.work_orders (
+           id,tenant_id,code,asset_id,component_id,maintenance_plan_version_id,origin_type,
+           work_type,title,description,priority,requester_id,content_hash_sha256
+         ) SELECT $1,$2,$3,asset_id,component_id,maintenance_plan_version_id,'ADMIN',
+                  'PREVENTIVE','Retry idempotente','Primeira tentativa.',
+                  'LOW',$4,repeat('f',64)
+             FROM maintenance.work_orders WHERE id=$5`,
+        [retryId, tenantId, retryCode, ids.admin, improvementWorkOrderId],
+      );
+      const firstRetryNumber = await client.query<{ operational_number: string }>(
+        `SELECT operational_number::text FROM maintenance.work_orders WHERE id=$1`,
+        [retryId],
+      );
+      const counterAfterFirstRetry = await client.query<{ next_number: string }>(
+        `SELECT next_number::text FROM maintenance.work_order_number_counters WHERE tenant_id=$1`,
+        [tenantId],
+      );
+      await client.query(
+        `INSERT INTO maintenance.work_orders (
+           id,tenant_id,code,asset_id,component_id,maintenance_plan_version_id,origin_type,
+           work_type,title,description,priority,requester_id,content_hash_sha256
+         ) SELECT $1,$2,$3,asset_id,component_id,maintenance_plan_version_id,'ADMIN',
+                  'PREVENTIVE','Retry idempotente','Segunda tentativa.',
+                  'LOW',$4,repeat('f',64)
+             FROM maintenance.work_orders WHERE id=$5
+         ON CONFLICT (tenant_id,code) DO UPDATE SET updated_at=clock_timestamp()`,
+        [randomUUID(), tenantId, retryCode, ids.admin, improvementWorkOrderId],
+      );
+      const secondRetryNumber = await client.query<{ operational_number: string }>(
+        `SELECT operational_number::text FROM maintenance.work_orders WHERE id=$1`,
+        [retryId],
+      );
+      const counterAfterSecondRetry = await client.query<{ next_number: string }>(
+        `SELECT next_number::text FROM maintenance.work_order_number_counters WHERE tenant_id=$1`,
+        [tenantId],
+      );
+      assert.equal(secondRetryNumber.rows[0]?.operational_number, firstRetryNumber.rows[0]?.operational_number);
+      assert.equal(counterAfterSecondRetry.rows[0]?.next_number, counterAfterFirstRetry.rows[0]?.next_number);
     });
   },
 );

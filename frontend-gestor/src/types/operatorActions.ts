@@ -25,6 +25,8 @@ export interface OperatorAction {
   programada_para: string | null
   ordem_id: string
   ordem_codigo: string
+  ordem_codigo_legado?: string
+  modo_execucao?: 'INTERNAL' | 'EXTERNAL' | 'MIXED'
   duracao_estimada_minutos: number | null
   checklist_nome: string
   execucao_id: string | null
@@ -92,12 +94,13 @@ export interface Execution {
     nome_facil: string | null
     quantidade: number
     unidade: string
-    valor_unitario: number
-    custo_total: number
+    valor_unitario: number | null
+    custo_total: number | null
     observacao: string | null
     registrado_em: string
   }>
   custo_materiais_total?: number
+  materiais_sem_preco?: number
   itens: ExecutionItem[]
 }
 
@@ -107,7 +110,7 @@ export interface ConsumableMaterial {
   nome: string
   nome_facil: string | null
   unidade: string
-  valor_unitario: number
+  valor_unitario: number | null
   estoque_atual: number
   estoque_minimo: number
   situacao_estoque: 'AVAILABLE' | 'LOW'
@@ -160,3 +163,5 @@ export interface EligibleSupportTechnician {
   nome: string
   matricula: string | null
 }
+
+export type ImprovementCategory = 'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER'

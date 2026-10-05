@@ -6,6 +6,9 @@ export type SignaturePolicy =
   | 'QUALIDADE_E_SEGURANCA';
 export type EvidenceType = 'PHOTO' | 'VIDEO' | 'DOCUMENT' | 'AUDIO' | 'OTHER';
 export type ExecutionStopMode = 'NO_STOP' | 'STOPPED' | 'EXECUTOR_DECISION';
+export type WorkOrderType = 'CORRECTIVE' | 'PREVENTIVE' | 'PREDICTIVE' | 'IMPROVEMENT';
+export type ExecutionMode = 'INTERNAL' | 'EXTERNAL' | 'MIXED';
+export type ImprovementCategory = 'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER';
 
 export interface RequestAuditMetadata {
   readonly traceId: string;
@@ -20,7 +23,9 @@ export interface WorkOrderInput {
   readonly assetTag: string | null;
   readonly originType: string;
   readonly originEntityId: string | null;
-  readonly workType: string;
+  readonly workType: WorkOrderType;
+  readonly executionMode: ExecutionMode;
+  readonly improvementCategory: ImprovementCategory | null;
   readonly title: string;
   readonly description: string;
   readonly priority: Priority;
@@ -36,6 +41,28 @@ export interface WorkOrderCorrectionInput {
   readonly responsibleId: string | null;
   readonly scheduledFor: string | null;
   readonly technicalAnalysis: Readonly<Record<string, unknown>>;
+  readonly executionMode: ExecutionMode;
+  readonly improvementCategory: ImprovementCategory | null;
+}
+
+export interface ExternalServiceInput {
+  readonly providerName: string;
+  readonly description: string;
+  readonly amount: number | null;
+  readonly serviceDate: string | null;
+  readonly notes: string | null;
+}
+
+export interface ImprovementRequestInput {
+  readonly assetId: string;
+  readonly category: ImprovementCategory;
+  readonly suggestion: string;
+  readonly reason: string;
+  readonly evidenceStorageObjectId: string | null;
+}
+
+export interface MaterialCostInput {
+  readonly unitCost: number;
 }
 
 export interface WorkOrderListQuery {

@@ -244,6 +244,7 @@ const planTypeFromNode: Readonly<Record<string, string>> = {
   INSPECTION: "INSPECAO",
   LUBRICATION: "LUBRIFICACAO",
   CORRECTIVE: "CORRETIVA",
+  IMPROVEMENT: "MELHORIA",
   CONDITION_BASED: "BASEADA_CONDICAO",
 };
 
@@ -359,6 +360,10 @@ function workOrderBody(data: JsonRecord, creating: boolean): JsonRecord {
       exige_liberacao_pos_intervencao: data.exige_liberacao_pos_intervencao === true,
       modo_parada: data.modo_parada_manutencao,
     },
+    modo_execucao: upperText(data.modo_execucao || "INTERNAL"),
+    categoria_melhoria: upperText(data.tipo) === "MELHORIA" || upperText(data.tipo) === "IMPROVEMENT"
+      ? upperText(data.categoria_melhoria || "OTHER")
+      : null,
   };
   if (!creating) return body;
   return {
@@ -1258,6 +1263,41 @@ export function nodeActionRequest(
         method: "POST",
         path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/materials`,
         body: { material_id: payload.material_id, quantidade: payload.quantidade, observacao: payload.observacao },
+        token,
+      };
+    case "improvement-requests.create":
+      return {
+        method: "POST",
+        path: "/v1/maintenance/improvement-requests",
+        body: {
+          ativo_id: payload.ativo_id,
+          categoria: payload.categoria,
+          sugestao: payload.sugestao,
+          motivo: payload.motivo,
+          objeto_evidencia_id: payload.objeto_evidencia_id ?? null,
+        },
+        token,
+      };
+    case "improvement-requests.list":
+      return { method: "GET", path: "/v1/maintenance/improvement-requests", token };
+    case "work-orders.external-services.list":
+      return {
+        method: "GET",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/external-services`,
+        token,
+      };
+    case "work-orders.external-services.create":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/external-services`,
+        body: { prestador: payload.prestador, descricao: payload.descricao, valor: payload.valor, data_servico: payload.data_servico, observacao: payload.observacao },
+        token,
+      };
+    case "material-usage.cost.update":
+      return {
+        method: "PATCH",
+        path: `/v1/maintenance/material-usage/${encodeURIComponent(String(payload.material_usage_id))}/cost`,
+        body: { valor_unitario: payload.valor_unitario },
         token,
       };
     case "operator-actions.validation":

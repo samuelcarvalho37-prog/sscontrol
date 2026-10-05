@@ -18,10 +18,13 @@ import type {
   CompletionInput,
   EvidenceInput,
   EvidenceUploadInput,
+  ExternalServiceInput,
   ExecutionBatchItemInput,
   ExecutionStopMode,
   ExecutionResponseInput,
   MaintenanceActionListQuery,
+  ImprovementRequestInput,
+  MaterialCostInput,
   MaterialConsumptionInput,
   RequestAuditMetadata,
   ReviewSubmissionInput,
@@ -119,7 +122,7 @@ function normalizedWorkOrder(input: WorkOrderInput): WorkOrderInput {
   return {
     ...input,
     originType: input.originType.trim().toUpperCase(),
-    workType: input.workType.trim().toUpperCase(),
+    workType: input.workType.trim().toUpperCase() as WorkOrderInput['workType'],
     title: input.title.trim(),
     description: input.description.trim(),
     assetTag: assetTag === undefined || assetTag === '' ? null : assetTag,
@@ -329,6 +332,96 @@ export class OperationsService {
     );
   }
 
+  async listExternalServices(user: AuthenticatedUser, workOrderId: string) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => {
+        if (!(await this.repository.findWorkOrder(client, workOrderId))) {
+          throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada.', 404);
+        }
+        return {
+          servicos: await this.repository.listExternalServices(client, workOrderId),
+          custos: await this.repository.workOrderCosts(client, workOrderId),
+        };
+      },
+    );
+  }
+
+  async createExternalService(
+    user: AuthenticatedUser,
+    workOrderId: string,
+    rawInput: ExternalServiceInput,
+    audit: RequestAuditMetadata,
+  ) {
+    const input: ExternalServiceInput = {
+      providerName: rawInput.providerName.trim(),
+      description: rawInput.description.trim(),
+      amount: rawInput.amount,
+      serviceDate: rawInput.serviceDate,
+      notes: nullableText(rawInput.notes),
+    };
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const workOrder = await this.repository.findWorkOrder(client, workOrderId, true);
+        if (!workOrder) throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada.', 404);
+        if (text(workOrder, 'execution_mode') === 'INTERNAL') {
+          throw error('EXTERNAL_SERVICE_MODE_INVALID', 'Altere o modo da OS para externa ou mista antes de registrar serviço externo.', 409);
+        }
+        const service = await this.repository.createExternalService(client, user.tenantId, workOrderId, user.id, input);
+        await this.repository.writeAudit(client,user.tenantId,user.id,audit,'WORK_ORDER_EXTERNAL_SERVICE_RECORDED','WORK_ORDER',workOrderId,{ service_id: service.id, provider: input.providerName, amount: input.amount });
+        return { servico: service, custos: await this.repository.workOrderCosts(client, workOrderId) };
+      },
+    );
+  }
+
+  async updateMaterialCost(
+    user: AuthenticatedUser,
+    materialUsageId: string,
+    input: MaterialCostInput,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const usage = await this.repository.updateMaterialCost(client, materialUsageId, input);
+        if (!usage) throw error('MATERIAL_USAGE_NOT_FOUND', 'Consumo de material não encontrado.', 404);
+        await this.repository.writeAudit(client,user.tenantId,user.id,audit,'MATERIAL_USAGE_COST_COMPLETED','MATERIAL_USAGE',materialUsageId,{ unit_cost: input.unitCost, total_cost: usage.total_cost });
+        return { consumo: usage };
+      },
+    );
+  }
+
+  async listImprovementRequests(user: AuthenticatedUser) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => ({ solicitacoes: await this.repository.listImprovementRequests(client) }),
+    );
+  }
+
+  async createImprovementRequest(
+    user: AuthenticatedUser,
+    rawInput: ImprovementRequestInput,
+    audit: RequestAuditMetadata,
+  ) {
+    const input: ImprovementRequestInput = {
+      ...rawInput,
+      suggestion: rawInput.suggestion.trim(),
+      reason: rawInput.reason.trim(),
+    };
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        if (!(await this.repository.findActiveAssetIdById(client, input.assetId))) {
+          throw error('IMPROVEMENT_ASSET_INVALID', 'O ativo informado não está disponível neste tenant.', 422);
+        }
+        const request = await this.repository.createImprovementRequest(client,user.tenantId,user.id,input);
+        await this.repository.writeAudit(client,user.tenantId,user.id,audit,'IMPROVEMENT_REQUEST_CREATED','IMPROVEMENT_REQUEST',text(request,'id'),request);
+        return { solicitacao: request };
+      },
+    );
+  }
+
   async createWorkOrder(
     user: AuthenticatedUser,
     rawInput: WorkOrderInput,
@@ -339,6 +432,7 @@ export class OperationsService {
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
         let occurrence: OperationsRow | null = null;
+        let improvementRequest: OperationsRow | null = null;
         if (input.originEntityId && input.originType === 'OCCURRENCE') {
           occurrence = await this.repository.findOccurrenceForWorkOrderConversion(
             client,
@@ -389,6 +483,29 @@ export class OperationsService {
             assetId: text(occurrence, 'asset_id'),
           };
         }
+        if (input.originEntityId && input.originType === 'IMPROVEMENT_REQUEST') {
+          improvementRequest = await this.repository.findImprovementRequest(client, input.originEntityId, true);
+          if (!improvementRequest) {
+            throw error('IMPROVEMENT_REQUEST_NOT_FOUND', 'A solicitação de melhoria não foi encontrada neste tenant.', 404);
+          }
+          const convertedWorkOrderId = nullableRowText(improvementRequest, 'converted_work_order_id');
+          if (convertedWorkOrderId) return this.requiredWorkOrderDetail(client, convertedWorkOrderId);
+          if (text(improvementRequest, 'status') !== 'OPEN') {
+            throw error('IMPROVEMENT_REQUEST_NOT_OPEN', 'Somente uma solicitação aberta pode ser convertida em OS.', 409);
+          }
+          input = {
+            ...input,
+            assetId: text(improvementRequest, 'asset_id'),
+            workType: 'IMPROVEMENT',
+            improvementCategory: text(improvementRequest, 'category') as WorkOrderInput['improvementCategory'],
+          };
+        }
+        if (input.workType === 'IMPROVEMENT' && input.improvementCategory === null) {
+          throw error('IMPROVEMENT_CATEGORY_REQUIRED', 'Informe a categoria da melhoria.', 422);
+        }
+        if (input.workType !== 'IMPROVEMENT' && input.improvementCategory !== null) {
+          throw error('IMPROVEMENT_CATEGORY_NOT_ALLOWED', 'Categoria de melhoria só é válida para OS de melhoria.', 422);
+        }
         const resolvedAssetId = input.assetId ?? (input.assetTag
           ? await this.repository.findActiveAssetIdByTag(client, input.assetTag)
           : null);
@@ -399,12 +516,13 @@ export class OperationsService {
           ? await this.repository.findPublishedPlanContext(client, input.planVersionId)
           : null;
         let generatedCorrectivePlan = false;
-        if (!context && input.workType === 'CORRECTIVE' && input.assetId) {
-          const generated = await this.repository.ensurePublishedCorrectivePlanContext(
+        if (!context && ['CORRECTIVE', 'IMPROVEMENT'].includes(input.workType) && input.assetId) {
+          const generated = await this.repository.ensurePublishedAdHocPlanContext(
             client,
             user.tenantId,
             input.assetId,
             user.id,
+            input.workType as 'CORRECTIVE' | 'IMPROVEMENT',
           );
           context = generated.context;
           generatedCorrectivePlan = generated.created;
@@ -450,6 +568,9 @@ export class OperationsService {
         if (occurrence) {
           await this.repository.linkOccurrenceToWorkOrder(client, text(occurrence, 'id'), id);
           await this.repository.retractOccurrenceNotification(client, text(occurrence, 'id'));
+        }
+        if (improvementRequest) {
+          await this.repository.markImprovementRequestConverted(client, text(improvementRequest, 'id'), id);
         }
         const detail = await this.requiredWorkOrderDetail(client, id);
         if (generatedCorrectivePlan) {
@@ -526,13 +647,15 @@ export class OperationsService {
           assetTag: null,
           originType: text(workOrder, 'origin_type'),
           originEntityId: nullableRowText(workOrder, 'origin_entity_id'),
-          workType: text(workOrder, 'work_type'),
+          workType: text(workOrder, 'work_type') as WorkOrderInput['workType'],
           title: input.title,
           description: input.description,
           priority: input.priority,
           responsibleId: input.responsibleId,
           scheduledFor: input.scheduledFor,
           technicalAnalysis: input.technicalAnalysis,
+          executionMode: input.executionMode,
+          improvementCategory: input.improvementCategory,
         };
         const contentHash = workOrderHash(
           workOrderId,

@@ -7,8 +7,11 @@ import type { OperationsService } from './operations.service.js';
 import type {
   EvidenceType,
   ExecutionStopMode,
+  ExecutionMode,
+  ImprovementCategory,
   Priority,
   SignaturePolicy,
+  WorkOrderType,
 } from './operations.types.js';
 
 interface Params {
@@ -19,6 +22,9 @@ interface Params {
   readonly itemId?: string;
   readonly objectId?: string;
   readonly materialId?: string;
+  readonly materialUsageId?: string;
+  readonly serviceId?: string;
+  readonly requestId?: string;
 }
 interface WorkOrderQuery {
   readonly busca?: string;
@@ -44,7 +50,9 @@ interface WorkOrderBody {
   readonly ativo_tag?: string;
   readonly tipo_origem: string;
   readonly entidade_origem_id: string | null;
-  readonly tipo_trabalho: string;
+  readonly tipo_trabalho: WorkOrderType;
+  readonly modo_execucao: ExecutionMode;
+  readonly categoria_melhoria?: ImprovementCategory | null;
   readonly titulo: string;
   readonly descricao: string;
   readonly prioridade: Priority;
@@ -59,6 +67,23 @@ interface WorkOrderCorrectionBody {
   readonly responsavel_id: string | null;
   readonly programada_para: string | null;
   readonly analise_tecnica: Readonly<Record<string, unknown>>;
+  readonly modo_execucao: ExecutionMode;
+  readonly categoria_melhoria?: ImprovementCategory | null;
+}
+interface ExternalServiceBody {
+  readonly prestador: string;
+  readonly descricao: string;
+  readonly valor: number | null;
+  readonly data_servico: string | null;
+  readonly observacao: string | null;
+}
+interface MaterialCostBody { readonly valor_unitario: number; }
+interface ImprovementRequestBody {
+  readonly ativo_id: string;
+  readonly categoria: ImprovementCategory;
+  readonly sugestao: string;
+  readonly motivo: string;
+  readonly objeto_evidencia_id?: string | null;
 }
 interface SubmitBody {
   readonly politica_assinatura: SignaturePolicy;
@@ -266,6 +291,8 @@ export class OperationsController {
           originType: request.body.tipo_origem,
           originEntityId: request.body.entidade_origem_id,
           workType: request.body.tipo_trabalho,
+          executionMode: request.body.modo_execucao,
+          improvementCategory: request.body.categoria_melhoria ?? null,
           title: request.body.titulo,
           description: request.body.descricao,
           priority: request.body.prioridade,
@@ -276,6 +303,70 @@ export class OperationsController {
         audit(request),
       ),
     );
+
+  listExternalServices = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(
+      request,
+      'maintenance.work-orders.external-services.list',
+      await this.service.listExternalServices(user(request), id(request.params, 'workOrderId')),
+    );
+
+  createExternalService = async (
+    request: FastifyRequest<{ Params: Params; Body: ExternalServiceBody }>,
+  ) => successEnvelope(
+    request,
+    'maintenance.work-orders.external-services.create',
+    await this.service.createExternalService(
+      user(request),
+      id(request.params, 'workOrderId'),
+      {
+        providerName: request.body.prestador,
+        description: request.body.descricao,
+        amount: request.body.valor,
+        serviceDate: request.body.data_servico,
+        notes: request.body.observacao,
+      },
+      audit(request),
+    ),
+  );
+
+  updateMaterialCost = async (
+    request: FastifyRequest<{ Params: Params; Body: MaterialCostBody }>,
+  ) => successEnvelope(
+    request,
+    'maintenance.material-usage.cost.update',
+    await this.service.updateMaterialCost(
+      user(request),
+      id(request.params, 'materialUsageId'),
+      { unitCost: request.body.valor_unitario },
+      audit(request),
+    ),
+  );
+
+  listImprovementRequests = async (request: FastifyRequest) =>
+    successEnvelope(
+      request,
+      'maintenance.improvement-requests.list',
+      await this.service.listImprovementRequests(user(request)),
+    );
+
+  createImprovementRequest = async (
+    request: FastifyRequest<{ Body: ImprovementRequestBody }>,
+  ) => successEnvelope(
+    request,
+    'maintenance.improvement-requests.create',
+    await this.service.createImprovementRequest(
+      user(request),
+      {
+        assetId: request.body.ativo_id,
+        category: request.body.categoria,
+        suggestion: request.body.sugestao,
+        reason: request.body.motivo,
+        evidenceStorageObjectId: request.body.objeto_evidencia_id ?? null,
+      },
+      audit(request),
+    ),
+  );
 
   correctWorkOrder = async (
     request: FastifyRequest<{ Params: Params; Body: WorkOrderCorrectionBody }>,
@@ -293,6 +384,8 @@ export class OperationsController {
           responsibleId: request.body.responsavel_id,
           scheduledFor: request.body.programada_para,
           technicalAnalysis: request.body.analise_tecnica,
+          executionMode: request.body.modo_execucao,
+          improvementCategory: request.body.categoria_melhoria ?? null,
         },
         audit(request),
       ),

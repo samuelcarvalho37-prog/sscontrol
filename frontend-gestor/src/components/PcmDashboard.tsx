@@ -3,7 +3,8 @@ import type { CSSProperties } from 'react'
 import { callApi } from '../services/api/client'
 import { getGestorToken } from '../services/api/config'
 import { getGestorActionDetail, getGestorNotifications, isGestorAuthenticationError } from '../services/api/gestor'
-import { getAdminIntervention, listAdminInterventions, saveAdminIntervention, sendAdminInterventionForValidation } from '../services/api/interventions'
+import { createExternalService, getAdminIntervention, listAdminInterventions, listImprovementRequests, saveAdminIntervention, sendAdminInterventionForValidation, updateMaterialUsageCost } from '../services/api/interventions'
+import type { ImprovementRequestSummary } from '../services/api/interventions'
 import { releaseMaintenanceWorkOrder } from '../services/api/maintenanceAssignments'
 import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
@@ -121,6 +122,10 @@ type MaintenanceStatus = 'NORMAL' | 'ATENCAO' | 'CRITICO'
 
 function number(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+}
+
+function formatCurrency(value: number | string | undefined) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0))
 }
 
 function duration(seconds: number | null) {
@@ -415,8 +420,16 @@ function humanWorkType(value: string) {
     CORRETIVA: 'Corretiva',
     PREVENTIVE: 'Preventiva',
     PREVENTIVA: 'Preventiva',
+    PREDICTIVE: 'Preditiva',
+    PREDITIVA: 'Preditiva',
+    IMPROVEMENT: 'Melhoria',
+    MELHORIA: 'Melhoria',
   }
   return labels[source] ?? humanStatus(value)
+}
+
+function humanExecutionMode(value: string | undefined) {
+  return ({ INTERNAL: 'Interna', EXTERNAL: 'Externa', MIXED: 'Mista' } as Record<string, string>)[normalize(value ?? '')] ?? 'Interna'
 }
 
 function maintenanceStatusLabel(value: MaintenanceStatus) {
@@ -466,7 +479,6 @@ function PcmReports({ report, onExport, onPrint }: { report: NonNullable<PcmData
   const executions = report.execucoes_detalhadas ?? []
   const materialCosts = report.custos_materiais ?? {}
   const lowStock = report.estoque_baixo ?? {}
-  const formatCurrency = (value: number | string | undefined) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0))
   const byType = (orders.por_tipo ?? []).map(item => ({ id: item.tipo, label: humanWorkType(item.tipo), value: Number(item.quantidade ?? 0) }))
   const byPriority = (orders.por_prioridade ?? []).map(item => ({ id: item.prioridade, label: humanPriority(item.prioridade), value: Number(item.quantidade ?? 0) }))
 
@@ -590,7 +602,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [createOrderOpen, setCreateOrderOpen] = useState(false)
   const createOccurrenceAssetResolverRef = useRef<ReturnType<typeof createPcmOccurrenceAssetResolver> | null>(null)
   createOccurrenceAssetResolverRef.current ??= createPcmOccurrenceAssetResolver()
-  const [createOrderMode, setCreateOrderMode] = useState<'WORK_ORDER' | 'PREVENTIVE'>('WORK_ORDER')
+  const [createOrderMode, setCreateOrderMode] = useState<'WORK_ORDER' | 'PREVENTIVE' | 'IMPROVEMENT'>('WORK_ORDER')
   const [createOrderBusy, setCreateOrderBusy] = useState(false)
   const [createOriginLoading, setCreateOriginLoading] = useState(false)
   const [createOrderError, setCreateOrderError] = useState('')
@@ -615,6 +627,17 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [createOriginAssetName, setCreateOriginAssetName] = useState('')
   const [createOriginType, setCreateOriginType] = useState('')
   const [createRequiresPostIntervention, setCreateRequiresPostIntervention] = useState(false)
+  const [createExecutionMode, setCreateExecutionMode] = useState<'INTERNAL' | 'EXTERNAL' | 'MIXED'>('INTERNAL')
+  const [createImprovementCategory, setCreateImprovementCategory] = useState<'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER'>('MODIFICATION')
+  const [externalProvider, setExternalProvider] = useState('')
+  const [externalDescription, setExternalDescription] = useState('')
+  const [externalAmount, setExternalAmount] = useState('')
+  const [externalDate, setExternalDate] = useState('')
+  const [externalNotice, setExternalNotice] = useState('')
+  const [externalBusy, setExternalBusy] = useState(false)
+  const [improvementRequests, setImprovementRequests] = useState<ImprovementRequestSummary[]>([])
+  const [improvementRequestId, setImprovementRequestId] = useState('')
+  const [materialCostDrafts, setMaterialCostDrafts] = useState<Record<string, string>>({})
   const [todayNotifications, setTodayNotifications] = useState<GestorNotification[]>([])
   const [notificationsError, setNotificationsError] = useState('')
 
@@ -758,6 +781,16 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
           return
         }
         setNotificationsError('Não foi possível carregar as notificações de hoje.')
+      })
+    return () => controller.abort()
+  }, [refresh, onSessionExpired])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void listImprovementRequests(controller.signal)
+      .then(rows => { if (!controller.signal.aborted) setImprovementRequests(rows) })
+      .catch(cause => {
+        if (!controller.signal.aborted && isGestorAuthenticationError(cause)) onSessionExpired()
       })
     return () => controller.abort()
   }, [refresh, onSessionExpired])
@@ -1093,8 +1126,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateDescription('')
     setCreatePriority('MEDIUM')
     setCreateRequiresPostIntervention(false)
+    setCreateExecutionMode('INTERNAL')
+    setCreateImprovementCategory('MODIFICATION')
     setCreateScheduledFor('')
     setCreateOriginEntityId('')
+    setImprovementRequestId('')
     setCreateOriginAssetId('')
     setCreateOriginAssetTag('')
     setCreateOriginAssetName('')
@@ -1103,13 +1139,25 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateOrderError('')
   }
 
+  function openImprovementRequest(request: ImprovementRequestSummary) {
+    void openCreateOrder('IMPROVEMENT').then(() => {
+      setImprovementRequestId(request.id)
+      setCreateOriginAssetId(request.ativo_id)
+      setCreateOriginAssetTag(request.ativo_tag)
+      setCreateOriginAssetName(request.ativo_nome)
+      setCreateImprovementCategory(request.categoria)
+      setCreateTitle(request.sugestao)
+      setCreateDescription(request.motivo)
+    })
+  }
+
   function closeCreateOrder() {
     createOccurrenceAssetResolverRef.current?.cancel()
     setCreateOrderOpen(false)
     resetCreateOrderForm()
   }
 
-  async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' = 'WORK_ORDER', notification?: GestorNotification) {
+  async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' | 'IMPROVEMENT' = 'WORK_ORDER', notification?: GestorNotification) {
     createOccurrenceAssetResolverRef.current?.cancel()
     resetCreateOrderForm()
     setCreateOrderMode(mode)
@@ -1159,7 +1207,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
   async function createWorkOrder() {
     const canBootstrapCorrective = createOrderMode === 'WORK_ORDER' && Boolean(createOriginEntityId && createOriginAssetId)
-    if ((!selectedCreatePlan && !canBootstrapCorrective) || createTitle.trim().length < 3 || createDescription.trim().length < 3) {
+    const canBootstrapImprovement = createOrderMode === 'IMPROVEMENT' && Boolean(createOriginAssetId)
+    if ((!selectedCreatePlan && !canBootstrapCorrective && !canBootstrapImprovement) || createTitle.trim().length < 3 || createDescription.trim().length < 3) {
       setCreateOrderError('Informe título e descrição com pelo menos 3 caracteres e confirme o ativo da ocorrência.')
       return
     }
@@ -1174,14 +1223,20 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
       const created = await saveAdminIntervention({
         origem: createOrderMode === 'PREVENTIVE'
           ? 'PCM_PREVENTIVE_SCHEDULE'
+          : improvementRequestId
+            ? 'IMPROVEMENT_REQUEST'
+          : createOrderMode === 'IMPROVEMENT'
+            ? 'PCM_IMPROVEMENT'
           : createOriginEntityId
             ? 'OCCURRENCE'
             : 'PCM',
-        entidade_origem_id: createOriginEntityId || undefined,
+        entidade_origem_id: improvementRequestId || createOriginEntityId || undefined,
         ...(selectedCreatePlan ? { plano_versao_id: selectedCreatePlan.versionId } : {}),
         ativo_id: selectedCreatePlan ? undefined : createOriginAssetId || undefined,
         ativo_tag: selectedCreatePlan ? undefined : createOriginAssetTag || undefined,
-        tipo: selectedCreatePlan?.workType ?? 'CORRETIVA',
+        tipo: createOrderMode === 'IMPROVEMENT' ? 'MELHORIA' : selectedCreatePlan?.workType ?? 'CORRETIVA',
+        modo_execucao: createExecutionMode,
+        categoria_melhoria: createOrderMode === 'IMPROVEMENT' ? createImprovementCategory : null,
         titulo: createTitle.trim(),
         descricao: createDescription.trim(),
         prioridade: createPriority,
@@ -1205,6 +1260,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         ? `OS ${created.codigo} criada e liberada para a equipe de Manutenção. O primeiro técnico a iniciá-la será registrado como executor.${createRequiresPostIntervention ? ' Qualidade ou Segurança validará a conclusão após a execução.' : ''}`
         : createOrderMode === 'PREVENTIVE'
         ? `Preventiva ${created.codigo} programada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
+        : createOrderMode === 'IMPROVEMENT'
+        ? `Melhoria ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
         : `OS ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`)
       reload()
     } catch (cause) {
@@ -1344,6 +1401,34 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     } finally {
       setPrepareBusy(false)
     }
+  }
+
+  async function registerExternalService() {
+    if (!selectedOrder || externalProvider.trim().length < 2 || externalDescription.trim().length < 3) return
+    const parsedAmount = externalAmount.trim() === '' ? null : Number(externalAmount)
+    if (parsedAmount !== null && (!Number.isFinite(parsedAmount) || parsedAmount < 0)) {
+      setExternalNotice('Informe um valor válido ou deixe-o pendente.')
+      return
+    }
+    setExternalBusy(true); setExternalNotice('')
+    try {
+      await createExternalService(selectedOrder.id, { provider: externalProvider.trim(), description: externalDescription.trim(), amount: parsedAmount, serviceDate: externalDate || null, notes: null })
+      const detail = await getAdminIntervention(selectedOrder.id)
+      setSelectedOrder(detail)
+      setExternalProvider(''); setExternalDescription(''); setExternalAmount(''); setExternalDate('')
+      setExternalNotice('Serviço externo registrado e custos recalculados pelo servidor.')
+    } catch (cause) {
+      setExternalNotice(cause instanceof Error ? cause.message : 'Não foi possível registrar o serviço externo.')
+    } finally { setExternalBusy(false) }
+  }
+
+  async function complementMaterialCost(materialUsageId: string) {
+    const value = Number(materialCostDrafts[materialUsageId])
+    if (!Number.isFinite(value) || value < 0 || !selectedOrder) return
+    await updateMaterialUsageCost(materialUsageId, value)
+    const detail = await getAdminIntervention(selectedOrder.id)
+    setSelectedOrder(detail)
+    if (detail.acao_id) setSelectedActionDetail(await getGestorActionDetail(detail.acao_id))
   }
 
 
@@ -1542,6 +1627,13 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
           {data.relatorios ? <PcmReports report={data.relatorios} onExport={exportPcmReport} onPrint={printPcmReport} /> : null}
 
 
+          {improvementRequests.some(request => request.status === 'OPEN') ? <section className="pcm-panel pcm-orders" aria-labelledby="pcm-improvement-requests-title">
+            <div className="pcm-panel__heading pcm-orders__heading"><div><span className="pcm-section-kicker">MELHORIAS</span><h2 id="pcm-improvement-requests-title">Solicitações da equipe técnica</h2></div></div>
+            <div className="pcm-orders__table-wrap"><table className="pcm-orders__table"><thead><tr><th>Equipamento</th><th>Categoria</th><th>Sugestão</th><th>Solicitante</th><th>Ação</th></tr></thead><tbody>
+              {improvementRequests.filter(request => request.status === 'OPEN').map(request => <tr key={request.id}><td><strong>{request.ativo_tag}</strong><br /><small>{request.ativo_nome}</small></td><td>{humanStatus(request.categoria)}</td><td><strong>{request.sugestao}</strong><br /><small>{request.motivo}</small></td><td>{request.solicitante_nome}<br /><small>{request.solicitante_matricula}</small></td><td><button type="button" className="pcm-order-link" onClick={() => openImprovementRequest(request)}>Avaliar e converter</button></td></tr>)}
+            </tbody></table></div>
+          </section> : null}
+
           <section className="pcm-panel pcm-orders" id="pcm-operational-queue">
             <div className="pcm-panel__heading pcm-orders__heading">
               <div>
@@ -1549,6 +1641,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                 <h2>Fila operacional</h2>
               </div>
               <div className="pcm-orders__heading-actions">
+                <button type="button" className="pcm-orders__export" onClick={() => void openCreateOrder('IMPROVEMENT')}>Nova melhoria</button>
                 <button type="button" className="pcm-orders__export" onClick={exportOperationalQueue} disabled={!filteredOperationalOrders.length}>Exportar CSV</button>
                 <span className="pcm-orders__count">
                   {filteredOperationalOrders.length} de {operationalOrders.length}
@@ -1668,6 +1761,10 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                       <dt>Tipo</dt>
                       <dd>{humanWorkType(selectedOrder.tipo)}</dd>
                     </div>
+                    <div className="pcm-order-detail__fact">
+                      <dt>Modo</dt>
+                      <dd>{humanExecutionMode(selectedOrder.modo_execucao)}</dd>
+                    </div>
                     <div className="pcm-order-detail__fact pcm-order-detail__fact--wide">
                       <dt>Equipamento</dt>
                       <dd>{[selectedOrder.ativo_tag, selectedOrder.ativo_nome].filter(Boolean).join(' · ') || 'Não informado'}</dd>
@@ -1711,7 +1808,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                       </li>)}
                     </ol>
                   </section> : null}
-                  {selectedActionDetail?.materiais?.length ? <section className="pcm-order-assignment"><h3>Materiais e custo da OS</h3><p>Saídas registradas pelo técnico. Os valores são preservados como histórico da execução.</p><ul>{selectedActionDetail.materiais.map((material, index) => { const data = material as Record<string, unknown>; const quantity = Number(data.quantidade ?? 0); const unitCost = Number(data.valor_unitario ?? 0); const total = Number(data.custo_total ?? 0); const name = String(data.nome_facil ?? data.nome ?? 'Material'); return <li key={String(data.id ?? index)}><strong>{String(data.sku ?? 'Sem SKU')} · {name}</strong><span> — {quantity} {String(data.unidade ?? '')} · {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitCost)} cada · total {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span></li> })}</ul></section> : null}
+                  {selectedActionDetail?.materiais?.length ? <section className="pcm-order-assignment"><h3>Materiais e custo da OS</h3><p>Saídas registradas pelo técnico. Valores desconhecidos podem ser complementados sem alterar a conclusão técnica.</p><ul>{selectedActionDetail.materiais.map((material, index) => { const data = material as Record<string, unknown>; const id = String(data.id ?? index); const quantity = Number(data.quantidade ?? 0); const unitCost = data.valor_unitario === null || data.valor_unitario === undefined ? null : Number(data.valor_unitario); const total = data.custo_total === null || data.custo_total === undefined ? null : Number(data.custo_total); const name = String(data.nome_facil ?? data.nome ?? 'Material'); return <li key={id}><strong>{String(data.sku ?? 'Sem SKU')} · {name}</strong><span> — {quantity} {String(data.unidade ?? '')} · {unitCost === null ? 'Preço pendente' : `${formatCurrency(unitCost)} cada · total ${formatCurrency(total ?? 0)}`}</span>{unitCost === null && data.id ? <span><input aria-label={`Valor unitário de ${name}`} type="number" min="0" step="0.0001" value={materialCostDrafts[id] ?? ''} onChange={event => setMaterialCostDrafts(current => ({ ...current, [id]: event.target.value }))} /><button type="button" onClick={() => void complementMaterialCost(id)}>Salvar valor</button></span> : null}</li> })}</ul></section> : null}
+                  <section className="pcm-order-assignment"><h3>Custos realizados</h3><p>Materiais: <strong>{formatCurrency(selectedOrder.custos?.materiais ?? 0)}</strong> · Serviços externos: <strong>{formatCurrency(selectedOrder.custos?.servicos_externos ?? 0)}</strong> · Total: <strong>{formatCurrency(selectedOrder.custos?.total_realizado ?? 0)}</strong></p>{selectedOrder.custos?.dados_financeiros_pendentes ? <p>Há valores pendentes de complementação financeira; isso não bloqueia a conclusão técnica.</p> : null}{selectedOrder.servicos_externos?.length ? <ul>{selectedOrder.servicos_externos.map(service => <li key={service.id}><strong>{service.prestador}</strong> — {service.descricao} · {service.valor === null ? 'Valor pendente' : formatCurrency(service.valor)}</li>)}</ul> : <p>Nenhum serviço externo registrado.</p>}{selectedOrder.modo_execucao !== 'INTERNAL' ? <div className="pcm-create-order-modal__form"><label>Prestador<input value={externalProvider} maxLength={240} onChange={event => setExternalProvider(event.target.value)} /></label><label>Descrição<input value={externalDescription} maxLength={2000} onChange={event => setExternalDescription(event.target.value)} /></label><label>Valor (opcional)<input type="number" min="0" step="0.01" value={externalAmount} onChange={event => setExternalAmount(event.target.value)} /></label><label>Data (opcional)<input type="date" value={externalDate} onChange={event => setExternalDate(event.target.value)} /></label><button type="button" disabled={externalBusy || externalProvider.trim().length < 2 || externalDescription.trim().length < 3} onClick={() => void registerExternalService()}>{externalBusy ? 'Registrando…' : 'Registrar serviço externo'}</button>{externalNotice ? <p role="status">{externalNotice}</p> : null}</div> : null}</section>
                   {selectedOrderReadyForPreparation ? <section className="pcm-order-assignment">
                     <h3>Preparar para execução</h3>
                     <p>Para uma OS normal, este passo libera a ação para toda a equipe de Manutenção. Se houver confirmação pós-execução configurada, ela será solicitada somente depois da conclusão técnica.</p>
@@ -1819,8 +1917,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
               <header className="pcm-create-order-modal__header">
                 <div>
                   <span className="pcm-section-kicker">ORDEM DE SERVIÇO</span>
-                  <h2 id="pcm-create-order-title">{createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</h2>
-                  <p id="pcm-create-order-description">{createOriginEntityId ? 'Revise os dados da ocorrência antes de criar a OS.' : createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : 'Escolha um plano publicado para definir o equipamento e o tipo de manutenção.'}</p>
+                  <h2 id="pcm-create-order-title">{createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : createOrderMode === 'IMPROVEMENT' ? 'Criar OS de melhoria' : 'Criar ordem de serviço'}</h2>
+                  <p id="pcm-create-order-description">{createOriginEntityId ? 'Revise os dados da ocorrência antes de criar a OS.' : createOrderMode === 'PREVENTIVE' ? 'Escolha um plano preventivo publicado e informe quando a OS deve ser executada.' : createOrderMode === 'IMPROVEMENT' ? 'Escolha o equipamento e classifique a melhoria sem criar burocracia adicional.' : 'Escolha um plano publicado para definir o equipamento e o tipo de manutenção.'}</p>
                 </div>
                 <button className="pcm-create-order-modal__close" type="button" aria-label="Fechar criação da ordem de serviço" onClick={closeCreateOrder} disabled={createOrderBusy}>×</button>
               </header>
@@ -1838,7 +1936,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                     <div><dt>Prioridade</dt><dd><span className={`pcm-create-order-modal__priority is-${normalize(createPriority).toLowerCase()}`}>{humanPriority(createPriority)}</span></dd></div>
                   </dl> : <p className="pcm-create-order-modal__empty">O equipamento da ocorrência ainda não foi localizado.</p>}
                   {selectedCreatePlan ? <p className="pcm-create-order-modal__plan">Plano aplicável: <strong>{selectedCreatePlan.code} · {selectedCreatePlan.name}</strong></p> : createOriginAssetId ? <p className="pcm-create-order-modal__plan">Será criado um checklist corretivo padrão, auditado e vinculado a este equipamento.</p> : null}
-                </section> : <section className="pcm-create-order-modal__section" aria-labelledby="pcm-plan-title">
+                </section> : createOrderMode === 'IMPROVEMENT' ? <section className="pcm-create-order-modal__section" aria-labelledby="pcm-plan-title"><div className="pcm-create-order-modal__section-heading"><span>ORIGEM DA SOLICITAÇÃO</span><h3 id="pcm-plan-title">Equipamento da melhoria</h3></div><label>Equipamento<select value={createOriginAssetId} onChange={event => { const asset=assetCatalog.find(candidate => recordText(candidate.id)===event.target.value); setCreateOriginAssetId(event.target.value); setCreateOriginAssetTag(recordText(asset?.tag)); setCreateOriginAssetName(recordText(asset?.nome)) }}><option value="">Selecione o equipamento</option>{assetCatalog.map(asset => <option key={recordText(asset.id)} value={recordText(asset.id)}>{recordText(asset.tag)} · {recordText(asset.nome)}</option>)}</select></label></section> : <section className="pcm-create-order-modal__section" aria-labelledby="pcm-plan-title">
                   <div className="pcm-create-order-modal__section-heading"><span>ORIGEM DA SOLICITAÇÃO</span><h3 id="pcm-plan-title">Plano e equipamento</h3></div>
                   <label>Plano publicado
                     <select value={createPlanVersionId} onChange={event => selectCreatePlan(event.target.value)} disabled={createOrderBusy || createPlansLoading}>
@@ -1856,6 +1954,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                     <label className="is-wide">Título<input value={createTitle} onChange={event => setCreateTitle(event.target.value)} maxLength={240} disabled={createOrderBusy} /></label>
                     <label className="is-wide">Descrição<textarea value={createDescription} onChange={event => setCreateDescription(event.target.value)} maxLength={8000} rows={4} disabled={createOrderBusy} /></label>
                     <label>Prioridade<select value={createPriority} onChange={event => setCreatePriority(event.target.value)} disabled={createOrderBusy}><option value="LOW">Baixa</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select></label>
+                    <label>Modo de execução<select value={createExecutionMode} onChange={event => setCreateExecutionMode(event.target.value as 'INTERNAL' | 'EXTERNAL' | 'MIXED')} disabled={createOrderBusy}><option value="INTERNAL">Interna</option><option value="EXTERNAL">Externa</option><option value="MIXED">Mista</option></select></label>
+                    {createOrderMode === 'IMPROVEMENT' ? <label>Categoria<select value={createImprovementCategory} onChange={event => setCreateImprovementCategory(event.target.value as typeof createImprovementCategory)} disabled={createOrderBusy}><option value="MODIFICATION">Modificação</option><option value="MANUFACTURE">Fabricação</option><option value="INSTALLATION">Instalação</option><option value="ADEQUACY">Adequação</option><option value="OTHER">Outra</option></select></label> : null}
                     <label>Programada para{createOrderMode === 'PREVENTIVE' ? '' : ' (opcional)'}<input type="datetime-local" value={createScheduledFor} onChange={event => setCreateScheduledFor(event.target.value)} disabled={createOrderBusy} required={createOrderMode === 'PREVENTIVE'} /></label>
                   </div>
                 </section>
@@ -1868,7 +1968,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                 {createOrderError ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}
               </div>
 
-              <footer className="pcm-create-order-modal__footer"><button className="pcm-create-order-modal__cancel" type="button" onClick={closeCreateOrder} disabled={createOrderBusy}>Cancelar</button><button className="pcm-create-order-modal__submit" type="button" onClick={() => void createWorkOrder()} disabled={createOrderBusy || createOriginLoading || createPlansLoading || (!selectedCreatePlan && !(createOrderMode === 'WORK_ORDER' && createOriginEntityId && createOriginAssetId))}>{createOrderBusy ? 'Criando…' : createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</button></footer>
+              <footer className="pcm-create-order-modal__footer"><button className="pcm-create-order-modal__cancel" type="button" onClick={closeCreateOrder} disabled={createOrderBusy}>Cancelar</button><button className="pcm-create-order-modal__submit" type="button" onClick={() => void createWorkOrder()} disabled={createOrderBusy || createOriginLoading || createPlansLoading || (!selectedCreatePlan && !(createOrderMode === 'WORK_ORDER' && createOriginEntityId && createOriginAssetId) && !(createOrderMode === 'IMPROVEMENT' && createOriginAssetId))}>{createOrderBusy ? 'Criando…' : createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</button></footer>
             </section>
           </div> : null}
 

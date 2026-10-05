@@ -5,11 +5,14 @@ import type { StoredObject } from '../../infrastructure/storage/object-storage.j
 
 import type {
   CompletionInput,
+  ExternalServiceInput,
   EvidenceInput,
   ExecutionResponseInput,
   RequestAuditMetadata,
   ReviewSubmissionInput,
   MaintenanceActionListQuery,
+  ImprovementRequestInput,
+  MaterialCostInput,
   TechnicalDemandListQuery,
   WorkOrderInput,
   WorkOrderCorrectionInput,
@@ -125,12 +128,12 @@ export class OperationsRepository {
       `
         INSERT INTO maintenance.work_orders (
           id, tenant_id, code, asset_id, component_id, maintenance_plan_version_id,
-          origin_type, origin_entity_id, work_type, title, description, priority,
+          origin_type, origin_entity_id, work_type, execution_mode, improvement_category, title, description, priority,
           requester_id, responsible_id, maintenance_stop_mode, technical_analysis,
           scheduled_for, content_hash_sha256
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16::jsonb, $17, $18
+          $13, $14, $15, $16, $17, $18::jsonb, $19, $20
         )
       `,
       [
@@ -143,6 +146,8 @@ export class OperationsRepository {
         input.originType,
         input.originEntityId,
         input.workType,
+        input.executionMode,
+        input.improvementCategory,
         input.title,
         input.description,
         input.priority,
@@ -238,7 +243,8 @@ export class OperationsRepository {
       `UPDATE maintenance.work_orders
        SET title = $2, description = $3, priority = $4, responsible_id = $5,
            scheduled_for = $6, technical_analysis = $7::jsonb,
-           content_hash_sha256 = $8, technical_demand_id = NULL,
+           execution_mode = $8, improvement_category = $9,
+           content_hash_sha256 = $10, technical_demand_id = NULL,
            status = 'DRAFT', submitted_at = NULL, updated_at = clock_timestamp()
        WHERE id = $1`,
       [
@@ -249,6 +255,8 @@ export class OperationsRepository {
         input.responsibleId,
         input.scheduledFor,
         JSON.stringify(input.technicalAnalysis),
+        input.executionMode,
+        input.improvementCategory,
         contentHash,
       ],
     );
@@ -260,12 +268,16 @@ export class OperationsRepository {
   ): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `
-        SELECT work_order.id, work_order.code AS codigo, work_order.title AS titulo,
+        SELECT work_order.id, work_order.operational_code AS codigo,
+               work_order.code AS codigo_legado, work_order.operational_number AS numero_operacional,
+               work_order.title AS titulo,
                work_order.description AS descricao,
                work_order.priority AS prioridade, work_order.status,
                work_order.origin_type AS origem,
                work_order.origin_entity_id AS entidade_origem_id,
                work_order.work_type AS tipo,
+               work_order.execution_mode AS modo_execucao,
+               work_order.improvement_category AS categoria_melhoria,
                work_order.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
                line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
                sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
@@ -319,7 +331,7 @@ export class OperationsRepository {
           ORDER BY latest_action.generated_at DESC, latest_action.id DESC
           LIMIT 1
         ) action ON true
-        WHERE ($1 = '' OR work_order.code ILIKE '%' || $1 || '%' OR work_order.title ILIKE '%' || $1 || '%' OR asset.tag ILIKE '%' || $1 || '%')
+        WHERE ($1 = '' OR work_order.operational_code ILIKE '%' || $1 || '%' OR work_order.code ILIKE '%' || $1 || '%' OR work_order.title ILIKE '%' || $1 || '%' OR asset.tag ILIKE '%' || $1 || '%')
           AND ($2::text IS NULL OR work_order.status = $2)
           AND ($3::uuid IS NULL OR work_order.asset_id = $3)
         ORDER BY CASE work_order.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
@@ -342,11 +354,15 @@ export class OperationsRepository {
   async getWorkOrderDetail(client: PoolClient, id: string): Promise<OperationsRow | null> {
     const result = await client.query<OperationsRow>(
       `
-        SELECT work_order.id, work_order.code AS codigo, work_order.title AS titulo,
+        SELECT work_order.id, work_order.operational_code AS codigo,
+               work_order.code AS codigo_legado, work_order.operational_number AS numero_operacional,
+               work_order.title AS titulo,
                work_order.description AS descricao, work_order.priority AS prioridade,
                work_order.status, work_order.origin_type AS tipo_origem,
                work_order.origin_entity_id AS entidade_origem_id,
                work_order.work_type AS tipo_trabalho, work_order.asset_id AS ativo_id,
+               work_order.execution_mode AS modo_execucao,
+               work_order.improvement_category AS categoria_melhoria,
                asset.tag AS ativo_tag, asset.name AS ativo_nome,
         line.id AS linha_id, line.tag AS linha_tag, line.name AS linha_nome,
         sector.id AS setor_id, sector.tag AS setor_tag, sector.name AS setor_nome,
@@ -379,6 +395,22 @@ export class OperationsRepository {
                work_order.submitted_at AS enviada_validacao_em,
                work_order.released_at AS liberada_em,
                work_order.created_at AS criada_em, work_order.updated_at AS atualizada_em,
+               jsonb_build_object(
+                 'materiais', cost.material_cost,
+                 'servicos_externos', cost.external_service_cost,
+                 'total_realizado', cost.realized_total,
+                 'materiais_sem_preco', cost.materials_pending_price,
+                 'servicos_sem_preco', cost.external_services_pending_price,
+                 'dados_financeiros_pendentes', cost.financial_data_pending
+               ) AS custos,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', service.id, 'prestador', service.provider_name,
+                 'descricao', service.description, 'valor', service.amount,
+                 'data_servico', service.service_date, 'observacao', service.notes,
+                 'registrado_em', service.created_at
+               ) ORDER BY service.created_at, service.id)
+               FROM maintenance.external_services service
+               WHERE service.work_order_id=work_order.id), '[]'::jsonb) AS servicos_externos,
                CASE WHEN demand.id IS NULL THEN NULL ELSE jsonb_build_object(
                  'id', demand.id, 'status', demand.status,
                  'politica_assinatura', demand.signature_policy,
@@ -444,6 +476,7 @@ export class OperationsRepository {
         JOIN maintenance.checklist_template_versions checklist_version ON checklist_version.id = plan_version.checklist_template_version_id
         JOIN maintenance.checklist_templates checklist_template ON checklist_template.id = checklist_version.checklist_template_id
         LEFT JOIN workflow.technical_demands demand ON demand.id = work_order.technical_demand_id
+        JOIN maintenance.work_order_realized_costs cost ON cost.work_order_id=work_order.id
         WHERE work_order.id = $1
       `,
       [id],
@@ -889,7 +922,7 @@ export class OperationsRepository {
               report.digital_signature_storage_key AS assinatura_digital,
               report.approved_at AS aprovada_em,report.content_hash_sha256 AS hash,
               signature.id AS assinatura_referencia,signature.signed_at AS assinado_em,
-              work_order.code AS os_codigo,work_order.title AS os_titulo,
+              work_order.operational_code AS os_codigo,work_order.code AS os_codigo_legado,work_order.title AS os_titulo,
               signer.name AS assinante,'ASSINADO'::text AS status
        FROM workflow.technical_validation_reports report
        JOIN maintenance.work_orders work_order
@@ -1031,7 +1064,8 @@ export class OperationsRepository {
                component.name AS componente_nome, action.action_type AS tipo,
                action.origin AS origem, action.maintenance_stop_mode AS modo_parada,
                action.generated_at AS liberada_em, work_order.scheduled_for AS programada_para,
-               work_order.id AS ordem_id, work_order.code AS ordem_codigo,
+               work_order.id AS ordem_id, work_order.operational_code AS ordem_codigo,
+               work_order.code AS ordem_codigo_legado, work_order.execution_mode AS modo_execucao,
                plan_version.estimated_duration_minutes AS duracao_estimada_minutos,
                checklist_template.name AS checklist_nome,
                execution.id AS execucao_id, execution.status AS execucao_status,
@@ -1091,7 +1125,8 @@ export class OperationsRepository {
                action.generated_at AS gerado_em, action.started_at AS iniciado_em,
                action.completed_at AS finalizado_em, action.updated_at AS atualizado_em,
                action.responsible_id AS responsavel_id, responsible.name AS responsavel_nome,
-               work_order.id AS ordem_id, work_order.code AS ordem_codigo,
+               work_order.id AS ordem_id, work_order.operational_code AS ordem_codigo,
+               work_order.code AS ordem_codigo_legado, work_order.execution_mode AS modo_execucao,
                work_order.scheduled_for AS programada_para,
                plan.id AS plano_id, plan.code AS plano_codigo, plan.name AS plano_nome,
                execution.id AS execucao_id, execution.status AS execucao_status,
@@ -1118,6 +1153,7 @@ export class OperationsRepository {
         WHERE ($1 = '' OR action.title ILIKE '%' || $1 || '%'
                          OR action.description ILIKE '%' || $1 || '%'
                          OR asset.tag ILIKE '%' || $1 || '%'
+                         OR work_order.operational_code ILIKE '%' || $1 || '%'
                          OR work_order.code ILIKE '%' || $1 || '%')
           AND (cardinality($2::text[]) = 0 OR action.status = ANY($2::text[]))
           AND ($3::uuid IS NULL OR action.asset_id = $3)
@@ -1146,7 +1182,8 @@ export class OperationsRepository {
                action.technical_analysis AS analise_tecnica,
                action.generated_at AS gerada_em, action.started_at AS iniciada_em,
                action.completed_at AS finalizada_em,
-               work_order.id AS ordem_id, work_order.code AS ordem_codigo,
+               work_order.id AS ordem_id, work_order.operational_code AS ordem_codigo,
+               work_order.code AS ordem_codigo_legado, work_order.execution_mode AS modo_execucao,
                work_order.status AS ordem_status, work_order.scheduled_for AS programada_para,
                work_order.created_at AS ordem_criada_em,
                 asset.id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
@@ -1331,7 +1368,9 @@ export class OperationsRepository {
                  ON support_user.tenant_id=support.tenant_id AND support_user.id=support.user_id
                WHERE support.tenant_id=execution.tenant_id AND support.execution_id=execution.id),
                '[]'::jsonb) AS tecnicos_auxiliares,
-               work_order.code AS ordem_codigo,
+               work_order.operational_code AS ordem_codigo,
+               work_order.code AS ordem_codigo_legado,
+               work_order.execution_mode AS modo_execucao,
                work_order.title AS titulo, asset.tag AS ativo_tag, asset.name AS ativo_nome,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', usage.id, 'material_id', usage.material_id, 'sku', usage.sku_snapshot,
@@ -1697,9 +1736,10 @@ export class OperationsRepository {
     return result.rows[0] ?? null;
   }
 
-  async findPublishedCorrectivePlanContext(
+  async findPublishedAdHocPlanContext(
     client: PoolClient,
     assetId: string,
+    workType: 'CORRECTIVE' | 'IMPROVEMENT',
   ): Promise<OperationsRow | null> {
     const result = await client.query<OperationsRow>(
       `
@@ -1716,7 +1756,7 @@ export class OperationsRepository {
         JOIN maintenance.checklist_template_versions checklist
           ON checklist.id = version.checklist_template_version_id
         WHERE plan.asset_id=$1
-          AND plan.plan_type='CORRECTIVE'
+          AND plan.plan_type=$2
           AND version.status='PUBLISHED'
           AND plan.lifecycle_status='ACTIVE'
           AND asset.lifecycle_status='ACTIVE'
@@ -1725,7 +1765,7 @@ export class OperationsRepository {
         ORDER BY version.published_at DESC NULLS LAST, version.created_at DESC
         LIMIT 1
       `,
-      [assetId],
+      [assetId, workType],
     );
     return result.rows[0] ?? null;
   }
@@ -1744,13 +1784,140 @@ export class OperationsRepository {
     return result.rows[0]?.id ?? null;
   }
 
-  async ensurePublishedCorrectivePlanContext(
+  async findActiveAssetIdById(client: PoolClient, assetId: string): Promise<string | null> {
+    const result = await client.query<{ id: string }>(
+      `SELECT id FROM cmms.assets
+       WHERE id=$1 AND deleted_at IS NULL AND lifecycle_status='ACTIVE'`,
+      [assetId],
+    );
+    return result.rows[0]?.id ?? null;
+  }
+
+  async findImprovementRequest(
+    client: PoolClient,
+    requestId: string,
+    lock = false,
+  ): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.improvement_requests WHERE id=$1 ${lock ? 'FOR UPDATE' : ''}`,
+      [requestId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listImprovementRequests(client: PoolClient): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(`
+      SELECT request.id,request.category AS categoria,request.suggestion AS sugestao,
+             request.reason AS motivo,request.status,request.created_at AS criada_em,
+             request.requested_by AS solicitante_id,person.name AS solicitante_nome,
+             person.employee_number AS solicitante_matricula,
+             asset.id AS ativo_id,asset.tag AS ativo_tag,asset.name AS ativo_nome,
+             request.converted_work_order_id AS ordem_id,
+             work_order.operational_code AS ordem_codigo
+      FROM maintenance.improvement_requests request
+      JOIN iam.users person ON person.id=request.requested_by
+      JOIN cmms.assets asset ON asset.id=request.asset_id
+      LEFT JOIN maintenance.work_orders work_order ON work_order.id=request.converted_work_order_id
+      ORDER BY CASE request.status WHEN 'OPEN' THEN 1 WHEN 'CONVERTED' THEN 2 ELSE 3 END,
+               request.created_at DESC,request.id DESC
+    `);
+    return result.rows;
+  }
+
+  async createImprovementRequest(
+    client: PoolClient,
+    tenantId: string,
+    userId: string,
+    input: ImprovementRequestInput,
+  ): Promise<OperationsRow> {
+    const result = await client.query<OperationsRow>(`
+      INSERT INTO maintenance.improvement_requests (
+        tenant_id,asset_id,category,suggestion,reason,evidence_storage_object_id,requested_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING id,asset_id,category,suggestion,reason,status,evidence_storage_object_id,created_at
+    `, [tenantId,input.assetId,input.category,input.suggestion,input.reason,input.evidenceStorageObjectId,userId]);
+    return required(result.rows, 'A solicitação de melhoria não foi registrada.');
+  }
+
+  async markImprovementRequestConverted(
+    client: PoolClient,
+    requestId: string,
+    workOrderId: string,
+  ): Promise<void> {
+    const result = await client.query(
+      `UPDATE maintenance.improvement_requests
+       SET status='CONVERTED',converted_work_order_id=$2,updated_at=clock_timestamp()
+       WHERE id=$1 AND status='OPEN' AND converted_work_order_id IS NULL`,
+      [requestId,workOrderId],
+    );
+    if ((result.rowCount ?? 0) !== 1) throw new Error('A solicitação de melhoria não pôde ser convertida.');
+  }
+
+  async listExternalServices(client: PoolClient, workOrderId: string): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(`
+      SELECT service.id,service.provider_name AS prestador,service.description AS descricao,
+             service.amount AS valor,service.service_date AS data_servico,
+             service.notes AS observacao,service.recorded_by AS registrado_por,
+             person.name AS registrado_por_nome,service.created_at AS registrado_em
+      FROM maintenance.external_services service
+      JOIN iam.users person ON person.id=service.recorded_by
+      WHERE service.work_order_id=$1
+      ORDER BY service.created_at,service.id
+    `,[workOrderId]);
+    return result.rows;
+  }
+
+  async createExternalService(
+    client: PoolClient,
+    tenantId: string,
+    workOrderId: string,
+    userId: string,
+    input: ExternalServiceInput,
+  ): Promise<OperationsRow> {
+    const result = await client.query<OperationsRow>(`
+      INSERT INTO maintenance.external_services (
+        tenant_id,work_order_id,provider_name,description,amount,service_date,notes,recorded_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING id,provider_name AS prestador,description AS descricao,amount AS valor,
+                service_date AS data_servico,notes AS observacao,created_at AS registrado_em
+    `,[tenantId,workOrderId,input.providerName,input.description,input.amount,input.serviceDate,input.notes,userId]);
+    return required(result.rows,'O serviço externo não foi registrado.');
+  }
+
+  async workOrderCosts(client: PoolClient, workOrderId: string): Promise<OperationsRow> {
+    const result = await client.query<OperationsRow>(`
+      SELECT work_order_id AS id,material_cost AS materiais,
+             external_service_cost AS servicos_externos,realized_total AS total_realizado,
+             materials_pending_price AS materiais_sem_preco,
+             external_services_pending_price AS servicos_sem_preco,
+             financial_data_pending AS dados_financeiros_pendentes
+      FROM maintenance.work_order_realized_costs WHERE work_order_id=$1
+    `,[workOrderId]);
+    return required(result.rows,'Os custos da OS não foram encontrados.');
+  }
+
+  async updateMaterialCost(
+    client: PoolClient,
+    materialUsageId: string,
+    input: MaterialCostInput,
+  ): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(`
+      UPDATE maintenance.material_usage
+      SET unit_cost=$2,total_cost=round(quantity*$2,4)
+      WHERE id=$1
+      RETURNING id,work_order_action_id,quantity,unit_cost,total_cost
+    `,[materialUsageId,input.unitCost]);
+    return result.rows[0] ?? null;
+  }
+
+  async ensurePublishedAdHocPlanContext(
     client: PoolClient,
     tenantId: string,
     assetId: string,
     userId: string,
+    workType: 'CORRECTIVE' | 'IMPROVEMENT',
   ): Promise<{ readonly context: OperationsRow; readonly created: boolean }> {
-    const existing = await this.findPublishedCorrectivePlanContext(client, assetId);
+    const existing = await this.findPublishedAdHocPlanContext(client, assetId, workType);
     if (existing) return { context: existing, created: false };
 
     const asset = await client.query<OperationsRow>(
@@ -1758,9 +1925,9 @@ export class OperationsRepository {
        FROM cmms.assets WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,
       [assetId],
     );
-    const row = required(asset.rows, 'Ativo não encontrado para a OS corretiva.');
+    const row = required(asset.rows, 'Ativo não encontrado para a OS sob demanda.');
     if (row.lifecycle_status !== 'ACTIVE') {
-      throw new Error('O ativo da ocorrência não está disponível para uma OS corretiva.');
+      throw new Error('O ativo não está disponível para uma OS sob demanda.');
     }
 
     const checklistId = randomUUID();
@@ -1770,15 +1937,17 @@ export class OperationsRepository {
     const suffix = randomUUID().slice(0, 8).toUpperCase();
     const assetTag = (nonEmptyText(row.tag) ?? assetId.slice(0, 8)).toUpperCase();
     const assetName = nonEmptyText(row.name) ?? assetTag;
+    const kindCode = workType === 'IMPROVEMENT' ? 'IMP' : 'COR';
+    const kindLabel = workType === 'IMPROVEMENT' ? 'melhoria' : 'corretivo';
     const hash = createHash('sha256')
-      .update(`auto-corrective:${tenantId}:${assetId}:${planVersionId}`, 'utf8')
+      .update(`auto-${workType.toLowerCase()}:${tenantId}:${assetId}:${planVersionId}`, 'utf8')
       .digest('hex');
 
     await client.query(
       `INSERT INTO maintenance.checklist_templates (
          id,tenant_id,code,name,asset_id,checklist_type,criticality,lifecycle_status,created_by
-       ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','MEDIUM','ACTIVE',$6)`,
-       [checklistId, tenantId, `CHK-COR-${assetTag}-${suffix}`, `Checklist corretivo · ${assetName}`, assetId, userId],
+       ) VALUES ($1,$2,$3,$4,$5,$6,'MEDIUM','ACTIVE',$7)`,
+       [checklistId, tenantId, `CHK-${kindCode}-${assetTag}-${suffix}`, `Checklist de ${kindLabel} · ${assetName}`, assetId, workType, userId],
     );
     await client.query(
       `INSERT INTO maintenance.checklist_template_versions (
@@ -1789,7 +1958,7 @@ export class OperationsRepository {
         checklistVersionId,
         tenantId,
         checklistId,
-        'Modelo corretivo automático criado pelo PCM para registrar a intervenção da ocorrência.',
+        `Modelo automático de ${kindLabel} criado pelo PCM para registrar a intervenção.`,
         hash,
         userId,
       ],
@@ -1803,7 +1972,7 @@ export class OperationsRepository {
         randomUUID(),
         tenantId,
         checklistVersionId,
-        'Executar e registrar a correção',
+        `Executar e registrar a ${kindLabel}`,
         'Registre a intervenção executada, os materiais utilizados e a condição final do equipamento.',
       ],
     );
@@ -1822,8 +1991,8 @@ export class OperationsRepository {
     await client.query(
       `INSERT INTO maintenance.maintenance_plans (
          id,tenant_id,code,name,asset_id,plan_type,lifecycle_status,created_by
-       ) VALUES ($1,$2,$3,$4,$5,'CORRECTIVE','ACTIVE',$6)`,
-       [planId, tenantId, `PLN-COR-${assetTag}-${suffix}`, `Corretiva sob demanda · ${assetName}`, assetId, userId],
+       ) VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',$7)`,
+       [planId, tenantId, `PLN-${kindCode}-${assetTag}-${suffix}`, `${workType === 'IMPROVEMENT' ? 'Melhoria' : 'Corretiva'} sob demanda · ${assetName}`, assetId, workType, userId],
     );
     await client.query(
       `INSERT INTO maintenance.maintenance_plan_versions (
@@ -1838,7 +2007,7 @@ export class OperationsRepository {
         planId,
         checklistVersionId,
         row.criticality ?? 'MEDIUM',
-        JSON.stringify({ auto_generated: true, purpose: 'CORRECTIVE_OCCURRENCE' }),
+        JSON.stringify({ auto_generated: true, purpose: workType === 'IMPROVEMENT' ? 'IMPROVEMENT_REQUEST' : 'CORRECTIVE_OCCURRENCE' }),
         hash,
         userId,
       ],
@@ -1856,7 +2025,7 @@ export class OperationsRepository {
       [planVersionId],
     );
     const context = await this.findPublishedPlanContext(client, planVersionId);
-    if (!context) throw new Error('O plano corretivo automático não ficou disponível para execução.');
+    if (!context) throw new Error('O plano automático não ficou disponível para execução.');
     return { context, created: true };
   }
 
@@ -1868,8 +2037,10 @@ export class OperationsRepository {
     userId: string,
     input: import('./operations.types.js').MaterialConsumptionInput,
   ): Promise<OperationsRow> {
-    const unitCost = Number(material.valor_unitario ?? 0);
-    const totalCost = Number((unitCost * input.quantity).toFixed(4));
+    const unitCost = material.valor_unitario === null || material.valor_unitario === undefined
+      ? null
+      : Number(material.valor_unitario);
+    const totalCost = unitCost === null ? null : Number((unitCost * input.quantity).toFixed(4));
     await client.query(
       `UPDATE cmms.materials SET current_stock = current_stock - $2 WHERE id = $1`,
       [material.id, input.quantity],
