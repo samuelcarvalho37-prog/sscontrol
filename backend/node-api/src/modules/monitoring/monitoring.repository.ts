@@ -14,6 +14,56 @@ import type {
   TransitionStopInput,
 } from './monitoring.types.js';
 
+const notificationActionabilityFilter = `
+  AND NOT (
+    inbox.entity_type='OPERATIONAL_OCCURRENCE'
+    AND EXISTS (
+      SELECT 1
+      FROM iam.user_roles user_role
+      JOIN iam.roles profile_role
+        ON profile_role.tenant_id=user_role.tenant_id AND profile_role.id=user_role.role_id
+      WHERE user_role.tenant_id=inbox.tenant_id AND user_role.user_id=$1
+        AND profile_role.code IN ('QUALIDADE','SEGURANCA')
+        AND profile_role.status='ACTIVE' AND profile_role.deleted_at IS NULL
+    )
+  )
+  AND (
+    inbox.notification_type <> 'POST_INTERVENTION_VALIDATION_REQUESTED'
+    OR EXISTS (
+      SELECT 1
+      FROM workflow.technical_demands demand
+      JOIN workflow.demand_validator_requirements requirement
+        ON requirement.tenant_id=demand.tenant_id
+       AND requirement.technical_demand_id=demand.id
+       AND requirement.status IN ('PENDING','PARTIALLY_FULFILLED')
+      JOIN iam.user_technical_assignments assignment
+        ON assignment.tenant_id=demand.tenant_id AND assignment.user_id=$1
+       AND (assignment.technical_area_id=requirement.technical_area_id
+         OR (requirement.technical_area_id IS NULL AND demand.signature_policy='QUALIDADE_OU_SEGURANCA'))
+       AND assignment.status='ACTIVE' AND assignment.valid_from<=clock_timestamp()
+       AND (assignment.valid_until IS NULL OR assignment.valid_until>clock_timestamp())
+      JOIN iam.technical_areas area
+        ON area.tenant_id=assignment.tenant_id AND area.id=assignment.technical_area_id
+      LEFT JOIN iam.technical_roles technical_role
+        ON technical_role.tenant_id=assignment.tenant_id AND technical_role.id=assignment.technical_role_id
+      WHERE demand.tenant_id=inbox.tenant_id AND demand.id=inbox.entity_id
+        AND inbox.entity_type='DEMANDAS_TECNICAS'
+        AND demand.demand_type='POST_INTERVENTION_RELEASE'
+        AND demand.status IN ('OPEN','AWAITING_SIGNATURE')
+        AND area.status='ACTIVE'
+        AND COALESCE(assignment.can_sign_override,technical_role.can_sign,area.default_signature_required,false)
+        AND (
+          (demand.signature_policy='QUALIDADE' AND area.code='QUALITY' AND requirement.requirement_code='QUALITY')
+          OR (demand.signature_policy='SEGURANCA' AND area.code='SAFETY' AND requirement.requirement_code='SAFETY')
+          OR (demand.signature_policy='QUALIDADE_E_SEGURANCA'
+            AND ((area.code='QUALITY' AND requirement.requirement_code='QUALITY')
+              OR (area.code='SAFETY' AND requirement.requirement_code='SAFETY')))
+          OR (demand.signature_policy='QUALIDADE_OU_SEGURANCA'
+            AND area.code IN ('QUALITY','SAFETY') AND requirement.requirement_code='QUALITY_OR_SAFETY')
+        )
+    )
+  )`;
+
 export type MonitoringRow = Record<string, unknown>;
 
 interface OpenStopRow extends MonitoringRow {
@@ -622,6 +672,7 @@ export class MonitoringRepository {
          AND (NOT $3::boolean OR inbox.unread)
          AND ($4::text IS NULL OR inbox.priority=$4)
          AND ($5::text IS NULL OR inbox.notification_type=$5 OR inbox.entity_type=$5)
+         ${notificationActionabilityFilter}
        ORDER BY inbox.unread DESC,
                 CASE inbox.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 WHEN 'LOW' THEN 4 ELSE 5 END,
                 inbox.created_at DESC,inbox.id DESC LIMIT $6`,
@@ -673,10 +724,11 @@ export class MonitoringRepository {
 
   async notificationCounters(client: PoolClient, userId: string): Promise<MonitoringRow> {
     const result = await client.query<MonitoringRow>(
-      `SELECT count(*) FILTER (WHERE unread)::integer AS nao_lidas,
-              count(*) FILTER (WHERE unread AND priority='CRITICAL')::integer AS criticas,
-              count(*) FILTER (WHERE created_at>=date_trunc('day',clock_timestamp()))::integer AS hoje
-       FROM workflow.v_notification_inbox WHERE user_id=$1`,
+      `SELECT count(*) FILTER (WHERE inbox.unread)::integer AS nao_lidas,
+              count(*) FILTER (WHERE inbox.unread AND inbox.priority='CRITICAL')::integer AS criticas,
+              count(*) FILTER (WHERE inbox.created_at>=date_trunc('day',clock_timestamp()))::integer AS hoje
+       FROM workflow.v_notification_inbox inbox
+       WHERE inbox.user_id=$1 ${notificationActionabilityFilter}`,
       [userId],
     );
     return result.rows[0] ?? { nao_lidas: 0, criticas: 0, hoje: 0 };

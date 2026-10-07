@@ -38,7 +38,7 @@ export function createOperationsRoutes(
 ): FastifyPluginAsyncTypebox {
   return (app) => {
     app.get('/v1/workflow/technical-context', {
-      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.review'),
       schema: {
         ...secured,
         summary: 'Consulta o escopo técnico e as capacidades do Gestor.',
@@ -46,7 +46,7 @@ export function createOperationsRoutes(
       handler: controller.getTechnicalContext,
     });
     app.get('/v1/workflow/technical-demands', {
-      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.review'),
       schema: {
         ...secured,
         querystring: technicalDemandListQuerySchema,
@@ -55,7 +55,7 @@ export function createOperationsRoutes(
       handler: controller.listTechnicalDemands,
     });
     app.get('/v1/workflow/technical-reports', {
-      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.review'),
       schema: { ...secured, summary: 'Consulta relatórios auditáveis da área técnica atual.' },
       handler: controller.listTechnicalValidationReports,
     });

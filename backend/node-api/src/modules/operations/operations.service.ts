@@ -733,13 +733,38 @@ export class OperationsService {
         const areas = await this.repository.findTechnicalAreas(client);
         const qualityArea = areas.find((area) => area.code === 'QUALITY');
         const safetyArea = areas.find((area) => area.code === 'SAFETY');
-        if (!qualityArea || !safetyArea) {
+        const requiredAreaCodes: readonly string[] =
+          input.signaturePolicy === 'QUALIDADE'
+            ? ['QUALITY']
+            : input.signaturePolicy === 'SEGURANCA'
+              ? ['SAFETY']
+              : input.signaturePolicy === 'QUALIDADE_E_SEGURANCA'
+                ? ['QUALITY', 'SAFETY']
+                : [];
+        const missingRequiredArea = requiredAreaCodes.some((code) =>
+          code === 'QUALITY' ? !qualityArea : !safetyArea,
+        );
+        const noAlternativeArea =
+          input.signaturePolicy === 'QUALIDADE_OU_SEGURANCA' &&
+          !qualityArea &&
+          !safetyArea;
+        if (missingRequiredArea || noAlternativeArea) {
           throw error(
             'VALIDATION_AREAS_NOT_CONFIGURED',
-            'As áreas de Qualidade e Segurança devem estar ativas.',
+            'As áreas exigidas pela política de validação devem estar ativas.',
             409,
           );
         }
+        const configuredAreaId = (area: OperationsRow | undefined): string => {
+          if (!area) {
+            throw error(
+              'VALIDATION_AREAS_NOT_CONFIGURED',
+              'A área exigida pela política de validação deve estar ativa.',
+              409,
+            );
+          }
+          return text(area, 'id');
+        };
         const demandId = randomUUID();
         await this.repository.createDemand(
           client,
@@ -756,7 +781,7 @@ export class OperationsService {
             user.tenantId,
             demandId,
             'QUALITY',
-            qualityArea.id,
+            configuredAreaId(qualityArea),
           );
         } else if (input.signaturePolicy === 'SEGURANCA') {
           await this.repository.createRequirement(
@@ -764,7 +789,7 @@ export class OperationsService {
             user.tenantId,
             demandId,
             'SAFETY',
-            safetyArea.id,
+            configuredAreaId(safetyArea),
           );
         } else if (input.signaturePolicy === 'QUALIDADE_OU_SEGURANCA') {
           await this.repository.createRequirement(
@@ -780,17 +805,27 @@ export class OperationsService {
             user.tenantId,
             demandId,
             'QUALITY',
-            qualityArea.id,
+            configuredAreaId(qualityArea),
           );
           await this.repository.createRequirement(
             client,
             user.tenantId,
             demandId,
             'SAFETY',
-            safetyArea.id,
+            configuredAreaId(safetyArea),
           );
         }
         await this.repository.preparePostInterventionValidation(client, workOrder, demandId);
+        const validationRoleCodes = requiredAreaCodes.length
+          ? requiredAreaCodes.map((code) => code === 'QUALITY' ? 'QUALIDADE' : 'SEGURANCA')
+          : ['QUALIDADE', 'SEGURANCA'];
+        await this.repository.createPostInterventionNotification(
+          client,
+          user.tenantId,
+          demandId,
+          workOrder,
+          validationRoleCodes,
+        );
         await this.repository.appendDemandEvent(
           client,
           user.tenantId,
@@ -910,6 +945,22 @@ export class OperationsService {
           integer(state, 'completed_signature_count') >=
             integer(state, 'required_signature_count') &&
           integer(state, 'pending_requirements') === 0;
+        if (demand.demand_type === 'POST_INTERVENTION_RELEASE') {
+          if (approved) {
+            await this.repository.retractPostInterventionNotification(
+              client,
+              user.tenantId,
+              demandId,
+            );
+          } else {
+            await this.repository.dismissPostInterventionNotifications(
+              client,
+              user.tenantId,
+              demandId,
+              user.id,
+            );
+          }
+        }
         let releasedActionId: string | null = null;
         if (approved && demand.demand_type === 'POST_INTERVENTION_RELEASE') {
           await this.repository.completePostIntervention(
@@ -1011,6 +1062,13 @@ export class OperationsService {
         }
         const normalizedReason = reason.trim();
         await this.repository.requestChanges(client, demandId, text(demand, 'entity_id'));
+        if (demand.demand_type === 'POST_INTERVENTION_RELEASE') {
+          await this.repository.retractPostInterventionNotification(
+            client,
+            user.tenantId,
+            demandId,
+          );
+        }
         await this.repository.appendDemandEvent(
           client,
           user.tenantId,

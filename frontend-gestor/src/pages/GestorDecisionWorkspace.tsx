@@ -388,11 +388,16 @@ export function GestorDecisionWorkspace({
       const focused = focus.kind === 'workOrder'
         ? items.find((item) => item.kind === 'demand' && item.raw.entidade_id === focus.id)
         : items.find((item) => item.kind === focus.kind && item.id === focus.id)
-      if (focused) {
-        setActiveView('all')
-        setSelectedId(focused.id)
+      if (!focused) {
+        setSelectedId('')
         return
       }
+      setActiveView('all')
+      setSelectedId(focused.id)
+      if (focused.kind === 'demand') setSelectedDemand(focused.raw as GestorTechnicalDemand)
+      if (focused.kind === 'action') setSelectedAction(focused.raw as GestorAction)
+      if (focused.kind === 'model') setSelectedModel(focused.raw as GestorChecklistModel)
+      return
     }
     setSelectedId((current) =>
       filteredItems.some((item) => item.id === current)

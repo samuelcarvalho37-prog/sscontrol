@@ -335,6 +335,7 @@ function workOrderRow(value: unknown): JsonRecord {
           cargo_atual_id: item.cargo_atual_id,
           cargo_atual_nome: item.cargo_atual_nome,
           exige_assinatura: Number(item.assinaturas_exigidas ?? validation.assinaturas_exigidas ?? 0) > 0 ? "SIM" : "NAO",
+          politica_assinatura: item.politica_assinatura ?? validation.politica_assinatura,
           assinaturas_necessarias: item.assinaturas_exigidas ?? validation.assinaturas_exigidas,
           assinaturas_realizadas: item.assinaturas_realizadas ?? validation.assinaturas_realizadas,
         }

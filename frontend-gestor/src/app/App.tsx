@@ -10,6 +10,7 @@ import {
 import { AdminWorkspace } from '../components/AdminWorkspace'
 import { BellIcon } from '../components/Icons'
 import { NotificationCenter } from '../components/NotificationCenter'
+import { notificationNavigation, validationDemandFromSearch } from '../components/notificationPolicy'
 import { PlatformMotorWorkspace } from '../components/PlatformMotorWorkspace'
 import { WorkspaceStartupGate } from '../components/WorkspaceStartupGate'
 import { useAdaptiveDevice } from '../hooks/useAdaptiveDevice'
@@ -103,7 +104,10 @@ export function App() {
   )
   const [section, setSection] = useState<GestorSection>('home')
   const [decisionView, setDecisionView] = useState<GestorWorkView>('demands')
-  const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(null)
+  const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(() => {
+    const demandId = validationDemandFromSearch(window.location.search)
+    return demandId ? { kind: 'demand', id: demandId } : null
+  })
   const [analyticsFocusAsset, setAnalyticsFocusAsset] = useState('')
   const [analyticsFocusOccurrence, setAnalyticsFocusOccurrence] = useState('')
   const [detailedAnalytics, setDetailedAnalytics] = useState(false)
@@ -119,6 +123,8 @@ export function App() {
     ? session.user.capacidades.includes('admin.identity.read')
     : session?.user.perfil.trim().toUpperCase() === 'ADMIN'
   const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
+  const canReviewWork = session?.user.capacidades?.includes('maintenance.work-orders.review') ?? false
+  const canAccessDecisionWorkspace = canReadWork || canReviewWork
   const canReportOccurrence = session?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
@@ -175,7 +181,7 @@ export function App() {
   }, [expireSession, isAdmin, isSystem, session, workspaceReady])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady || !canReadWork) return
+    if (!session || isAdmin || isSystem || !workspaceReady || !canAccessDecisionWorkspace) return
     const controller = new AbortController()
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
@@ -187,7 +193,7 @@ export function App() {
         if (isGestorAuthenticationError(cause)) expireSession()
       })
     return () => controller.abort()
-  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canReadWork, canReadAnalytics])
+  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canAccessDecisionWorkspace, canReadAnalytics])
 
   useEffect(() => {
     if (!session) return
@@ -215,7 +221,8 @@ export function App() {
     setSection('home')
     setAdminModule('overview')
     setDecisionView('demands')
-    setDecisionFocus(null)
+    const validationDemandId = validationDemandFromSearch(window.location.search)
+    setDecisionFocus(validationDemandId ? { kind: 'demand', id: validationDemandId } : null)
     setAnalyticsFocusAsset('')
     setAnalyticsFocusOccurrence('')
     setNotificationCount(0)
@@ -244,6 +251,12 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
 
+  function preserveValidationDemandInUrl(demandId: string) {
+    const url = new URL(window.location.href)
+    url.searchParams.set('validationDemand', demandId)
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
   function handleOpenAnalytics(assetId = '', occurrenceId = '') {
     setAnalyticsFocusAsset(assetId)
     setAnalyticsFocusOccurrence(occurrenceId)
@@ -258,12 +271,21 @@ export function App() {
     if (!entityId) {
       throw new Error('Esta notificação não possui um registro de destino válido.')
     }
+    const destination = notificationNavigation(notification, normalizedProfile)
+    if (destination?.kind === 'technical-demand') {
+      preserveValidationDemandInUrl(destination.id)
+      handleOpenDecision('demands', { kind: 'demand', id: destination.id })
+      return
+    }
+    if (destination?.kind === 'occurrence') {
+      handleOpenAnalytics('', destination.id)
+      return
+    }
     if (
       entityType === 'OCORRENCIAS_OPERACIONAIS' ||
       entityType === 'OPERATIONAL_OCCURRENCE'
     ) {
-      handleOpenAnalytics('', entityId)
-      return
+      throw new Error('Ocorrências operacionais são tratadas pelo PCM e não geram validação desta área.')
     }
     if (entityType === 'ATIVOS') {
       handleOpenAnalytics(entityId)
@@ -456,7 +478,7 @@ export function App() {
           ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
-          {section === 'home' && canReadWork && !isTechnician ? (
+          {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
               initialView={decisionView}
@@ -502,7 +524,7 @@ export function App() {
               onSessionExpired={expireSession}
             />
           ) : null}
-          {section === 'more' || (section === 'home' && !canReadWork && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
+          {section === 'more' || (section === 'home' && !canAccessDecisionWorkspace && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
         </div>
@@ -521,6 +543,7 @@ export function App() {
         <NotificationCenter
           open={notificationOpen}
           audience="manager"
+          profile={session.user.perfil}
           onClose={() => setNotificationOpen(false)}
           onOpenNotification={handleOpenNotification}
           onUnreadChange={setNotificationCount}

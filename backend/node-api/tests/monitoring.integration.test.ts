@@ -350,9 +350,8 @@ test(
       headers: bearer(tokens.manager),
     });
     assert.equal(notifications.statusCode, 200, notifications.body);
-    assert.equal(notifications.json().data.contadores.nao_lidas, 1);
-    const notificationId: string = notifications.json().data.itens[0].id;
-    assert.equal(notifications.json().data.itens[0].entidade_id, occurrenceId);
+    assert.equal(notifications.json().data.contadores.nao_lidas, 0);
+    assert.equal(notifications.json().data.itens.length, 0);
 
     const pcmNotifications = await app.inject({
       method: 'GET',
@@ -362,17 +361,18 @@ test(
     assert.equal(pcmNotifications.statusCode, 200, pcmNotifications.body);
     assert.equal(pcmNotifications.json().data.contadores.nao_lidas, 1);
     assert.equal(pcmNotifications.json().data.itens[0].entidade_id, occurrenceId);
+    const notificationId: string = pcmNotifications.json().data.itens[0].id;
 
     const read = await app.inject({
       method: 'PATCH',
       url: `/v1/notifications/${notificationId}/read`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(read.statusCode, 200, read.body);
     const unreadAfterRead = await app.inject({
       method: 'GET',
       url: '/v1/notifications?somente_nao_lidas=true',
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(unreadAfterRead.json().data.contadores.nao_lidas, 0);
     assert.equal(unreadAfterRead.json().data.itens.length, 0);

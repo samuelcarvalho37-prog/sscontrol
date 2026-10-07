@@ -11,6 +11,12 @@ import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
 import type { GestorActionDetail, GestorNotification } from '../types/gestor'
 import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction } from './pcmOccurrenceAssetResolver'
+import { assertWorkOrderDetailMatchesSelection, createWorkOrderDetailRequestGate, focusWorkOrderDetail, loadOperationalWorkOrder, workOrderDetailHeadingCode } from './workOrderDetailNavigation'
+import {
+  postInterventionPolicyLabel,
+  postInterventionPolicySelectionError,
+  selectedPostInterventionPolicy,
+} from './postInterventionPolicy'
 import './PcmDashboard.css'
 
 interface PcmData {
@@ -585,6 +591,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [orderLoading, setOrderLoading] = useState(true)
   const [orderError, setOrderError] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<AdminIntervention | null>(null)
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('')
+  const [selectedWorkOrderCode, setSelectedWorkOrderCode] = useState('')
   const [selectedActionDetail, setSelectedActionDetail] = useState<GestorActionDetail | null>(null)
   const [selectedOrderLoading, setSelectedOrderLoading] = useState(false)
   const [selectedOrderError, setSelectedOrderError] = useState('')
@@ -593,7 +601,10 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [prepareBusy, setPrepareBusy] = useState(false)
   const [prepareError, setPrepareError] = useState('')
   const [assignmentSuccess, setAssignmentSuccess] = useState('')
-  const detailRequestRef = useRef(0)
+  const detailRequestGateRef = useRef<ReturnType<typeof createWorkOrderDetailRequestGate> | null>(null)
+  detailRequestGateRef.current ??= createWorkOrderDetailRequestGate()
+  const workOrderDetailPanelRef = useRef<HTMLElement | null>(null)
+  const workOrderDetailHeadingRef = useRef<HTMLHeadingElement | null>(null)
   const [orderStatus, setOrderStatus] = useState('')
   const [orderPriority, setOrderPriority] = useState('')
   const [orderSector, setOrderSector] = useState('')
@@ -627,6 +638,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   const [createOriginAssetName, setCreateOriginAssetName] = useState('')
   const [createOriginType, setCreateOriginType] = useState('')
   const [createRequiresPostIntervention, setCreateRequiresPostIntervention] = useState(false)
+  const [createQualityValidation, setCreateQualityValidation] = useState(false)
+  const [createSafetyValidation, setCreateSafetyValidation] = useState(false)
   const [createExecutionMode, setCreateExecutionMode] = useState<'INTERNAL' | 'EXTERNAL' | 'MIXED'>('INTERNAL')
   const [createImprovementCategory, setCreateImprovementCategory] = useState<'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER'>('MODIFICATION')
   const [externalProvider, setExternalProvider] = useState('')
@@ -1029,49 +1042,63 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     return items.slice(0, 5)
   }, [activeCriticalOrders, data])
 
-  async function openWorkOrderById(workOrderId: string) {
-    const requestId = detailRequestRef.current + 1
-    detailRequestRef.current = requestId
+  async function openWorkOrderById(workOrderId: string, publicCode?: string) {
+    const requestGate = detailRequestGateRef.current
+    if (!requestGate) return
+    const request = requestGate.begin(workOrderId)
+    setSelectedWorkOrderId(workOrderId)
+    setSelectedWorkOrderCode(publicCode ?? '')
     setSelectedOrderLoading(true)
     setSelectedOrderError('')
     setSelectedOrder(null)
     setReleaseError('')
     setPrepareError('')
     try {
-      const detail = await getAdminIntervention(workOrderId)
+      const detail = await getAdminIntervention(request.workOrderId)
+      assertWorkOrderDetailMatchesSelection(detail, request)
       let actionDetail: GestorActionDetail | null = null
       if (detail.acao_id) {
         try { actionDetail = await getGestorActionDetail(detail.acao_id) } catch { /* A OS continua acessível mesmo sem histórico de execução. */ }
       }
-      if (detailRequestRef.current === requestId) {
+      requestGate.commit(request, () => {
         setSelectedOrder(detail)
+        setSelectedWorkOrderCode(detail.codigo || publicCode || '')
         setSelectedActionDetail(actionDetail)
-      }
+      })
     } catch (cause) {
-      if (detailRequestRef.current !== requestId) return
+      if (!requestGate.isCurrent(request)) return
       if (isGestorAuthenticationError(cause)) {
         onSessionExpired()
         return
       }
       setSelectedOrderError(cause instanceof Error ? cause.message : 'Não foi possível carregar a ordem de serviço.')
     } finally {
-      if (detailRequestRef.current === requestId) setSelectedOrderLoading(false)
+      if (requestGate.isCurrent(request)) setSelectedOrderLoading(false)
     }
   }
 
   async function openOperationalOrder(order: OperationalOrder) {
-    await openWorkOrderById(order.raw.id)
+    await loadOperationalWorkOrder(order, workOrderId => openWorkOrderById(workOrderId, order.code))
   }
 
   function closeOperationalOrder() {
-    detailRequestRef.current += 1
+    detailRequestGateRef.current?.invalidate()
     setSelectedOrder(null)
+    setSelectedWorkOrderId('')
+    setSelectedWorkOrderCode('')
     setSelectedActionDetail(null)
     setSelectedOrderError('')
     setSelectedOrderLoading(false)
     setReleaseError('')
     setPrepareError('')
   }
+
+  useEffect(() => {
+    if (!selectedOrder || selectedOrderLoading || selectedOrder.id !== selectedWorkOrderId) return
+    const panel = workOrderDetailPanelRef.current
+    const heading = workOrderDetailHeadingRef.current
+    if (panel && heading) focusWorkOrderDetail(panel, heading)
+  }, [selectedOrder, selectedOrderLoading, selectedWorkOrderId])
   const selectedOrderReadyForRelease = selectedOrder?.status === 'AGUARDANDO_LIBERACAO'
   const selectedOrderReadyForPreparation = selectedOrder !== null && ['RASCUNHO', 'DRAFT', 'DEVOLVIDO_CORRECAO', 'CHANGES_REQUESTED'].includes(normalize(selectedOrder.status))
 
@@ -1126,6 +1153,8 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateDescription('')
     setCreatePriority('MEDIUM')
     setCreateRequiresPostIntervention(false)
+    setCreateQualityValidation(false)
+    setCreateSafetyValidation(false)
     setCreateExecutionMode('INTERNAL')
     setCreateImprovementCategory('MODIFICATION')
     setCreateScheduledFor('')
@@ -1208,12 +1237,24 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
   async function createWorkOrder() {
     const canBootstrapCorrective = createOrderMode === 'WORK_ORDER' && Boolean(createOriginEntityId && createOriginAssetId)
     const canBootstrapImprovement = createOrderMode === 'IMPROVEMENT' && Boolean(createOriginAssetId)
+    const postInterventionPolicy = selectedPostInterventionPolicy(
+      createQualityValidation,
+      createSafetyValidation,
+    )
     if ((!selectedCreatePlan && !canBootstrapCorrective && !canBootstrapImprovement) || createTitle.trim().length < 3 || createDescription.trim().length < 3) {
       setCreateOrderError('Informe título e descrição com pelo menos 3 caracteres e confirme o ativo da ocorrência.')
       return
     }
     if (createOrderMode === 'PREVENTIVE' && !createScheduledFor) {
       setCreateOrderError('Informe a data e hora da preventiva programada.')
+      return
+    }
+    const policySelectionError = postInterventionPolicySelectionError(
+      createRequiresPostIntervention,
+      postInterventionPolicy,
+    )
+    if (policySelectionError) {
+      setCreateOrderError(policySelectionError)
       return
     }
     setCreateOrderBusy(true)
@@ -1244,25 +1285,33 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
         planejada_para: createScheduledFor || undefined,
         exige_liberacao_pos_intervencao: createRequiresPostIntervention,
       })
-      if (releaseForMaintenance) {
+      if (releaseForMaintenance || createRequiresPostIntervention) {
         await sendAdminInterventionForValidation({
           intervencao_id: created.id,
-          politica_assinatura: 'QUALIDADE_OU_SEGURANCA',
-          comentario: 'OS criada pelo PCM a partir de uma ocorrência operacional.',
+          politica_assinatura: postInterventionPolicy ?? 'QUALIDADE_OU_SEGURANCA',
+          comentario: 'OS criada pelo PCM com a configuração de validação selecionada.',
           exige_segregacao: 'NAO',
         })
+      }
+      if (releaseForMaintenance) {
         // A validação pós-intervenção permanece pendente para Qualidade ou Segurança,
         // mas nunca deve impedir a equipe de iniciar a execução da OS.
         await releaseMaintenanceWorkOrder(created.id)
       }
       closeCreateOrder()
       setCreateOrderSuccess(releaseForMaintenance
-        ? `OS ${created.codigo} criada e liberada para a equipe de Manutenção. O primeiro técnico a iniciá-la será registrado como executor.${createRequiresPostIntervention ? ' Qualidade ou Segurança validará a conclusão após a execução.' : ''}`
+        ? `OS ${created.codigo} criada e liberada para a equipe de Manutenção. O primeiro técnico a iniciá-la será registrado como executor.${createRequiresPostIntervention ? ` ${postInterventionPolicyLabel(true, postInterventionPolicy)} validará a conclusão após a execução.` : ''}`
         : createOrderMode === 'PREVENTIVE'
-        ? `Preventiva ${created.codigo} programada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
+        ? createRequiresPostIntervention
+          ? `Preventiva ${created.codigo} preparada com validação pós-intervenção de ${postInterventionPolicyLabel(true, postInterventionPolicy)}. Libere-a para a equipe de Manutenção quando estiver pronta.`
+          : `Preventiva ${created.codigo} programada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
         : createOrderMode === 'IMPROVEMENT'
-        ? `Melhoria ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
-        : `OS ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`)
+        ? createRequiresPostIntervention
+          ? `Melhoria ${created.codigo} preparada com validação pós-intervenção de ${postInterventionPolicyLabel(true, postInterventionPolicy)}. Libere-a para a equipe de Manutenção quando estiver pronta.`
+          : `Melhoria ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`
+        : createRequiresPostIntervention
+          ? `OS ${created.codigo} preparada com validação pós-intervenção de ${postInterventionPolicyLabel(true, postInterventionPolicy)}. Libere-a para a equipe de Manutenção quando estiver pronta.`
+          : `OS ${created.codigo} criada como rascunho. Prepare-a e libere-a para a equipe de Manutenção.`)
       reload()
     } catch (cause) {
       setCreateOrderError(cause instanceof Error ? cause.message : 'Não foi possível criar a ordem de serviço.')
@@ -1703,7 +1752,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                     {filteredOperationalOrders.map(item => {
                       const window = scheduleWindow(item.deadline, item.status)
                       return <tr key={item.id}>
-                        <td><button type="button" className="pcm-order-link" onClick={() => void openOperationalOrder(item)}>{item.code}</button></td>
+                        <td><button type="button" className="pcm-order-link" aria-label={`Abrir detalhes da ordem ${item.code}`} aria-controls={selectedWorkOrderId === item.raw.id ? 'pcm-operational-order-detail' : undefined} aria-expanded={selectedWorkOrderId === item.raw.id} onClick={() => void openOperationalOrder(item)}>{item.code}</button></td>
                         <td>{item.equipment}</td>
                         <td>{item.sector}</td>
                         <td>{humanWorkType(item.type)}</td>
@@ -1729,11 +1778,11 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
           </section>
 
           {(selectedOrderLoading || selectedOrderError || selectedOrder) && (
-            <section className="pcm-panel pcm-order-detail" aria-busy={selectedOrderLoading} aria-live="polite">
+            <section id="pcm-operational-order-detail" ref={workOrderDetailPanelRef} className="pcm-panel pcm-order-detail" aria-busy={selectedOrderLoading} aria-live="polite">
               <div className="pcm-panel__heading pcm-order-detail__heading">
                 <div>
                   <span className="pcm-section-kicker">ORDEM DE SERVIÇO</span>
-                  <h2>{selectedOrder?.codigo || 'Detalhes da ordem'}</h2>
+                  <h2 ref={workOrderDetailHeadingRef} tabIndex={-1}>{workOrderDetailHeadingCode(selectedOrder?.codigo, selectedWorkOrderCode)}</h2>
                 </div>
                 <button type="button" className="pcm-order-detail__close" onClick={closeOperationalOrder}>
                   Fechar
@@ -1752,6 +1801,13 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
                     <div className="pcm-order-detail__fact">
                       <dt>Status</dt>
                       <dd>{humanStatus(selectedOrder.status)}</dd>
+                    </div>
+                    <div className="pcm-order-detail__fact pcm-order-detail__fact--wide">
+                      <dt>Validação pós-intervenção</dt>
+                      <dd>{postInterventionPolicyLabel(
+                        selectedOrder.exige_liberacao_pos_intervencao === true,
+                        selectedOrder.demanda?.politica_assinatura,
+                      )}</dd>
                     </div>
                     <div className="pcm-order-detail__fact">
                       <dt>Prioridade</dt>
@@ -1962,10 +2018,31 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
 
                 <section className="pcm-create-order-modal__section" aria-labelledby="pcm-post-intervention-title">
                   <div className="pcm-create-order-modal__section-heading"><span>VALIDAÇÃO PÓS-INTERVENÇÃO</span><h3 id="pcm-post-intervention-title">Liberação formal</h3></div>
-                  <label className="pcm-create-order-modal__post-intervention"><input type="checkbox" checked={createRequiresPostIntervention} onChange={event => setCreateRequiresPostIntervention(event.target.checked)} disabled={createOrderBusy} /><span><strong>Exigir liberação de Qualidade ou Segurança</strong><small>Use quando a manutenção exigir validação formal antes da liberação final do equipamento.</small></span></label>
+                  <label className="pcm-create-order-modal__post-intervention"><input type="checkbox" checked={createRequiresPostIntervention} onChange={event => {
+                    const required = event.target.checked
+                    setCreateRequiresPostIntervention(required)
+                    if (!required) {
+                      setCreateQualityValidation(false)
+                      setCreateSafetyValidation(false)
+                    }
+                  }} disabled={createOrderBusy} /><span><strong>Exigir liberação pós-intervenção</strong><small>Quando marcada, a OS aguardará as validações das áreas selecionadas após a conclusão técnica.</small></span></label>
+                  {createRequiresPostIntervention ? (
+                    <fieldset className="pcm-post-intervention-areas" disabled={createOrderBusy}>
+                      <legend>Áreas responsáveis pela liberação *</legend>
+                      <label><input type="checkbox" checked={createQualityValidation} onChange={event => {
+                        setCreateQualityValidation(event.target.checked)
+                        setCreateOrderError('')
+                      }} /> Qualidade</label>
+                      <label><input type="checkbox" checked={createSafetyValidation} onChange={event => {
+                        setCreateSafetyValidation(event.target.checked)
+                        setCreateOrderError('')
+                      }} /> Segurança</label>
+                      {createOrderError.includes('Selecione ao menos uma área responsável') ? <p role="alert">Selecione ao menos uma área responsável pela liberação pós-intervenção.</p> : null}
+                    </fieldset>
+                  ) : null}
                 </section>
 
-                {createOrderError ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}
+                {createOrderError && !createOrderError.includes('Selecione ao menos uma área responsável') ? <p className="pcm-order-detail__error" role="alert">{createOrderError}</p> : null}
               </div>
 
               <footer className="pcm-create-order-modal__footer"><button className="pcm-create-order-modal__cancel" type="button" onClick={closeCreateOrder} disabled={createOrderBusy}>Cancelar</button><button className="pcm-create-order-modal__submit" type="button" onClick={() => void createWorkOrder()} disabled={createOrderBusy || createOriginLoading || createPlansLoading || (!selectedCreatePlan && !(createOrderMode === 'WORK_ORDER' && createOriginEntityId && createOriginAssetId) && !(createOrderMode === 'IMPROVEMENT' && createOriginAssetId))}>{createOrderBusy ? 'Criando…' : createOrderMode === 'PREVENTIVE' ? 'Programar preventiva' : 'Criar ordem de serviço'}</button></footer>
