@@ -140,6 +140,9 @@ export interface GestorTechnicalDemand {
   tipo: string
   entidade_tipo: string
   entidade_id: string
+  ordem_codigo?: string | null
+  ativo_tag?: string | null
+  ativo_nome?: string | null
   titulo: string
   descricao?: string
   prioridade: string
@@ -168,6 +171,13 @@ export interface GestorTechnicalDemand {
   sla_resolucao_atrasado?: boolean
   criado_em?: string
   atualizado_em?: string
+  historico?: Array<{
+    acao: string
+    decisao?: string | null
+    motivo?: string | null
+    usuario?: string | null
+    ocorrido_em: string
+  }>
 }
 
 export interface GestorTechnicalReport {

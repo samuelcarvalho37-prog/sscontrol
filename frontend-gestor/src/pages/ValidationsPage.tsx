@@ -524,7 +524,7 @@ export function ValidationsPage({
                 >
                   <div className="validation-card__topline">
                     <span className="status-pill status-pill--blue">
-                      {humanize(demand.entidade_tipo)}
+                      {demand.ordem_codigo || humanize(demand.entidade_tipo)}
                     </span>
                     <span className="priority-chip">
                       {humanize(demand.prioridade)}
@@ -532,7 +532,8 @@ export function ValidationsPage({
                   </div>
                   <h2>{demand.titulo}</h2>
                   <p>
-                    {demand.area_atual_nome || 'Sem área'}
+                    {[demand.ativo_tag, demand.ativo_nome].filter(Boolean).join(' · ') || demand.area_atual_nome || 'Sem área'}
+                    {demand.area_atual_nome && demand.ativo_tag ? ` · ${demand.area_atual_nome}` : ''}
                     {demand.cargo_atual_nome ? ` · ${demand.cargo_atual_nome}` : ''}
                   </p>
                   <div className="manager-next-action">

@@ -533,6 +533,106 @@ export class OperationsRepository {
     );
   }
 
+  async createPostInterventionNotification(
+    client: PoolClient,
+    tenantId: string,
+    demandId: string,
+    workOrder: OperationsRow,
+    roleCodes: readonly string[],
+  ): Promise<void> {
+    const code = nonEmptyText(workOrder.operational_code) ?? nonEmptyText(workOrder.code);
+    if (!code) throw new Error('A OS não possui código para contextualizar a validação.');
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO workflow.notifications
+       (tenant_id,notification_type,title,message,entity_type,entity_id,priority,
+        action_route,action_payload,audience,deduplication_key)
+       VALUES ($1,'POST_INTERVENTION_VALIDATION_REQUESTED',$2,$3,'DEMANDAS_TECNICAS',$4,
+        'HIGH',$5,$6::jsonb,$7::jsonb,$8)
+       ON CONFLICT (tenant_id,deduplication_key)
+       WHERE deduplication_key IS NOT NULL AND status='ACTIVE'
+       DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,
+         action_route=EXCLUDED.action_route,action_payload=EXCLUDED.action_payload
+       RETURNING id`,
+      [
+        tenantId,
+        `Validação pós-intervenção · ${code}`,
+        `A OS ${code} aguarda validação conforme a política de assinatura definida.`,
+        demandId,
+        `/validations?validationDemand=${demandId}`,
+        JSON.stringify({ entityType: 'DEMANDAS_TECNICAS', entityId: demandId }),
+        JSON.stringify({ roleCodes }),
+        `post-intervention-validation:${demandId}`,
+      ],
+    );
+    const notificationId = result.rows[0]?.id;
+    if (!notificationId) throw new Error('A notificação de validação não foi persistida.');
+
+    await client.query(
+      `INSERT INTO workflow.notification_recipients
+       (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+       SELECT DISTINCT $1::uuid,$2::uuid,user_account.id,'DELIVERED',clock_timestamp(),clock_timestamp(),1
+       FROM iam.users user_account
+       JOIN iam.user_roles user_role
+         ON user_role.tenant_id=user_account.tenant_id AND user_role.user_id=user_account.id
+       JOIN iam.roles profile_role
+         ON profile_role.tenant_id=user_role.tenant_id AND profile_role.id=user_role.role_id
+       JOIN iam.user_technical_assignments assignment
+         ON assignment.tenant_id=user_account.tenant_id AND assignment.user_id=user_account.id
+       JOIN iam.technical_areas area
+         ON area.tenant_id=assignment.tenant_id AND area.id=assignment.technical_area_id
+       LEFT JOIN iam.technical_roles technical_role
+         ON technical_role.tenant_id=assignment.tenant_id AND technical_role.id=assignment.technical_role_id
+       WHERE user_account.tenant_id=$1::uuid AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
+         AND profile_role.status='ACTIVE' AND profile_role.deleted_at IS NULL
+         AND profile_role.code=ANY($3::text[])
+         AND area.status='ACTIVE'
+         AND assignment.status='ACTIVE' AND assignment.valid_from<=clock_timestamp()
+         AND (assignment.valid_until IS NULL OR assignment.valid_until>clock_timestamp())
+         AND COALESCE(assignment.can_sign_override,technical_role.can_sign,area.default_signature_required,false)
+         AND ((profile_role.code='QUALIDADE' AND area.code='QUALITY')
+           OR (profile_role.code='SEGURANCA' AND area.code='SAFETY'))
+       ON CONFLICT (tenant_id,notification_id,user_id) DO NOTHING`,
+      [tenantId, notificationId, roleCodes],
+    );
+  }
+
+  async dismissPostInterventionNotifications(
+    client: PoolClient,
+    tenantId: string,
+    demandId: string,
+    userId?: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE workflow.notification_recipients recipient
+       SET read_at=COALESCE(recipient.read_at,clock_timestamp()),
+           dismissed_at=COALESCE(recipient.dismissed_at,clock_timestamp())
+       FROM workflow.notifications notification
+       WHERE notification.tenant_id=recipient.tenant_id
+         AND notification.id=recipient.notification_id
+         AND notification.tenant_id=$1
+         AND notification.notification_type='POST_INTERVENTION_VALIDATION_REQUESTED'
+         AND notification.entity_type='DEMANDAS_TECNICAS'
+         AND notification.entity_id=$2
+         AND ($3::uuid IS NULL OR recipient.user_id=$3)`,
+      [tenantId, demandId, userId ?? null],
+    );
+  }
+
+  async retractPostInterventionNotification(
+    client: PoolClient,
+    tenantId: string,
+    demandId: string,
+  ): Promise<void> {
+    await this.dismissPostInterventionNotifications(client, tenantId, demandId);
+    await client.query(
+      `UPDATE workflow.notifications
+       SET status='RETRACTED'
+       WHERE tenant_id=$1 AND notification_type='POST_INTERVENTION_VALIDATION_REQUESTED'
+         AND entity_type='DEMANDAS_TECNICAS' AND entity_id=$2 AND status='ACTIVE'`,
+      [tenantId, demandId],
+    );
+  }
+
   async createRequirement(
     client: PoolClient,
     tenantId: string,
@@ -751,6 +851,9 @@ export class OperationsRepository {
                  AND demand.completed_at IS NULL
                  AND demand.resolution_due_at < clock_timestamp() AS sla_resolucao_atrasado,
                demand.created_at AS criado_em, demand.updated_at AS atualizado_em,
+               work_order.operational_code AS ordem_codigo,
+               asset.tag AS ativo_tag, asset.name AS ativo_nome,
+               demand_history.items AS historico,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', area.id, 'codigo', area.code, 'nome', area.name,
                  'assinada', requirement.status IN ('FULFILLED','WAIVED'),
@@ -764,6 +867,27 @@ export class OperationsRepository {
         LEFT JOIN iam.technical_areas current_area ON current_area.id = demand.current_area_id
         LEFT JOIN iam.technical_roles technical_role
           ON technical_role.id = demand.current_technical_role_id
+        LEFT JOIN maintenance.work_orders work_order
+          ON work_order.tenant_id = demand.tenant_id
+         AND demand.entity_type = 'WORK_ORDER'
+         AND work_order.id = demand.entity_id
+        LEFT JOIN cmms.assets asset
+          ON asset.tenant_id = work_order.tenant_id AND asset.id = work_order.asset_id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'acao', event.action,
+            'decisao', event.decision,
+            'motivo', event.reason,
+            'usuario', event_user.name,
+            'ocorrido_em', event.created_at
+          ) ORDER BY event.sequence), '[]'::jsonb) AS items
+          FROM workflow.demand_events event
+          LEFT JOIN iam.users event_user
+            ON event_user.tenant_id = event.tenant_id
+           AND event_user.id = event.from_user_id
+          WHERE event.tenant_id = demand.tenant_id
+            AND event.technical_demand_id = demand.id
+        ) demand_history ON true
         LEFT JOIN iam.users responsible ON responsible.id = demand.current_responsible_id
         WHERE ($1 = '' OR demand.title ILIKE '%' || $1 || '%'
                          OR demand.description ILIKE '%' || $1 || '%')
@@ -2167,7 +2291,7 @@ export class OperationsRepository {
              JOIN workflow.technical_demands demand
                ON demand.tenant_id=work_order.tenant_id AND demand.id=work_order.technical_demand_id
              WHERE work_order.id=action.work_order_id
-               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND work_order.technical_analysis->'exige_liberacao_pos_intervencao' = 'true'::jsonb
                AND demand.demand_type='POST_INTERVENTION_RELEASE'
                AND demand.status<>'COMPLETED'
            ) THEN 'PENDING' ELSE 'COMPLETED' END,
@@ -2182,7 +2306,7 @@ export class OperationsRepository {
              FROM workflow.technical_demands demand
              WHERE demand.tenant_id=work_order.tenant_id
                AND demand.id=work_order.technical_demand_id
-               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND work_order.technical_analysis->'exige_liberacao_pos_intervencao' = 'true'::jsonb
                AND demand.demand_type='POST_INTERVENTION_RELEASE'
                AND demand.status<>'COMPLETED'
            ) THEN 'IN_TECHNICAL_REVIEW' ELSE 'COMPLETED' END,
@@ -2191,7 +2315,7 @@ export class OperationsRepository {
              FROM workflow.technical_demands demand
              WHERE demand.tenant_id=work_order.tenant_id
                AND demand.id=work_order.technical_demand_id
-               AND COALESCE(work_order.technical_analysis->>'exige_liberacao_pos_intervencao', 'false')='true'
+               AND work_order.technical_analysis->'exige_liberacao_pos_intervencao' = 'true'::jsonb
                AND demand.demand_type='POST_INTERVENTION_RELEASE'
                AND demand.status<>'COMPLETED'
            ) THEN completed_at ELSE COALESCE(completed_at, clock_timestamp()) END,

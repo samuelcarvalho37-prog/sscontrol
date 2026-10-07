@@ -250,7 +250,9 @@ export async function prepareWorkspace(
 
 async function prepareCapabilityWorkspace(capabilities: string[], signal: AbortSignal): Promise<number> {
   const tasks: StartupTask[] = []
-  if (capabilities.includes('maintenance.work-orders.read')) tasks.push(() => getGestorTechnicalContext(signal), () => getGestorTechnicalDemands(signal))
+  if (capabilities.includes('maintenance.work-orders.read') || capabilities.includes('maintenance.work-orders.review')) {
+    tasks.push(() => getGestorTechnicalContext(signal), () => getGestorTechnicalDemands(signal))
+  }
   if (capabilities.includes('workflow.notifications.read')) tasks.push(() => getUnreadNotificationCount(signal))
   if (capabilities.includes('admin.identity.read')) tasks.push(() => listAdminUsers({}, signal), () => getAdminPermissionMatrix(signal))
   await Promise.all(tasks.map((task) => task()))

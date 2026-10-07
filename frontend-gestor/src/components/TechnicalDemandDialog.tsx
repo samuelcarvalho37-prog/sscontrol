@@ -58,6 +58,18 @@ function policyLabel(value?: string): string {
   return labels[upper(value)] || 'Filtro técnico'
 }
 
+function pendingValidatorLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    QUALIDADE: 'Qualidade validará esta liberação.',
+    SEGURANCA: 'Segurança validará esta liberação.',
+    QUALIDADE_OU_SEGURANCA:
+      'Qualidade ou Segurança poderá validar esta liberação.',
+    QUALIDADE_E_SEGURANCA:
+      'Qualidade e Segurança precisarão validar esta liberação.',
+  }
+  return labels[upper(value)] || 'As áreas validadoras configuradas validarão esta liberação.'
+}
+
 export function TechnicalDemandDialog({
   demand,
   context,
@@ -223,7 +235,11 @@ export function TechnicalDemandDialog({
               VALIDAÇÃO TÉCNICA · {context.identidade.area_nome}
             </span>
             <h2 id="validation-gate-title">{demand.titulo}</h2>
-            <p>{humanize(demand.entidade_tipo)} · {demand.entidade_id}</p>
+            <p>
+              {demand.ordem_codigo || `${humanize(demand.entidade_tipo)} · ${demand.entidade_id}`}
+              {demand.ativo_tag ? ` · ${demand.ativo_tag}` : ''}
+              {demand.ativo_nome ? ` · ${demand.ativo_nome}` : ''}
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar">×</button>
         </header>
@@ -271,10 +287,35 @@ export function TechnicalDemandDialog({
             </div>
           </section>
 
+          {isPostInterventionRelease ? (
+            <section className="validation-gate-progress" aria-label="Histórico da validação pós-intervenção">
+              <header>
+                <strong>Histórico da validação</strong>
+                <span>{humanize(demand.status)}</span>
+              </header>
+              <div>
+                {(demand.historico ?? []).map((event, index) => (
+                  <article key={`${event.acao}-${event.ocorrido_em}-${index}`}>
+                    <span>
+                      <strong>{humanize(event.acao)}{event.decisao ? ` · ${humanize(event.decisao)}` : ''}</strong>
+                      <small>
+                        {event.usuario || 'Usuário do fluxo'} · {new Date(event.ocorrido_em).toLocaleString('pt-BR')}
+                        {event.motivo ? ` · ${event.motivo}` : ''}
+                      </small>
+                    </span>
+                  </article>
+                ))}
+                {!demand.historico?.length ? (
+                  <article><span><small>Não há eventos anteriores registrados.</small></span></article>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
           {awaitingPostInterventionExecution ? (
             <div className="feedback feedback--info" role="status">
               Aguardando a conclusão técnica da OS. Após o técnico concluir checklist,
-              evidências e relatório, Qualidade e Segurança poderão assinar esta liberação.
+              evidências e relatório, {pendingValidatorLabel(demand.politica_assinatura)}
             </div>
           ) : null}
 

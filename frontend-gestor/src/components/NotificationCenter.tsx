@@ -7,6 +7,10 @@ import {
   markGestorNotificationRead,
 } from "../services/api/gestor";
 import type { GestorNotification, GestorOverview } from "../types/gestor";
+import {
+  isNotificationActionableForProfile,
+  isOperationalOccurrenceNotification,
+} from "./notificationPolicy";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { usesNodeApi } from "../services/api/config";
 import {
@@ -24,6 +28,7 @@ type NotificationCategory = "all" | "technical" | "operation" | "system";
 interface NotificationCenterProps {
   open: boolean;
   audience?: NotificationAudience;
+  profile?: string;
   onClose: () => void;
   onOpenNotification: (
     notification: GestorNotification,
@@ -37,6 +42,7 @@ interface NotificationMetadata {
   typeLabel: string;
   actionLabel: string;
   entityLabel: string;
+  actionable: boolean;
 }
 
 function upper(value: unknown): string {
@@ -84,22 +90,35 @@ function isUnread(notification: GestorNotification): boolean {
   return upper(notification.status) === "NAO_LIDA";
 }
 
+function isUnreadForProfile(notification: GestorNotification, profile: string): boolean {
+  return isUnread(notification) && isNotificationActionableForProfile(notification, profile);
+}
+
 function isCritical(notification: GestorNotification): boolean {
   return ["CRITICAL", "HIGH", "CRITICA", "CRÍTICA", "ALTA"].includes(
     upper(notification.prioridade),
   );
 }
 
-function metadataOf(notification: GestorNotification): NotificationMetadata {
+function metadataOf(notification: GestorNotification, profile = ""): NotificationMetadata {
   const type = upper(notification.tipo);
   const entity = upper(notification.entidade_tipo);
+  const actionable = isNotificationActionableForProfile(notification, profile);
+  const actionLabel = (fallback: string) => {
+    if (!actionable) return "Histórico · sem ação";
+    if (type === "POST_INTERVENTION_VALIDATION_REQUESTED" || entity === "DEMANDAS_TECNICAS") {
+      return "Analisar validação";
+    }
+    return fallback;
+  };
 
   if (type === "PARADA_TECNICA" || entity === "PARADAS_EQUIPAMENTO") {
     return {
       category: "operation",
       typeLabel: "Parada técnica",
-      actionLabel: "Tratar parada",
+      actionLabel: actionLabel("Tratar parada"),
       entityLabel: "Equipamento indisponível",
+      actionable,
     };
   }
 
@@ -107,8 +126,9 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
     return {
       category: "technical",
       typeLabel: "Checklist solicitado",
-      actionLabel: "Compor checklist",
+      actionLabel: actionLabel("Compor checklist"),
       entityLabel: "Solicitação do Gestor",
+      actionable,
     };
   }
 
@@ -116,8 +136,9 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
     return {
       category: "technical",
       typeLabel: "Inspeção solicitada",
-      actionLabel: "Planejar intervenção",
+      actionLabel: actionLabel("Planejar intervenção"),
       entityLabel: "Leitura técnica",
+      actionable,
     };
   }
 
@@ -125,8 +146,9 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
     return {
       category: "technical",
       typeLabel: "Análise técnica",
-      actionLabel: "Abrir análise",
+      actionLabel: actionLabel("Abrir análise"),
       entityLabel: "Ocorrência analisada",
+      actionable,
     };
   }
 
@@ -140,8 +162,9 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
       category: "technical",
       typeLabel:
         type === "DEMANDA_ENCAMINHADA" ? "Encaminhamento" : "Decisão técnica",
-      actionLabel: "Abrir solicitação",
+      actionLabel: actionLabel(type === "DEMANDA_ENCAMINHADA" ? "Abrir encaminhamento" : "Abrir solicitação"),
       entityLabel: "Fluxo técnico",
+      actionable,
     };
   }
 
@@ -155,12 +178,10 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
       category: "operation",
       typeLabel:
         entity === "OCORRENCIAS_OPERACIONAIS" ? "Ocorrência" : "Operação",
-      actionLabel:
-        entity === "OCORRENCIAS_OPERACIONAIS"
-          ? "Analisar ocorrência"
-          : "Abrir operação",
+      actionLabel: isOperationalOccurrenceNotification(notification) ? actionLabel("Analisar ocorrência") : actionLabel("Abrir operação"),
       entityLabel:
         entity === "OCORRENCIAS_OPERACIONAIS" ? "Chão de fábrica" : "Execução",
+      actionable,
     };
   }
 
@@ -168,8 +189,9 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
     return {
       category: "technical",
       typeLabel: "Checklist para validar",
-      actionLabel: "Validar checklist",
+      actionLabel: actionLabel("Validar checklist"),
       entityLabel: "Filtro técnico",
+      actionable,
     };
   }
 
@@ -178,16 +200,18 @@ function metadataOf(notification: GestorNotification): NotificationMetadata {
       category: "operation",
       typeLabel:
         entity === "ATIVOS" ? "Ativo monitorado" : "Modelo operacional",
-      actionLabel: entity === "ATIVOS" ? "Acompanhar ativo" : "Abrir modelo",
+      actionLabel: actionLabel(entity === "ATIVOS" ? "Acompanhar ativo" : "Abrir modelo"),
       entityLabel: entity === "ATIVOS" ? "Ativo" : "Planejamento",
+      actionable,
     };
   }
 
   return {
     category: "system",
     typeLabel: "Aviso do sistema",
-    actionLabel: "Ver contexto",
+    actionLabel: actionLabel("Ver contexto"),
     entityLabel: "Governança",
+    actionable,
   };
 }
 
@@ -254,6 +278,7 @@ function operationalNotifications(
 export function NotificationCenter({
   open,
   audience = "manager",
+  profile = "",
   onClose,
   onOpenNotification,
   onUnreadChange,
@@ -282,7 +307,9 @@ export function NotificationCenter({
           setNotifications([
             ...operationalNotifications(overview, data),
             ...data,
-          ]);
+          ].filter((item) => !(
+            profile && !isNotificationActionableForProfile(item, profile) && item.id.startsWith("virtual-")
+          )));
         }
       } catch (cause) {
         if (signal?.aborted) return;
@@ -301,7 +328,7 @@ export function NotificationCenter({
         }
       }
     },
-    [onSessionExpired],
+    [onSessionExpired, profile],
   );
 
   useEffect(() => {
@@ -318,13 +345,13 @@ export function NotificationCenter({
 
   const summary = useMemo(
     () => ({
-      unread: notifications.filter(isUnread).length,
+      unread: notifications.filter((item) => isUnreadForProfile(item, profile)).length,
       critical: notifications.filter(
-        (item) => isUnread(item) && isCritical(item),
+        (item) => isUnreadForProfile(item, profile) && isCritical(item),
       ).length,
       today: notifications.filter((item) => isToday(item.criado_em)).length,
     }),
-    [notifications],
+    [notifications, profile],
   );
 
   useEffect(() => {
@@ -335,8 +362,8 @@ export function NotificationCenter({
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
 
     return notifications.filter((item) => {
-      const metadata = metadataOf(item);
-      if (scope === "unread" && !isUnread(item)) return false;
+      const metadata = metadataOf(item, profile);
+      if (scope === "unread" && !isUnreadForProfile(item, profile)) return false;
       if (scope === "today" && !isToday(item.criado_em)) return false;
       if (scope === "critical" && !isCritical(item)) return false;
       if (category !== "all" && metadata.category !== category) return false;
@@ -355,7 +382,7 @@ export function NotificationCenter({
           .includes(normalizedQuery),
       );
     });
-  }, [category, notifications, query, scope]);
+  }, [category, notifications, profile, query, scope]);
 
   const grouped = useMemo(
     () => ({
@@ -376,7 +403,7 @@ export function NotificationCenter({
   }
 
   async function openNotification(notification: GestorNotification) {
-    if (openingId) return;
+    if (openingId || !isNotificationActionableForProfile(notification, profile)) return;
     setOpeningId(notification.id);
     setError("");
     try {
@@ -391,7 +418,7 @@ export function NotificationCenter({
           entidade_id: treatment.occurrence.id,
         };
       }
-      if (isUnread(notification)) {
+      if (isUnreadForProfile(notification, profile)) {
         await markGestorNotificationRead(destination);
         updateNotificationAsRead(notification.id);
       }
@@ -413,7 +440,7 @@ export function NotificationCenter({
   }
 
   async function markAllAsRead() {
-    const pending = notifications.filter(isUnread);
+    const pending = notifications.filter((item) => isUnreadForProfile(item, profile));
     if (!pending.length || markingAll) return;
 
     setMarkingAll(true);
@@ -425,7 +452,7 @@ export function NotificationCenter({
       const readAt = new Date().toISOString();
       setNotifications((current) =>
         current.map((item) =>
-          isUnread(item) ? { ...item, status: "LIDA", lida_em: readAt } : item,
+          isUnreadForProfile(item, profile) ? { ...item, status: "LIDA", lida_em: readAt } : item,
         ),
       );
       setScope("all");
@@ -599,6 +626,7 @@ export function NotificationCenter({
               items={grouped.today}
               onOpen={(item) => void openNotification(item)}
               openingId={openingId}
+              profile={profile}
             />
           ) : null}
           {grouped.previous.length > 0 ? (
@@ -607,6 +635,7 @@ export function NotificationCenter({
               items={grouped.previous}
               onOpen={(item) => void openNotification(item)}
               openingId={openingId}
+              profile={profile}
             />
           ) : null}
         </div>
@@ -640,11 +669,13 @@ function NotificationGroup({
   items,
   onOpen,
   openingId,
+  profile,
 }: {
   title: string;
   items: GestorNotification[];
   onOpen: (notification: GestorNotification) => void;
   openingId: string;
+  profile: string;
 }) {
   return (
     <section className="manager-notification-group">
@@ -654,16 +685,16 @@ function NotificationGroup({
       </header>
       <div>
         {items.map((item) => {
-          const unread = isUnread(item);
+          const unread = isUnreadForProfile(item, profile);
           const critical = isCritical(item);
-          const metadata = metadataOf(item);
+          const metadata = metadataOf(item, profile);
 
           return (
             <button
               className={`${unread ? "is-unread" : ""}${critical ? " is-critical" : ""}`}
               type="button"
               key={item.id}
-              disabled={openingId === item.id}
+              disabled={openingId === item.id || !metadata.actionable}
               onClick={() => onOpen(item)}
             >
               <span className={critical ? "is-critical" : ""}>

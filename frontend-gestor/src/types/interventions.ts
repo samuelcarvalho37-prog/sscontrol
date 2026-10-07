@@ -8,6 +8,7 @@ export interface AdminTechnicalDemandSummary extends AdminEntityRecord {
   cargo_atual_id?: string
   cargo_atual_nome?: string
   exige_assinatura?: string
+  politica_assinatura?: string
   assinaturas_necessarias?: number | string
   assinaturas_realizadas?: number | string
 }

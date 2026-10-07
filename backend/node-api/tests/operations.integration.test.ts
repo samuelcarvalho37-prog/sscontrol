@@ -23,6 +23,7 @@ const ids = {
   supportSecond: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
+  safetyRole: randomUUID(),
   operatorRole: randomUUID(),
   productionRole: randomUUID(),
   qualityArea: randomUUID(),
@@ -116,6 +117,28 @@ interface TechnicalReportListResponse {
       readonly assinatura_referencia: string;
       readonly hash: string;
       readonly status: 'ASSINADO';
+    }[];
+  };
+}
+
+interface TechnicalDemandListResponse {
+  readonly data: {
+    readonly demandas: readonly {
+      readonly id: string;
+      readonly ordem_codigo: string;
+      readonly ativo_tag: string;
+      readonly ativo_nome: string;
+      readonly historico: readonly { readonly acao: string }[];
+    }[];
+  };
+}
+
+interface NotificationListResponse {
+  readonly data: {
+    readonly itens: readonly {
+      readonly id: string;
+      readonly tipo: string;
+      readonly entidade_id: string;
     }[];
   };
 }
@@ -216,10 +239,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
-      ($1,$4,'OPS_ADMIN','Administrador','Administra o fluxo.','ADMIN',true),
-      ($2,$4,'OPS_VALIDATOR','Validador','Valida o fluxo.','MANAGER',true),
-      ($3,$4,'TECNICO','Operador','Executa o fluxo.','OPERATOR',true)`,
-      [ids.adminRole, ids.validatorRole, ids.operatorRole, tenantId],
+      ($1,$5,'OPS_ADMIN','Administrador','Administra o fluxo.','ADMIN',true),
+      ($2,$5,'QUALIDADE','Qualidade','Valida requisitos de qualidade.','MANAGER',true),
+      ($3,$5,'SEGURANCA','Segurança','Valida requisitos de segurança.','MANAGER',true),
+      ($4,$5,'TECNICO','Operador','Executa o fluxo.','OPERATOR',true)`,
+      [ids.adminRole, ids.validatorRole, ids.safetyRole, ids.operatorRole, tenantId],
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected)
@@ -243,7 +267,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
-      ($1,$2,$8),($1,$3,$9),($1,$4,$9),($1,$5,$10),($1,$6,$10),($1,$7,$10)`,
+      ($1,$2,$8),($1,$3,$9),($1,$4,$10),($1,$5,$11),($1,$6,$11),($1,$7,$11)`,
       [
         tenantId,
         ids.admin,
@@ -254,6 +278,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
         ids.supportSecond,
         ids.adminRole,
         ids.validatorRole,
+        ids.safetyRole,
         ids.operatorRole,
       ],
     );
@@ -283,14 +308,17 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     );
     await client.query(
       `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
-      SELECT $1,$2,id,'ALLOW' FROM iam.capabilities WHERE code=ANY($3::text[])`,
+      SELECT $1,roles.role_id,id,'ALLOW'
+      FROM iam.capabilities
+      CROSS JOIN unnest($2::uuid[]) AS roles(role_id)
+      WHERE code=ANY($3::text[])`,
       [
         tenantId,
-        ids.validatorRole,
+        [ids.validatorRole, ids.safetyRole],
         [
-          'maintenance.work-orders.read',
           'maintenance.work-orders.review',
           'maintenance.executions.read',
+          'workflow.notifications.read',
         ],
       ],
     );
@@ -501,10 +529,29 @@ test(
       await client.query(
         `INSERT INTO workflow.notification_recipients
          (tenant_id,notification_id,user_id,delivery_status,delivered_at)
-         VALUES ($1,$2,$3,'DELIVERED',clock_timestamp())`,
-        [tenantId, occurrenceNotificationId, ids.admin],
+         VALUES ($1,$2,$3,'DELIVERED',clock_timestamp()),
+                ($1,$2,$4,'DELIVERED',clock_timestamp()),
+                ($1,$2,$5,'DELIVERED',clock_timestamp())`,
+        [tenantId, occurrenceNotificationId, ids.admin, ids.quality, ids.safety],
       );
     });
+
+    for (const identity of [identities.quality, identities.safety]) {
+      const legacyOccurrenceInbox = await app.inject({
+        method: 'GET',
+        url: '/v1/notifications?somente_nao_lidas=true',
+        headers: bearer(identity),
+      });
+      assert.equal(legacyOccurrenceInbox.statusCode, 200, legacyOccurrenceInbox.body);
+      assert.equal(
+        legacyOccurrenceInbox.json<NotificationListResponse>().data.itens.some((item) => item.id === occurrenceNotificationId),
+        false,
+      );
+    }
+    const preservedHistoricalNotification = await transaction(pool, async (client) =>
+      client.query(`SELECT status FROM workflow.notifications WHERE id=$1`, [occurrenceNotificationId]),
+    );
+    assert.equal(preservedHistoricalNotification.rows[0]?.status, 'ACTIVE');
 
     await transaction(pool, async (client) => {
       await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [randomUUID()]);
@@ -760,8 +807,67 @@ test(
         },
       },
     });
+
+    const productionOccurrence = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/occurrences',
+      headers: bearer(identities.production),
+      payload: {
+        ativo_id: ids.asset,
+        componente_id: null,
+        tipo: 'FALHA_OPERACIONAL',
+        titulo: 'Ocorrência comum sem validação de Qualidade ou Segurança',
+        descricao: 'O PCM deve receber esta ocorrência para triagem.',
+        severidade: 'HIGH',
+        equipamento_parado: false,
+        tipo_parada: null,
+        motivo_parada: null,
+        ocorrida_em: new Date().toISOString(),
+      },
+    });
+    assert.equal(productionOccurrence.statusCode, 200, productionOccurrence.body);
+    const productionOccurrenceId: string = productionOccurrence.json().data.id;
+    for (const identity of [identities.quality, identities.safety]) {
+      const inbox = await app.inject({
+        method: 'GET',
+        url: '/v1/notifications?somente_nao_lidas=true',
+        headers: bearer(identity),
+      });
+      assert.equal(inbox.statusCode, 200, inbox.body);
+      assert.equal(
+        inbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === productionOccurrenceId),
+        false,
+      );
+    }
     assert.equal(created.statusCode, 200, created.body);
     const workOrderId: string = created.json().data.id;
+
+    const missingPostInterventionPolicy = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${workOrderId}/submit-review`,
+      headers: bearer(identities.admin),
+      payload: {
+        assinaturas_exigidas: 1,
+        primeira_resposta_ate: null,
+        resolucao_ate: null,
+      },
+    });
+    assert.equal(missingPostInterventionPolicy.statusCode, 400, missingPostInterventionPolicy.body);
+
+    for (const unauthorizedIdentity of [identities.operator, identities.production]) {
+      const unauthorizedConfiguration = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${workOrderId}/submit-review`,
+        headers: bearer(unauthorizedIdentity),
+        payload: {
+          politica_assinatura: 'QUALIDADE',
+          assinaturas_exigidas: 1,
+          primeira_resposta_ate: null,
+          resolucao_ate: null,
+        },
+      });
+      assert.equal(unauthorizedConfiguration.statusCode, 403, unauthorizedConfiguration.body);
+    }
 
     const submitted = await app.inject({
       method: 'POST',
@@ -776,6 +882,19 @@ test(
     });
     assert.equal(submitted.statusCode, 200, submitted.body);
     const demandId: string = submitted.json().data.validacao.id;
+    for (const identity of [identities.quality, identities.safety]) {
+      const inbox = await app.inject({
+        method: 'GET',
+        url: '/v1/notifications?somente_nao_lidas=true',
+        headers: bearer(identity),
+      });
+      assert.equal(inbox.statusCode, 200, inbox.body);
+      assert.equal(
+        inbox.json<NotificationListResponse>().data.itens.some((item) =>
+          item.tipo === 'POST_INTERVENTION_VALIDATION_REQUESTED' && item.entidade_id === demandId),
+        true,
+      );
+    }
     await transaction(pool, async (client) => {
       const postIntervention = await client.query(
         `SELECT demand_type, status FROM workflow.technical_demands WHERE id=$1`,
@@ -805,6 +924,158 @@ test(
     });
     assert.equal(technicalQueue.statusCode, 200, technicalQueue.body);
     assert.match(technicalQueue.body, new RegExp(demandId));
+    const listedPostIntervention = technicalQueue.json<TechnicalDemandListResponse>().data.demandas.find(
+      (item) => item.id === demandId,
+    );
+    assert.ok(listedPostIntervention);
+    assert.equal(listedPostIntervention.ordem_codigo, created.json().data.codigo);
+    assert.equal(listedPostIntervention.ativo_tag, 'EQ-OPS-001');
+    assert.equal(listedPostIntervention.ativo_nome, 'Prensa de teste');
+    const lastDemandEvent = listedPostIntervention.historico.at(-1);
+    assert.ok(lastDemandEvent);
+    assert.equal(lastDemandEvent.acao, 'SUBMITTED');
+    const generalWorkOrders = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.quality),
+    });
+    assert.equal(generalWorkOrders.statusCode, 403, generalWorkOrders.body);
+    const hiddenPostInterventionDemand = await transaction(pool, async (client) => {
+      await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [randomUUID()]);
+      const hidden = await client.query(
+        `SELECT id FROM workflow.technical_demands WHERE id=$1`,
+        [demandId],
+      );
+      return hidden.rowCount;
+    });
+    assert.equal(hiddenPostInterventionDemand, 0);
+    const productionSignature = await app.inject({
+      method: 'POST',
+      url: `/v1/workflow/technical-demands/${demandId}/sign`,
+      headers: bearer(identities.production),
+      payload: {
+        declaracao: 'Tentativa não autorizada de validação.',
+        significado: 'Tentativa',
+      },
+    });
+    assert.equal(productionSignature.statusCode, 403, productionSignature.body);
+
+    const qualityOnlyWorkOrder = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion,
+        tipo_origem: 'ADMIN',
+        entidade_origem_id: null,
+        tipo_trabalho: 'PREVENTIVE',
+        modo_execucao: 'INTERNAL',
+        titulo: 'Validação excepcional somente Qualidade',
+        descricao: 'Somente a área selecionada deve ser necessária.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: new Date(Date.now() + 86400000).toISOString(),
+        analise_tecnica: { exige_liberacao_pos_intervencao: true },
+      },
+    });
+    assert.equal(qualityOnlyWorkOrder.statusCode, 200, qualityOnlyWorkOrder.body);
+    await transaction(pool, async (client) => {
+      await client.query(`UPDATE iam.technical_areas SET status='INACTIVE' WHERE id=$1`, [ids.safetyArea]);
+    });
+    const qualityOnlySubmitted = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${qualityOnlyWorkOrder.json().data.id}/submit-review`,
+      headers: bearer(identities.admin),
+      payload: {
+        politica_assinatura: 'QUALIDADE',
+        assinaturas_exigidas: 1,
+        primeira_resposta_ate: null,
+        resolucao_ate: null,
+      },
+    });
+    assert.equal(qualityOnlySubmitted.statusCode, 200, qualityOnlySubmitted.body);
+    const qualityOnlyDemandId: string = qualityOnlySubmitted.json().data.validacao.id;
+    const qualityOnlyInbox = await app.inject({
+      method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(identities.quality),
+    });
+    const safetyQualityOnlyInbox = await app.inject({
+      method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(identities.safety),
+    });
+    assert.equal(qualityOnlyInbox.statusCode, 200, qualityOnlyInbox.body);
+    assert.equal(safetyQualityOnlyInbox.statusCode, 200, safetyQualityOnlyInbox.body);
+    assert.equal(qualityOnlyInbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === qualityOnlyDemandId), true);
+    assert.equal(safetyQualityOnlyInbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === qualityOnlyDemandId), false);
+    await transaction(pool, async (client) => {
+      const requirements = await client.query<{ readonly code: string }>(
+        `SELECT area.code FROM workflow.demand_validator_requirements requirement
+         JOIN iam.technical_areas area ON area.id=requirement.technical_area_id
+         WHERE requirement.technical_demand_id=$1 AND requirement.status='PENDING'`,
+        [qualityOnlyDemandId],
+      );
+      assert.deepEqual(requirements.rows.map((row) => row.code), ['QUALITY']);
+      await client.query(`UPDATE iam.technical_areas SET status='ACTIVE' WHERE id=$1`, [ids.safetyArea]);
+      await client.query(`UPDATE iam.technical_areas SET status='INACTIVE' WHERE id=$1`, [ids.qualityArea]);
+    });
+
+    const safetyOnlyWorkOrder = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion,
+        tipo_origem: 'ADMIN',
+        entidade_origem_id: null,
+        tipo_trabalho: 'PREVENTIVE',
+        modo_execucao: 'INTERNAL',
+        titulo: 'Validação excepcional somente Segurança',
+        descricao: 'Somente a área selecionada deve ser necessária.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: new Date(Date.now() + 86400000).toISOString(),
+        analise_tecnica: { exige_liberacao_pos_intervencao: true },
+      },
+    });
+    assert.equal(safetyOnlyWorkOrder.statusCode, 200, safetyOnlyWorkOrder.body);
+    const safetyOnlySubmitted = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${safetyOnlyWorkOrder.json().data.id}/submit-review`,
+      headers: bearer(identities.admin),
+      payload: {
+        politica_assinatura: 'SEGURANCA',
+        assinaturas_exigidas: 1,
+        primeira_resposta_ate: null,
+        resolucao_ate: null,
+      },
+    });
+    assert.equal(safetyOnlySubmitted.statusCode, 200, safetyOnlySubmitted.body);
+    const safetyOnlyDemandId: string = safetyOnlySubmitted.json().data.validacao.id;
+    const safetyOnlyInbox = await app.inject({
+      method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(identities.safety),
+    });
+    const qualitySafetyOnlyInbox = await app.inject({
+      method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(identities.quality),
+    });
+    assert.equal(safetyOnlyInbox.statusCode, 200, safetyOnlyInbox.body);
+    assert.equal(qualitySafetyOnlyInbox.statusCode, 200, qualitySafetyOnlyInbox.body);
+    assert.equal(safetyOnlyInbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === safetyOnlyDemandId), true);
+    assert.equal(qualitySafetyOnlyInbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === safetyOnlyDemandId), false);
+    await transaction(pool, async (client) => {
+      const requirements = await client.query<{ readonly code: string }>(
+        `SELECT area.code FROM workflow.demand_validator_requirements requirement
+         JOIN iam.technical_areas area ON area.id=requirement.technical_area_id
+         WHERE requirement.technical_demand_id=$1 AND requirement.status='PENDING'`,
+        [safetyOnlyDemandId],
+      );
+      assert.deepEqual(requirements.rows.map((row) => row.code), ['SAFETY']);
+      await client.query(`UPDATE iam.technical_areas SET status='ACTIVE' WHERE id=$1`, [ids.qualityArea]);
+      await client.query(
+        `UPDATE maintenance.work_orders SET status='CANCELLED' WHERE id=ANY($1::uuid[])`,
+        [[
+          qualityOnlyWorkOrder.json().data.id,
+          safetyOnlyWorkOrder.json().data.id,
+        ]],
+      );
+    });
 
     const assumedDemand = await app.inject({
       method: 'POST',
@@ -1221,6 +1492,19 @@ test(
         'Assinar a liberação não deve gerar outra ação',
       );
     }
+    for (const identity of [identities.quality, identities.safety]) {
+      const resolvedDemandInbox = await app.inject({
+        method: 'GET',
+        url: '/v1/notifications?somente_nao_lidas=true',
+        headers: bearer(identity),
+      });
+      assert.equal(resolvedDemandInbox.statusCode, 200, resolvedDemandInbox.body);
+      assert.equal(
+        resolvedDemandInbox.json<NotificationListResponse>().data.itens.some((item) => item.entidade_id === demandId),
+        false,
+        'Demanda pós-intervenção concluída não deve reaparecer como pendência.',
+      );
+    }
 
     const qualityReports = await app.inject({
       method: 'GET',
@@ -1441,7 +1725,7 @@ test(
     assert.equal(normalStarted.statusCode, 200, normalStarted.body);
     assert.equal(normalStarted.json().data.execucao.operador_id, ids.operator);
     const normalExecutionId: string = normalStarted.json().data.execucao.id;
-    const productionOccurrence = await app.inject({
+    const productionOccurrenceForAuthorization = await app.inject({
       method: 'POST', url: '/v1/maintenance/occurrences', headers: bearer(identities.production),
       payload: {
         ativo_id: ids.asset, componente_id: null, tipo: 'FALHA_OPERACIONAL',
@@ -1451,7 +1735,7 @@ test(
         motivo_parada: null, ocorrida_em: null,
       },
     });
-    assert.equal(productionOccurrence.statusCode, 200, productionOccurrence.body);
+    assert.equal(productionOccurrenceForAuthorization.statusCode, 200, productionOccurrenceForAuthorization.body);
     const productionStart = await app.inject({
       method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`,
       headers: bearer(identities.production), payload: { modo_parada: 'NO_STOP' },
@@ -1914,5 +2198,156 @@ test(
       assert.equal(secondRetryNumber.rows[0]?.operational_number, firstRetryNumber.rows[0]?.operational_number);
       assert.equal(counterAfterSecondRetry.rows[0]?.next_number, counterAfterFirstRetry.rows[0]?.next_number);
     });
+
+    const completeSingleAreaPostIntervention = async (
+      policy: 'QUALIDADE' | 'SEGURANCA',
+      signerToken: string,
+      title: string,
+    ) => {
+      const workOrderResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/maintenance/work-orders',
+        headers: bearer(identities.admin),
+        payload: {
+          plano_versao_id: ids.planVersion,
+          tipo_origem: 'ADMIN',
+          entidade_origem_id: null,
+          tipo_trabalho: 'PREVENTIVE',
+          modo_execucao: 'INTERNAL',
+          titulo: title,
+          descricao: 'Validação excepcional com somente uma área obrigatória.',
+          prioridade: 'MEDIUM',
+          responsavel_id: null,
+          programada_para: new Date(Date.now() + 86400000).toISOString(),
+          analise_tecnica: { exige_liberacao_pos_intervencao: true },
+        },
+      });
+      assert.equal(workOrderResponse.statusCode, 200, workOrderResponse.body);
+      const workOrderId: string = workOrderResponse.json().data.id;
+      const submitted = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${workOrderId}/submit-review`,
+        headers: bearer(identities.admin),
+        payload: {
+          politica_assinatura: policy,
+          assinaturas_exigidas: 1,
+          primeira_resposta_ate: null,
+          resolucao_ate: null,
+        },
+      });
+      assert.equal(submitted.statusCode, 200, submitted.body);
+      const demandId: string = submitted.json().data.validacao.id;
+      const released = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/work-orders/${workOrderId}/release`,
+        headers: bearer(identities.admin),
+      });
+      assert.equal(released.statusCode, 200, released.body);
+
+      const actionQueue = await app.inject({
+        method: 'GET',
+        url: '/v1/maintenance/operator-actions',
+        headers: bearer(identities.operator),
+      });
+      assert.equal(actionQueue.statusCode, 200, actionQueue.body);
+      const action = actionQueue.json<OperatorActionQueueResponse>().data.itens.find(
+        (item) => item.ordem_id === workOrderId,
+      );
+      assert.ok(action);
+      const assumedExecution = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/operator-actions/${action.id}/assume`,
+        headers: bearer(identities.operator),
+      });
+      assert.equal(assumedExecution.statusCode, 200, assumedExecution.body);
+      const executionId: string = assumedExecution.json().data.id;
+      const startedExecution = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/executions/${executionId}/start`,
+        headers: bearer(identities.operator),
+        payload: { modo_parada: 'STOPPED' },
+      });
+      assert.equal(startedExecution.statusCode, 200, startedExecution.body);
+      const items: readonly { readonly id: string; readonly tipo_resposta: string }[] =
+        startedExecution.json().data.itens;
+      const confirmation = items.find((item) => item.tipo_resposta === 'CONFIRMACAO');
+      const inspection = items.find((item) => item.tipo_resposta === 'OK_NOK');
+      const parameter = items.find((item) => item.tipo_resposta === 'PARAMETRO');
+      const evidence = items.find((item) => item.tipo_resposta === 'EVIDENCIA');
+      assert.ok(confirmation && inspection && parameter && evidence);
+      const responses = await app.inject({
+        method: 'PUT',
+        url: `/v1/maintenance/operator-actions/${action.id}/responses`,
+        headers: bearer(identities.operator),
+        payload: {
+          itens: [
+            { item_id: confirmation.id, resposta: 'SIM', valor: null, observacao: null },
+            { item_id: inspection.id, resposta: 'OK', valor: null, observacao: 'Sem anormalidades.' },
+            { item_id: parameter.id, resposta: null, valor: 160, observacao: 'Dentro da faixa.' },
+          ],
+        },
+      });
+      assert.equal(responses.statusCode, 200, responses.body);
+      const savedEvidence = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/executions/${executionId}/items/${evidence.id}/evidence`,
+        headers: bearer(identities.operator),
+        payload: {
+          objeto_armazenamento_id: ids.storageObject,
+          tipo: 'PHOTO',
+          observacao: 'Condição final inspecionada.',
+          capturada_em: null,
+        },
+      });
+      assert.equal(savedEvidence.statusCode, 200, savedEvidence.body);
+      const completion = await app.inject({
+        method: 'POST',
+        url: `/v1/maintenance/operator-actions/${action.id}/complete`,
+        headers: bearer(identities.operator),
+        payload: {
+          resultado: 'Intervenção concluída e equipamento liberado tecnicamente.',
+          observacao: null,
+          relatorio_tecnico: {
+            diagnostico_tecnico: 'Inspeção concluída.',
+            acao_realizada: 'Intervenção executada conforme checklist.',
+            pecas_materiais: 'Nenhum material utilizado.',
+            medicoes: 'Parâmetros dentro da faixa.',
+          },
+          modo_parada: 'STOPPED',
+        },
+      });
+      assert.equal(completion.statusCode, 200, completion.body);
+      assert.equal(completion.json().data.execucao.status, 'COMPLETED');
+      const awaitingSignature = await app.inject({
+        method: 'GET',
+        url: `/v1/maintenance/work-orders/${workOrderId}`,
+        headers: bearer(identities.admin),
+      });
+      assert.equal(awaitingSignature.statusCode, 200, awaitingSignature.body);
+      assert.equal(awaitingSignature.json().data.status, 'IN_TECHNICAL_REVIEW');
+      assert.equal(awaitingSignature.json().data.validacao.id, demandId);
+      const signed = await app.inject({
+        method: 'POST',
+        url: `/v1/workflow/technical-demands/${demandId}/sign`,
+        headers: bearer(signerToken),
+        payload: {
+          declaracao: `Validação final da área ${policy}.`,
+          significado: `Liberação pós-intervenção — ${policy}.`,
+        },
+      });
+      assert.equal(signed.statusCode, 200, signed.body);
+      assert.equal(signed.json().data.status, 'COMPLETED');
+    };
+
+    await completeSingleAreaPostIntervention(
+      'QUALIDADE',
+      identities.quality,
+      'Pós-intervenção validada somente pela Qualidade',
+    );
+    await completeSingleAreaPostIntervention(
+      'SEGURANCA',
+      identities.safety,
+      'Pós-intervenção validada somente pela Segurança',
+    );
   },
 );

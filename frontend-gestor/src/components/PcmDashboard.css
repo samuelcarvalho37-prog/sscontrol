@@ -1279,6 +1279,7 @@
   gap: 18px;
   border-color: #cbdce8;
   background: linear-gradient(145deg, #ffffff, #f7fbfe);
+  scroll-margin-block-start: 24px;
 }
 
 .pcm-order-detail__heading {
@@ -1584,6 +1585,21 @@
 .pcm-create-order-modal__post-intervention input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #1767c5; }
 .pcm-create-order-modal__post-intervention span { display: grid; gap: 4px; color: #17334a; font-size: 14px; }
 .pcm-create-order-modal__post-intervention small { color: #5a7183; font-size: 13px; font-weight: 500; line-height: 1.45; }
+
+.pcm-post-intervention-areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #cbd9e4;
+  border-radius: 10px;
+  background: #fff;
+}
+.pcm-post-intervention-areas legend { padding: 0 5px; color: #17334a; font-size: 13px; font-weight: 800; }
+.pcm-post-intervention-areas label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.pcm-post-intervention-areas input { width: 17px; height: 17px; margin: 0; accent-color: #1767c5; }
+.pcm-post-intervention-areas p { flex-basis: 100%; color: #9b2836; font-size: 13px; font-weight: 700; }
 
 .pcm-create-order-modal__footer {
   position: sticky;

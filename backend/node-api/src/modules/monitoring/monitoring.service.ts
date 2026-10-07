@@ -205,7 +205,9 @@ export class MonitoringService {
           priority: input.severity,
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `occurrence:${occurrenceId}:reported`,
-          roles: ['ADMIN', 'MANAGER'],
+          // QUALIDADE and SEGURANCA use the MANAGER role_type for capability
+          // inheritance, but a production occurrence is a PCM triage item.
+          roles: ['ADMIN'],
           roleCodes: ['PCM'],
         });
         return detail;
@@ -682,7 +684,8 @@ export class MonitoringService {
           priority: 'CRITICAL',
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `equipment-stop:${stopId}:treatment`,
-          roles: ['ADMIN', 'MANAGER'],
+          roles: ['ADMIN'],
+          roleCodes: ['PCM'],
         });
         return {
           created: true,
@@ -748,7 +751,8 @@ export class MonitoringService {
           priority: 'CRITICAL',
           actionRoute: `/maintenance/stops/${stopId}`,
           deduplicationKey: `equipment-stop:${stopId}:opened`,
-          roles: ['ADMIN', 'MANAGER'],
+          roles: ['ADMIN'],
+          roleCodes: ['PCM'],
         });
         return detail;
       },
@@ -986,7 +990,8 @@ export class MonitoringService {
           priority: occurrenceInput.severity,
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `alert:${alertId}:occurrence`,
-          roles: ['ADMIN', 'MANAGER'],
+          roles: ['ADMIN'],
+          roleCodes: ['PCM'],
         });
         return detail;
       },
