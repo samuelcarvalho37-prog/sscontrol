@@ -95,39 +95,68 @@ test('preserva a política persistida pela API no detalhe da OS', async () => {
 });
 
 test('não transforma ocorrência operacional em pendência de Qualidade ou Segurança', async () => {
-  const { notificationNavigation, isNotificationActionableForProfile } = await notificationPolicyModule();
-  const occurrence = {
-    tipo: 'OCCURRENCE_REPORTED',
-    entidade_tipo: 'OPERATIONAL_OCCURRENCE',
-    entidade_id: 'occurrence-id',
-  };
-  assert.equal(isNotificationActionableForProfile(occurrence, 'QUALIDADE'), false);
-  assert.equal(isNotificationActionableForProfile(occurrence, 'SEGURANCA'), false);
-  assert.equal(notificationNavigation(occurrence, 'QUALIDADE'), null);
-  assert.equal(notificationNavigation(occurrence, 'SEGURANCA'), null);
-  assert.deepEqual(notificationNavigation(occurrence, 'PCM'), {
-    kind: 'occurrence',
-    id: 'occurrence-id',
-  });
+  const {
+    notificationNavigation,
+    isNotificationActionableForProfile,
+    isNotificationVisibleForProfile,
+  } = await notificationPolicyModule();
+  for (const entityType of [
+    'OPERATIONAL_OCCURRENCE',
+    'OCORRENCIAS_OPERACIONAIS',
+    'PARADAS_EQUIPAMENTO',
+  ]) {
+    const occurrence = {
+      tipo: 'OCCURRENCE_REPORTED',
+      entidade_tipo: entityType,
+      entidade_id: 'occurrence-internal-id',
+    };
+    for (const profile of ['QUALIDADE', 'SEGURANCA']) {
+      assert.equal(isNotificationActionableForProfile(occurrence, profile), false);
+      assert.equal(isNotificationVisibleForProfile(occurrence, profile), false);
+      assert.equal(notificationNavigation(occurrence, profile), null);
+    }
+    assert.equal(isNotificationVisibleForProfile(occurrence, 'PCM'), true);
+    assert.deepEqual(notificationNavigation(occurrence, 'PCM'), {
+      kind: 'occurrence',
+      id: 'occurrence-internal-id',
+    });
+  }
 });
 
 test('notificação explícita de pós-intervenção abre a demanda exata e mantém deep-link após refresh', async () => {
-  const { notificationNavigation, notificationActionLabel, validationDemandFromSearch } = await notificationPolicyModule();
+  const {
+    notificationNavigation,
+    notificationActionLabel,
+    validationDemandFromSearch,
+    filterNotificationsForProfile,
+  } = await notificationPolicyModule();
   const notification = {
     tipo: 'POST_INTERVENTION_VALIDATION_REQUESTED',
     entidade_tipo: 'DEMANDAS_TECNICAS',
-    entidade_id: 'exact-demand-id',
+    entidade_id: '7bc8c66a-1418-4f5e-982f-8b897b71ca2f',
+    titulo: 'Validação pós-intervenção · OS-00000011',
   };
   assert.deepEqual(notificationNavigation(notification, 'QUALIDADE'), {
     kind: 'technical-demand',
-    id: 'exact-demand-id',
+    id: '7bc8c66a-1418-4f5e-982f-8b897b71ca2f',
   });
   assert.deepEqual(notificationNavigation(notification, 'SEGURANCA'), {
     kind: 'technical-demand',
-    id: 'exact-demand-id',
+    id: '7bc8c66a-1418-4f5e-982f-8b897b71ca2f',
   });
   assert.equal(notificationActionLabel(notification, 'QUALIDADE'), 'Analisar validação');
-  assert.equal(validationDemandFromSearch('?validationDemand=exact-demand-id'), 'exact-demand-id');
+  assert.equal(notificationNavigation(notification, 'QUALIDADE').id.includes('OS-00000011'), false);
+  assert.deepEqual(
+    filterNotificationsForProfile([
+      { tipo: 'OCCURRENCE_REPORTED', entidade_tipo: 'OCORRENCIAS_OPERACIONAIS', entidade_id: 'old-occurrence-id' },
+      notification,
+    ], 'QUALIDADE').map((item) => item.entidade_id),
+    ['7bc8c66a-1418-4f5e-982f-8b897b71ca2f'],
+  );
+  assert.equal(
+    validationDemandFromSearch('?validationDemand=7bc8c66a-1418-4f5e-982f-8b897b71ca2f'),
+    '7bc8c66a-1418-4f5e-982f-8b897b71ca2f',
+  );
 });
 
 test('papéis com capability de revisão entram no portal sem receber acesso genérico de leitura de OS', async () => {
