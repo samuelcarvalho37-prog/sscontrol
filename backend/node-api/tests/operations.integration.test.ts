@@ -139,6 +139,8 @@ interface NotificationListResponse {
       readonly id: string;
       readonly tipo: string;
       readonly entidade_id: string;
+      readonly entidade_tipo?: string;
+      readonly titulo?: string;
     }[];
   };
 }
@@ -504,6 +506,7 @@ test(
 
     const occurrenceId = randomUUID();
     const occurrenceNotificationId = randomUUID();
+    const occurrenceAliasNotificationIds: string[] = [];
     await transaction(pool, async (client) => {
       await client.query(
         `INSERT INTO maintenance.operational_occurrences
@@ -534,6 +537,27 @@ test(
                 ($1,$2,$5,'DELIVERED',clock_timestamp())`,
         [tenantId, occurrenceNotificationId, ids.admin, ids.quality, ids.safety],
       );
+      for (const entityType of ['OCORRENCIAS_OPERACIONAIS', 'PARADAS_EQUIPAMENTO']) {
+        const notificationId = randomUUID();
+        occurrenceAliasNotificationIds.push(notificationId);
+        await client.query(
+          `INSERT INTO workflow.notifications
+           (id,tenant_id,notification_type,title,message,entity_type,entity_id,priority,status,
+            action_payload,audience,deduplication_key)
+           VALUES ($1,$2,'OCCURRENCE_REPORTED','Ocorrência operacional histórica',
+             'Notificação legada não deve chegar à fila de validação.',$3,$4::uuid,'HIGH','ACTIVE',
+             jsonb_build_object('entityId',$4::text),jsonb_build_object('roleTypes',jsonb_build_array('ADMIN')),$5)`,
+          [notificationId, tenantId, entityType, occurrenceId, `occurrence:${occurrenceId}:${entityType}`],
+        );
+        await client.query(
+          `INSERT INTO workflow.notification_recipients
+           (tenant_id,notification_id,user_id,delivery_status,delivered_at)
+           VALUES ($1,$2,$3,'DELIVERED',clock_timestamp()),
+                  ($1,$2,$4,'DELIVERED',clock_timestamp()),
+                  ($1,$2,$5,'DELIVERED',clock_timestamp())`,
+          [tenantId, notificationId, ids.admin, ids.quality, ids.safety],
+        );
+      }
     });
 
     for (const identity of [identities.quality, identities.safety]) {
@@ -544,7 +568,8 @@ test(
       });
       assert.equal(legacyOccurrenceInbox.statusCode, 200, legacyOccurrenceInbox.body);
       assert.equal(
-        legacyOccurrenceInbox.json<NotificationListResponse>().data.itens.some((item) => item.id === occurrenceNotificationId),
+        legacyOccurrenceInbox.json<NotificationListResponse>().data.itens.some((item) =>
+          [occurrenceNotificationId, ...occurrenceAliasNotificationIds].includes(item.id)),
         false,
       );
     }
@@ -889,11 +914,11 @@ test(
         headers: bearer(identity),
       });
       assert.equal(inbox.statusCode, 200, inbox.body);
-      assert.equal(
-        inbox.json<NotificationListResponse>().data.itens.some((item) =>
-          item.tipo === 'POST_INTERVENTION_VALIDATION_REQUESTED' && item.entidade_id === demandId),
-        true,
-      );
+      const validationNotification = inbox.json<NotificationListResponse>().data.itens.find((item) =>
+        item.tipo === 'POST_INTERVENTION_VALIDATION_REQUESTED' && item.entidade_id === demandId);
+      assert.ok(validationNotification);
+      assert.equal(validationNotification.entidade_tipo, 'DEMANDAS_TECNICAS');
+      assert.match(validationNotification.titulo ?? '', new RegExp(created.json().data.codigo));
     }
     await transaction(pool, async (client) => {
       const postIntervention = await client.query(
@@ -1074,6 +1099,73 @@ test(
           qualityOnlyWorkOrder.json().data.id,
           safetyOnlyWorkOrder.json().data.id,
         ]],
+      );
+    });
+
+    const eitherAreaWorkOrder = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion,
+        tipo_origem: 'ADMIN',
+        entidade_origem_id: null,
+        tipo_trabalho: 'PREVENTIVE',
+        modo_execucao: 'INTERNAL',
+        titulo: 'Validação pós-intervenção por Qualidade ou Segurança',
+        descricao: 'Qualquer uma das áreas elegíveis pode atender à política.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: new Date(Date.now() + 86400000).toISOString(),
+        analise_tecnica: { exige_liberacao_pos_intervencao: true },
+      },
+    });
+    assert.equal(eitherAreaWorkOrder.statusCode, 200, eitherAreaWorkOrder.body);
+    const eitherAreaSubmitted = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${eitherAreaWorkOrder.json().data.id}/submit-review`,
+      headers: bearer(identities.admin),
+      payload: {
+        politica_assinatura: 'QUALIDADE_OU_SEGURANCA',
+        assinaturas_exigidas: 1,
+        primeira_resposta_ate: null,
+        resolucao_ate: null,
+      },
+    });
+    assert.equal(eitherAreaSubmitted.statusCode, 200, eitherAreaSubmitted.body);
+    const eitherAreaDemandId: string = eitherAreaSubmitted.json().data.validacao.id;
+    for (const identity of [identities.quality, identities.safety]) {
+      const inbox = await app.inject({
+        method: 'GET',
+        url: '/v1/notifications?somente_nao_lidas=true',
+        headers: bearer(identity),
+      });
+      assert.equal(inbox.statusCode, 200, inbox.body);
+      assert.equal(
+        inbox.json<NotificationListResponse>().data.itens.some((item) =>
+          item.tipo === 'POST_INTERVENTION_VALIDATION_REQUESTED' && item.entidade_id === eitherAreaDemandId),
+        true,
+      );
+    }
+    const eitherRequirement = await transaction(pool, async (client) =>
+      client.query(
+        `SELECT demand.signature_policy,demand.required_signature_count,requirement.requirement_code
+         FROM workflow.technical_demands demand
+         JOIN workflow.demand_validator_requirements requirement
+           ON requirement.tenant_id=demand.tenant_id AND requirement.technical_demand_id=demand.id
+         WHERE demand.id=$1`,
+        [eitherAreaDemandId],
+      ),
+    );
+    assert.deepEqual(eitherRequirement.rows[0], {
+      signature_policy: 'QUALIDADE_OU_SEGURANCA',
+      required_signature_count: 1,
+      requirement_code: 'QUALITY_OR_SAFETY',
+    });
+    await transaction(pool, async (client) => {
+      await client.query(
+        `UPDATE maintenance.work_orders SET status='CANCELLED' WHERE id=$1`,
+        [eitherAreaWorkOrder.json().data.id],
       );
     });
 

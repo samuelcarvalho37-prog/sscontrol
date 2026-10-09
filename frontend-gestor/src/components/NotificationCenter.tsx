@@ -8,6 +8,7 @@ import {
 } from "../services/api/gestor";
 import type { GestorNotification, GestorOverview } from "../types/gestor";
 import {
+  filterNotificationsForProfile,
   isNotificationActionableForProfile,
   isOperationalOccurrenceNotification,
 } from "./notificationPolicy";
@@ -343,15 +344,20 @@ export function NotificationCenter({
     intervalMs: 12_000,
   });
 
+  const profileNotifications = useMemo(
+    () => filterNotificationsForProfile(notifications, profile),
+    [notifications, profile],
+  );
+
   const summary = useMemo(
     () => ({
-      unread: notifications.filter((item) => isUnreadForProfile(item, profile)).length,
-      critical: notifications.filter(
+      unread: profileNotifications.filter((item) => isUnreadForProfile(item, profile)).length,
+      critical: profileNotifications.filter(
         (item) => isUnreadForProfile(item, profile) && isCritical(item),
       ).length,
-      today: notifications.filter((item) => isToday(item.criado_em)).length,
+      today: profileNotifications.filter((item) => isToday(item.criado_em)).length,
     }),
-    [notifications, profile],
+    [profileNotifications, profile],
   );
 
   useEffect(() => {
@@ -361,7 +367,7 @@ export function NotificationCenter({
   const visible = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
 
-    return notifications.filter((item) => {
+    return profileNotifications.filter((item) => {
       const metadata = metadataOf(item, profile);
       if (scope === "unread" && !isUnreadForProfile(item, profile)) return false;
       if (scope === "today" && !isToday(item.criado_em)) return false;
@@ -382,7 +388,7 @@ export function NotificationCenter({
           .includes(normalizedQuery),
       );
     });
-  }, [category, notifications, profile, query, scope]);
+  }, [category, profile, profileNotifications, query, scope]);
 
   const grouped = useMemo(
     () => ({
@@ -547,7 +553,7 @@ export function NotificationCenter({
             onClick={() => setScope("all")}
           >
             <span>Todas</span>
-            <strong>{notifications.length}</strong>
+            <strong>{profileNotifications.length}</strong>
           </button>
         </section>
 
@@ -596,16 +602,16 @@ export function NotificationCenter({
             <div className="manager-notification-empty">
               <CheckIcon />
               <strong>
-                {notifications.length
+                {profileNotifications.length
                   ? "Nenhum alerta neste filtro"
                   : "Central em dia"}
               </strong>
               <span>
-                {notifications.length
+                {profileNotifications.length
                   ? "Ajuste a busca ou consulte todas as notificações."
                   : "Novas ocorrências, análises e decisões aparecerão aqui."}
               </span>
-              {notifications.length ? (
+              {profileNotifications.length ? (
                 <button
                   type="button"
                   onClick={() => {

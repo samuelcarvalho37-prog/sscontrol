@@ -16,7 +16,11 @@ import type {
 
 const notificationActionabilityFilter = `
   AND NOT (
-    inbox.entity_type='OPERATIONAL_OCCURRENCE'
+    inbox.entity_type IN (
+      'OPERATIONAL_OCCURRENCE',
+      'OCORRENCIAS_OPERACIONAIS',
+      'PARADAS_EQUIPAMENTO'
+    )
     AND EXISTS (
       SELECT 1
       FROM iam.user_roles user_role

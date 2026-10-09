@@ -31,6 +31,25 @@ export function isNotificationActionableForProfile(
   )
 }
 
+export function isNotificationVisibleForProfile(
+  notification: Pick<GestorNotification, 'entidade_tipo'>,
+  profile: string,
+): boolean {
+  return !(
+    isQualitySafetyProfile(profile) &&
+    isOperationalOccurrenceNotification(notification)
+  )
+}
+
+export function filterNotificationsForProfile(
+  notifications: readonly GestorNotification[],
+  profile: string,
+): GestorNotification[] {
+  return notifications.filter((notification) =>
+    isNotificationVisibleForProfile(notification, profile),
+  )
+}
+
 export function notificationNavigation(
   notification: Pick<GestorNotification, 'tipo' | 'entidade_tipo' | 'entidade_id'>,
   profile: string,
