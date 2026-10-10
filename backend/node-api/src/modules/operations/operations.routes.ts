@@ -16,9 +16,11 @@ import {
   maintenanceActionListQuerySchema,
   materialCostBodySchema,
   improvementRequestBodySchema,
+  inviteCollaboratorBodySchema,
   operatorActionListQuerySchema,
   operationsIdentifierParamsSchema,
   pauseExecutionBodySchema,
+  pauseParticipantSessionBodySchema,
   requestChangesBodySchema,
   signatureBodySchema,
   startExecutionBodySchema,
@@ -225,6 +227,26 @@ export function createOperationsRoutes(
       },
       handler: controller.getOperatorAction,
     });
+    app.get('/v1/maintenance/operator-actions/:actionId/participants', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.read'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Lista participantes e convites da execução.' },
+      handler: controller.listActionParticipants,
+    });
+    app.post('/v1/maintenance/operator-actions/:actionId/collaborators', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: inviteCollaboratorBodySchema, summary: 'Convida técnico para colaborar na execução.' },
+      handler: controller.inviteCollaborator,
+    });
+    app.post('/v1/maintenance/operator-actions/:actionId/collaborators/:participantId/accept', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Aceita convite para colaborar.' },
+      handler: controller.acceptCollaborator,
+    });
+    app.post('/v1/maintenance/operator-actions/:actionId/collaborators/:participantId/decline', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Recusa convite para colaborar.' },
+      handler: controller.declineCollaborator,
+    });
     app.post('/v1/maintenance/operator-actions/:actionId/start', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
       schema: {
@@ -329,6 +351,26 @@ export function createOperationsRoutes(
         summary: 'Retoma uma execução pausada sem contabilizar o tempo de pausa.',
       },
       handler: controller.resumeExecution,
+    });
+    app.post('/v1/maintenance/executions/:executionId/sessions/start', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Inicia intervalo individual de trabalho.' },
+      handler: controller.startParticipantSession,
+    });
+    app.post('/v1/maintenance/executions/:executionId/sessions/pause', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: pauseParticipantSessionBodySchema, summary: 'Pausa somente o intervalo individual de trabalho.' },
+      handler: controller.pauseParticipantSession,
+    });
+    app.post('/v1/maintenance/executions/:executionId/sessions/resume', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Abre novo intervalo individual de trabalho.' },
+      handler: controller.resumeParticipantSession,
+    });
+    app.post('/v1/maintenance/executions/:executionId/sessions/end', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Encerra o intervalo individual de trabalho.' },
+      handler: controller.endParticipantSession,
     });
     app.put('/v1/maintenance/executions/:executionId/items/:itemId/response', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),

@@ -11,6 +11,7 @@ import type {
   TechnicalCompletionInput,
   EligibleSupportTechnician,
   ImprovementCategory,
+  ExecutionParticipant,
 } from '../../types/operatorActions'
 import type { AdminEntityRecord } from '../../types/catalog'
 
@@ -42,10 +43,10 @@ export async function listTechnicianPlans(signal?: AbortSignal): Promise<AdminEn
   return requireData(response.data, 'maintenance.plans.list').rows ?? []
 }
 
-export async function getOperatorAction(actionId: string, signal?: AbortSignal): Promise<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis: EligibleSupportTechnician[] }> {
-  const response = await callApi<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis?: EligibleSupportTechnician[] }>('operator-actions.get', { token: token(), acao_id: actionId }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
+export async function getOperatorAction(actionId: string, signal?: AbortSignal): Promise<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis: EligibleSupportTechnician[]; participantes: ExecutionParticipant[] }> {
+  const response = await callApi<{ acao: OperatorActionDetail; execucao: Execution | null; tecnicos_elegiveis?: EligibleSupportTechnician[]; participantes?: ExecutionParticipant[] }>('operator-actions.get', { token: token(), acao_id: actionId }, signal, { timeoutMs: API_TIMEOUT_MS.DETAIL_READ })
   const data = requireData(response.data, 'operator-actions.get')
-  return { ...data, tecnicos_elegiveis: data.tecnicos_elegiveis ?? [] }
+  return { ...data, tecnicos_elegiveis: data.tecnicos_elegiveis ?? [], participantes: data.participantes ?? [] }
 }
 
 export async function startOperatorAction(actionId: string, modoParada: StopMode): Promise<Execution> {
@@ -53,8 +54,38 @@ export async function startOperatorAction(actionId: string, modoParada: StopMode
   return requireData(response.data, 'operator-actions.start').execucao
 }
 
-export async function pauseExecution(executionId: string, motivo: string): Promise<Execution> {
-  const response = await callApi<Execution>('maintenance.executions.pause', { token: token(), execucao_id: executionId, motivo }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+export async function claimOperatorAction(actionId: string): Promise<void> {
+  const response = await callApi<Record<string, unknown>>('operator-actions.assume', { token: token(), acao_id: actionId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  requireData(response.data, 'operator-actions.assume')
+}
+
+export async function inviteActionCollaborator(actionId: string, userId: string): Promise<void> {
+  const response = await callApi<Record<string, unknown>>('operator-actions.collaborators.invite', { token: token(), acao_id: actionId, usuario_id: userId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  requireData(response.data, 'operator-actions.collaborators.invite')
+}
+
+export async function respondToCollaboratorInvite(actionId: string, participantId: string, accept: boolean): Promise<void> {
+  const response = await callApi<Record<string, unknown>>(accept ? 'operator-actions.collaborators.accept' : 'operator-actions.collaborators.decline', { token: token(), acao_id: actionId, participant_id: participantId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  requireData(response.data, 'operator-actions.collaborators.respond')
+}
+
+export async function startParticipantSession(executionId: string): Promise<Execution> {
+  const response = await callApi<Execution>('execution.sessions.start', { token: token(), execucao_id: executionId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  return requireData(response.data, 'execution.sessions.start')
+}
+
+export async function pauseParticipantSession(executionId: string, reason: string): Promise<Execution> {
+  const response = await callApi<Execution>('execution.sessions.pause', { token: token(), execucao_id: executionId, motivo: reason }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  return requireData(response.data, 'execution.sessions.pause')
+}
+
+export async function endParticipantSession(executionId: string): Promise<Execution> {
+  const response = await callApi<Execution>('execution.sessions.end', { token: token(), execucao_id: executionId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  return requireData(response.data, 'execution.sessions.end')
+}
+
+export async function pauseExecution(executionId: string, motivoCodigo: string, motivoDetalhe: string | null): Promise<Execution> {
+  const response = await callApi<Execution>('maintenance.executions.pause', { token: token(), execucao_id: executionId, motivo_codigo: motivoCodigo, motivo_detalhe: motivoDetalhe }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   return requireData(response.data, 'maintenance.executions.pause')
 }
 

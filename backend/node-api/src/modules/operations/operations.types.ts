@@ -6,6 +6,7 @@ export type SignaturePolicy =
   | 'QUALIDADE_E_SEGURANCA';
 export type EvidenceType = 'PHOTO' | 'VIDEO' | 'DOCUMENT' | 'AUDIO' | 'OTHER';
 export type ExecutionStopMode = 'NO_STOP' | 'STOPPED' | 'EXECUTOR_DECISION';
+export type ExecutionPauseReason = 'SUPER_URGENCIA' | 'AGUARDANDO_PECA' | 'AGUARDANDO_PRODUCAO' | 'AGUARDANDO_TERCEIRO' | 'CONTINUIDADE_PROXIMO_TURNO' | 'DIAGNOSTICO_PENDENTE' | 'OUTRO';
 export type WorkOrderType = 'CORRECTIVE' | 'PREVENTIVE' | 'PREDICTIVE' | 'IMPROVEMENT';
 export type ExecutionMode = 'INTERNAL' | 'EXTERNAL' | 'MIXED';
 export type ImprovementCategory = 'MODIFICATION' | 'MANUFACTURE' | 'INSTALLATION' | 'ADEQUACY' | 'OTHER';

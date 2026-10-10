@@ -32,9 +32,23 @@ export interface OperatorAction {
   execucao_id: string | null
   execucao_status: string | null
   operador_id?: string | null
+  responsavel_id?: string | null
   concluida_em?: string | null
-  papel_na_equipe?: 'LIDER' | 'APOIO'
+  papel_na_equipe?: 'LIDER' | 'APOIO' | 'PRINCIPAL' | 'COLABORADOR' | null
+  participacao_status?: 'PRIMARY' | 'INVITED' | 'ACCEPTED' | 'DECLINED'
   total_itens: number
+}
+
+export interface ExecutionParticipant {
+  id: string
+  user_id: string
+  nome: string
+  matricula: string | null
+  papel: 'PRIMARY' | 'COLLABORATOR'
+  status: 'PRIMARY' | 'INVITED' | 'ACCEPTED' | 'DECLINED' | 'REMOVED'
+  worked_seconds: number
+  session_status: 'WORKING' | 'INVITED' | 'STOPPED'
+  sou_destinatario?: boolean
 }
 
 export interface ExecutionItem {
@@ -82,6 +96,10 @@ export interface Execution {
   duracao_segundos: number | null
   pausada_em?: string | null
   segundos_pausados?: number
+  calendar_duration_seconds?: number
+  effective_work_seconds?: number
+  global_paused_seconds?: number
+  participants?: ExecutionParticipant[]
   resultado: string | null
   observacao: string | null
   modo_parada: StopMode | null
@@ -143,6 +161,7 @@ export interface OperatorActionDetail extends OperatorAction {
   ordem_status: string
   ordem_criada_em: string
   checklist_itens: ExecutionItem[]
+  papel_na_equipe?: 'PRINCIPAL' | 'COLABORADOR' | null
 }
 
 export interface TechnicalCompletionInput {

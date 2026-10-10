@@ -68,33 +68,277 @@ export class OperationsRepository {
     return result.rows[0]?.exists ?? false;
   }
 
-  async listActiveTechnicians(client: PoolClient): Promise<readonly OperationsRow[]> {
+  async listActiveTechnicians(client: PoolClient, actionId?: string, excludedUserId?: string): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `SELECT user_account.id, user_account.name AS nome, user_account.employee_number AS matricula
        FROM iam.users user_account
        JOIN iam.user_roles user_role ON user_role.tenant_id=user_account.tenant_id AND user_role.user_id=user_account.id
        JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+       JOIN iam.user_technical_assignments technical_assignment
+         ON technical_assignment.tenant_id=user_account.tenant_id AND technical_assignment.user_id=user_account.id
+       JOIN iam.technical_areas technical_area
+         ON technical_area.tenant_id=technical_assignment.tenant_id AND technical_area.id=technical_assignment.technical_area_id
+       LEFT JOIN iam.technical_roles technical_role
+         ON technical_role.tenant_id=technical_assignment.tenant_id AND technical_role.id=technical_assignment.technical_role_id
        WHERE user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
          AND user_role.valid_from <= clock_timestamp()
          AND (user_role.valid_until IS NULL OR user_role.valid_until > clock_timestamp())
          AND role.code='TECNICO' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+         AND technical_assignment.status='ACTIVE' AND technical_assignment.valid_from<=clock_timestamp()
+         AND (technical_assignment.valid_until IS NULL OR technical_assignment.valid_until>clock_timestamp())
+         AND technical_area.status='ACTIVE' AND technical_area.deleted_at IS NULL
+         AND (technical_assignment.technical_role_id IS NULL OR (technical_role.status='ACTIVE' AND technical_role.deleted_at IS NULL))
+         AND ($1::uuid IS NULL OR EXISTS (
+           SELECT 1
+           FROM maintenance.work_order_actions scoped_action
+           JOIN cmms.assets scoped_asset ON scoped_asset.tenant_id=scoped_action.tenant_id AND scoped_asset.id=scoped_action.asset_id
+           JOIN cmms.lines scoped_line ON scoped_line.tenant_id=scoped_asset.tenant_id AND scoped_line.id=scoped_asset.line_id
+           JOIN cmms.sectors scoped_sector ON scoped_sector.tenant_id=scoped_line.tenant_id AND scoped_sector.id=scoped_line.sector_id
+           WHERE scoped_action.id=$1 AND EXISTS (
+             SELECT 1 FROM iam.user_scope_assignments scope
+             WHERE scope.tenant_id=user_account.tenant_id AND scope.user_id=user_account.id AND scope.status='ACTIVE'
+               AND ((scope.scope_type='TENANT') OR (scope.scope_type='PLANT' AND scope.plant_id=scoped_sector.plant_id)
+                 OR (scope.scope_type='SECTOR' AND scope.sector_id=scoped_sector.id)
+                 OR (scope.scope_type='LINE' AND scope.line_id=scoped_line.id)
+                 OR (scope.scope_type='ASSET' AND scope.asset_id=scoped_asset.id))
+           )
+         ))
+         AND ($2::uuid IS NULL OR user_account.id<>$2)
        ORDER BY user_account.name, user_account.id`,
+      [actionId ?? null, excludedUserId ?? null],
     );
     return result.rows;
   }
 
-  async activeTechnicianExists(client: PoolClient, userId: string): Promise<boolean> {
+  async activeTechnicianExists(client: PoolClient, userId: string, actionId?: string): Promise<boolean> {
     const result = await client.query<{ exists: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM iam.users user_account
          JOIN iam.user_roles user_role ON user_role.tenant_id=user_account.tenant_id AND user_role.user_id=user_account.id
          JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+         JOIN iam.user_technical_assignments assignment
+           ON assignment.tenant_id=user_account.tenant_id AND assignment.user_id=user_account.id
+         JOIN iam.technical_areas area
+           ON area.tenant_id=assignment.tenant_id AND area.id=assignment.technical_area_id
+         LEFT JOIN iam.technical_roles technical_role
+           ON technical_role.tenant_id=assignment.tenant_id AND technical_role.id=assignment.technical_role_id
          WHERE user_account.id=$1 AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
            AND user_role.valid_from <= clock_timestamp()
            AND (user_role.valid_until IS NULL OR user_role.valid_until > clock_timestamp())
            AND role.code='TECNICO' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+           AND assignment.status='ACTIVE' AND assignment.valid_from<=clock_timestamp()
+           AND (assignment.valid_until IS NULL OR assignment.valid_until>clock_timestamp())
+           AND area.status='ACTIVE' AND area.deleted_at IS NULL
+           AND (assignment.technical_role_id IS NULL OR (technical_role.status='ACTIVE' AND technical_role.deleted_at IS NULL))
+           AND ($2::uuid IS NULL OR EXISTS (
+             SELECT 1 FROM maintenance.work_order_actions scoped_action
+             JOIN cmms.assets scoped_asset ON scoped_asset.tenant_id=scoped_action.tenant_id AND scoped_asset.id=scoped_action.asset_id
+             JOIN cmms.lines scoped_line ON scoped_line.tenant_id=scoped_asset.tenant_id AND scoped_line.id=scoped_asset.line_id
+             JOIN cmms.sectors scoped_sector ON scoped_sector.tenant_id=scoped_line.tenant_id AND scoped_sector.id=scoped_line.sector_id
+             WHERE scoped_action.id=$2 AND EXISTS (
+               SELECT 1 FROM iam.user_scope_assignments scope
+               WHERE scope.tenant_id=user_account.tenant_id AND scope.user_id=user_account.id AND scope.status='ACTIVE'
+                 AND ((scope.scope_type='TENANT') OR (scope.scope_type='PLANT' AND scope.plant_id=scoped_sector.plant_id)
+                   OR (scope.scope_type='SECTOR' AND scope.sector_id=scoped_sector.id)
+                   OR (scope.scope_type='LINE' AND scope.line_id=scoped_line.id)
+                   OR (scope.scope_type='ASSET' AND scope.asset_id=scoped_asset.id))
+             )
+           ))
        ) AS exists`,
-      [userId],
+      [userId, actionId ?? null],
+    );
+    return result.rows[0]?.exists ?? false;
+  }
+
+  async userCanAccessActionPlant(client: PoolClient, actionId: string, userId: string): Promise<boolean> {
+    const result = await client.query<{ allowed: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM maintenance.work_order_actions action
+        JOIN cmms.assets asset ON asset.tenant_id=action.tenant_id AND asset.id=action.asset_id
+        JOIN cmms.lines line ON line.tenant_id=asset.tenant_id AND line.id=asset.line_id
+        JOIN cmms.sectors sector ON sector.tenant_id=line.tenant_id AND sector.id=line.sector_id
+        WHERE action.id=$1 AND EXISTS (
+          SELECT 1 FROM iam.user_scope_assignments scope
+          WHERE scope.tenant_id=action.tenant_id AND scope.user_id=$2 AND scope.status='ACTIVE'
+            AND ((scope.scope_type='TENANT') OR (scope.scope_type='PLANT' AND scope.plant_id=sector.plant_id)
+              OR (scope.scope_type='SECTOR' AND scope.sector_id=sector.id)
+              OR (scope.scope_type='LINE' AND scope.line_id=line.id)
+              OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id))
+        )
+      ) AS allowed`,
+      [actionId, userId],
+    );
+    return result.rows[0]?.allowed ?? false;
+  }
+
+  async claimAction(client: PoolClient, tenantId: string, actionId: string, userId: string): Promise<void> {
+    const result = await client.query(
+      `UPDATE maintenance.work_order_actions
+       SET responsible_id=$3, updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND id=$2 AND status='READY' AND responsible_id IS NULL`,
+      [tenantId, actionId, userId],
+    );
+    if (result.rowCount !== 1) throw new Error('ACTION_CLAIM_CONFLICT');
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET responsible_id=$3, updated_at=clock_timestamp()
+       FROM maintenance.work_order_actions action
+       WHERE action.tenant_id=$1 AND action.id=$2 AND work_order.tenant_id=action.tenant_id
+         AND work_order.id=action.work_order_id`,
+      [tenantId, actionId, userId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.work_order_action_participants
+       (tenant_id,action_id,user_id,participant_role,invitation_status,joined_at)
+       VALUES ($1,$2,$3,'PRIMARY','PRIMARY',clock_timestamp())`,
+      [tenantId, actionId, userId],
+    );
+  }
+
+  async findActionParticipant(client: PoolClient, actionId: string, userId: string): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.work_order_action_participants
+       WHERE action_id=$1 AND user_id=$2 AND invitation_status IN ('PRIMARY','INVITED','ACCEPTED')
+       ORDER BY created_at DESC LIMIT 1`, [actionId, userId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findPrimaryParticipant(client: PoolClient, actionId: string): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.work_order_action_participants
+       WHERE action_id=$1 AND participant_role='PRIMARY' AND invitation_status='PRIMARY'
+       LIMIT 1 FOR UPDATE`, [actionId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findParticipantById(client: PoolClient, actionId: string, participantId: string, userId: string): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.work_order_action_participants
+       WHERE action_id=$1 AND id=$2 AND user_id=$3 FOR UPDATE`, [actionId, participantId, userId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async setActionStatus(client: PoolClient, tenantId: string, actionId: string, status: 'IN_PROGRESS'|'BLOCKED'): Promise<void> {
+    await client.query(`UPDATE maintenance.work_order_actions SET status=$3,updated_at=clock_timestamp() WHERE tenant_id=$1 AND id=$2`, [tenantId, actionId, status]);
+    await client.query(`UPDATE maintenance.work_orders work_order SET status=$3,updated_at=clock_timestamp() FROM maintenance.work_order_actions action WHERE action.tenant_id=$1 AND action.id=$2 AND work_order.tenant_id=action.tenant_id AND work_order.id=action.work_order_id`, [tenantId, actionId, status]);
+  }
+
+  async listActionParticipants(client: PoolClient, actionId: string, currentUserId: string): Promise<readonly OperationsRow[]> {
+    const result = await client.query<OperationsRow>(
+      `SELECT participant.id,participant.user_id,participant.participant_role,
+              participant.invitation_status,participant.invited_by,participant.invited_at,
+              participant.responded_at,participant.joined_at,participant.left_at,
+              user_account.name AS nome,user_account.employee_number AS matricula,
+              participant.user_id=$2 AS sou_destinatario,
+              COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(interval.ended_at,clock_timestamp())-interval.started_at)))::bigint,0) AS worked_seconds,
+              CASE WHEN bool_or(interval.ended_at IS NULL) THEN 'WORKING'
+                   WHEN participant.invitation_status='INVITED' THEN 'INVITED'
+                   ELSE 'STOPPED' END AS session_status
+       FROM maintenance.work_order_action_participants participant
+       JOIN iam.users user_account ON user_account.tenant_id=participant.tenant_id AND user_account.id=participant.user_id
+       LEFT JOIN maintenance.execution_participant_work_intervals interval
+         ON interval.tenant_id=participant.tenant_id AND interval.participant_id=participant.id
+       WHERE participant.action_id=$1 AND participant.invitation_status<>'REMOVED'
+       GROUP BY participant.id,user_account.id
+       ORDER BY CASE participant.participant_role WHEN 'PRIMARY' THEN 0 ELSE 1 END,
+                participant.created_at,participant.id`, [actionId,currentUserId],
+    );
+    return result.rows;
+  }
+
+  async createCollaboratorInvite(client: PoolClient, tenantId: string, actionId: string, invitedUserId: string, inviterId: string): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO maintenance.work_order_action_participants
+       (tenant_id,action_id,execution_id,user_id,participant_role,invitation_status,invited_by,invited_at)
+       VALUES ($1,$2,
+         (SELECT execution.id FROM maintenance.executions execution
+          WHERE execution.tenant_id=$1 AND execution.work_order_action_id=$2
+            AND execution.status IN ('OPEN','IN_PROGRESS','PAUSED','BLOCKED')
+          ORDER BY execution.created_at DESC,execution.id DESC LIMIT 1),
+         $3,'COLLABORATOR','INVITED',$4,clock_timestamp()) RETURNING id`,
+      [tenantId, actionId, invitedUserId, inviterId],
+    );
+    const participantId = result.rows[0]?.id;
+    if (!participantId) throw new Error('O convite não foi persistido.');
+    const notification = await client.query<{ id: string }>(
+      `INSERT INTO workflow.notifications
+       (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience,deduplication_key)
+       SELECT $1,'EXECUTION_COLLABORATOR_INVITED','Convite para equipe de manutenção',
+              'Você foi convidado para colaborar em uma ordem de serviço.',
+              'WORK_ORDER_ACTION',$2,'MEDIUM','/technician',
+              jsonb_build_object('entityType','WORK_ORDER_ACTION','entityId',($2::uuid)::text,'participantId',$3::text),
+              jsonb_build_object('userIds',jsonb_build_array($4::text)),
+              'execution-collaborator:'||$3::text
+       RETURNING id`, [tenantId, actionId, participantId, invitedUserId],
+    );
+    const notificationId = notification.rows[0]?.id;
+    if (notificationId) await client.query(
+      `INSERT INTO workflow.notification_recipients
+       (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+       VALUES ($1,$2,$3,'DELIVERED',clock_timestamp(),clock_timestamp(),1)`, [tenantId, notificationId, invitedUserId],
+    );
+    return participantId;
+  }
+
+  async respondToCollaboratorInvite(client: PoolClient, participantId: string, userId: string, accept: boolean): Promise<boolean> {
+    const result = await client.query(
+      `UPDATE maintenance.work_order_action_participants
+       SET invitation_status=$3,responded_at=clock_timestamp(),joined_at=CASE WHEN $3='ACCEPTED' THEN clock_timestamp() ELSE NULL END,
+           updated_at=clock_timestamp()
+       WHERE id=$1 AND user_id=$2 AND participant_role='COLLABORATOR' AND invitation_status='INVITED'`,
+      [participantId, userId, accept ? 'ACCEPTED' : 'DECLINED'],
+    );
+    return result.rowCount === 1;
+  }
+
+  async setActionParticipantsExecution(client: PoolClient, tenantId: string, actionId: string, executionId: string): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.work_order_action_participants SET execution_id=$3,updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND action_id=$2 AND invitation_status IN ('PRIMARY','INVITED','ACCEPTED')`,
+      [tenantId, actionId, executionId],
+    );
+  }
+
+  async openParticipantWorkInterval(client: PoolClient, tenantId: string, executionId: string, userId: string): Promise<void> {
+    await client.query(
+      `INSERT INTO maintenance.execution_participant_work_intervals
+       (tenant_id,participant_id,execution_id,user_id)
+       SELECT participant.tenant_id,participant.id,$2,participant.user_id
+       FROM maintenance.work_order_action_participants participant
+       JOIN maintenance.executions execution ON execution.tenant_id=participant.tenant_id
+         AND execution.work_order_action_id=participant.action_id AND execution.id=$2
+       WHERE participant.tenant_id=$1 AND participant.user_id=$3
+         AND participant.invitation_status IN ('PRIMARY','ACCEPTED')
+       ON CONFLICT DO NOTHING`, [tenantId, executionId, userId],
+    );
+  }
+
+  async closeParticipantWorkInterval(client: PoolClient, tenantId: string, executionId: string, userId: string, reason: 'PAUSE'|'GLOBAL_PAUSE'|'COMPLETED'|'LEFT', pauseReason: string | null): Promise<boolean> {
+    const result = await client.query(
+      `UPDATE maintenance.execution_participant_work_intervals
+       SET ended_at=clock_timestamp(),ended_reason=$4,pause_reason=$5
+       WHERE tenant_id=$1 AND execution_id=$2 AND user_id=$3 AND ended_at IS NULL`,
+      [tenantId, executionId, userId, reason, pauseReason],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async closeAllParticipantWorkIntervals(client: PoolClient, tenantId: string, executionId: string, reason: 'GLOBAL_PAUSE'|'COMPLETED'): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.execution_participant_work_intervals
+       SET ended_at=clock_timestamp(),ended_reason=$3
+       WHERE tenant_id=$1 AND execution_id=$2 AND ended_at IS NULL`, [tenantId, executionId, reason],
+    );
+  }
+
+  async hasOpenParticipantWorkInterval(client: PoolClient, tenantId: string, executionId: string, userId: string): Promise<boolean> {
+    const result = await client.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM maintenance.execution_participant_work_intervals
+         WHERE tenant_id=$1 AND execution_id=$2 AND user_id=$3 AND ended_at IS NULL
+       ) AS exists`, [tenantId, executionId, userId],
     );
     return result.rows[0]?.exists ?? false;
   }
@@ -152,7 +396,7 @@ export class OperationsRepository {
         input.description,
         input.priority,
         userId,
-        input.responsibleId,
+        null,
         context.maintenance_stop_mode,
         JSON.stringify(input.technicalAnalysis),
         input.scheduledFor,
@@ -241,10 +485,10 @@ export class OperationsRepository {
   ): Promise<void> {
     await client.query(
       `UPDATE maintenance.work_orders
-       SET title = $2, description = $3, priority = $4, responsible_id = $5,
-           scheduled_for = $6, technical_analysis = $7::jsonb,
-           execution_mode = $8, improvement_category = $9,
-           content_hash_sha256 = $10, technical_demand_id = NULL,
+       SET title = $2, description = $3, priority = $4, responsible_id = NULL,
+           scheduled_for = $5, technical_analysis = $6::jsonb,
+           execution_mode = $7, improvement_category = $8,
+           content_hash_sha256 = $9, technical_demand_id = NULL,
            status = 'DRAFT', submitted_at = NULL, updated_at = clock_timestamp()
        WHERE id = $1`,
       [
@@ -252,7 +496,6 @@ export class OperationsRepository {
         input.title,
         input.description,
         input.priority,
-        input.responsibleId,
         input.scheduledFor,
         JSON.stringify(input.technicalAnalysis),
         input.executionMode,
@@ -1143,10 +1386,10 @@ export class OperationsRepository {
           tenant_id, work_order_id, asset_id, component_id, maintenance_plan_version_id,
           origin, action_type, title, description, priority, status, responsible_id,
           maintenance_stop_mode, technical_analysis
-        ) VALUES ($1,$2,$3,$4,$5,'WORK_ORDER_RELEASE',$6,$7,$8,$9,'READY',$10,$11,$12::jsonb)
+        ) VALUES ($1,$2,$3,$4,$5,'WORK_ORDER_RELEASE',$6,$7,$8,$9,'READY',NULL,$10,$11::jsonb)
         ON CONFLICT (tenant_id, work_order_id, origin) WHERE origin = 'WORK_ORDER_RELEASE'
         DO UPDATE SET status='READY', title=EXCLUDED.title, description=EXCLUDED.description,
-          priority=EXCLUDED.priority, responsible_id=EXCLUDED.responsible_id,
+          priority=EXCLUDED.priority, responsible_id=NULL,
           maintenance_stop_mode=EXCLUDED.maintenance_stop_mode,
           technical_analysis=EXCLUDED.technical_analysis,
           maintenance_plan_version_id=EXCLUDED.maintenance_plan_version_id,
@@ -1163,7 +1406,6 @@ export class OperationsRepository {
         workOrder.title,
         workOrder.description,
         workOrder.priority,
-        workOrder.responsible_id,
         workOrder.maintenance_stop_mode,
         JSON.stringify(workOrder.technical_analysis),
       ],
@@ -1194,7 +1436,9 @@ export class OperationsRepository {
                checklist_template.name AS checklist_nome,
                execution.id AS execucao_id, execution.status AS execucao_status,
                execution.operator_id AS operador_id, execution.completed_at AS concluida_em,
-               CASE WHEN action.responsible_id=$1 THEN 'LIDER' ELSE 'APOIO' END AS papel_na_equipe,
+               participant.invitation_status AS participacao_status,
+               CASE WHEN participant.participant_role='PRIMARY' THEN 'PRINCIPAL'
+                    WHEN participant.participant_role='COLLABORATOR' THEN 'COLABORADOR' ELSE NULL END AS papel_na_equipe,
                (SELECT count(*)::integer FROM maintenance.checklist_items item
                 WHERE item.checklist_template_version_id = plan_version.checklist_template_version_id
                   AND item.status = 'ACTIVE') AS total_itens
@@ -1215,15 +1459,33 @@ export class OperationsRepository {
           ORDER BY current_execution.created_at DESC, current_execution.id DESC
           LIMIT 1
         ) execution ON true
+        LEFT JOIN LATERAL (
+          SELECT member.participant_role, member.invitation_status
+          FROM maintenance.work_order_action_participants member
+          WHERE member.tenant_id=action.tenant_id AND member.action_id=action.id
+            AND member.user_id=$1 AND member.invitation_status IN ('PRIMARY','INVITED','ACCEPTED')
+          ORDER BY CASE member.invitation_status WHEN 'PRIMARY' THEN 1 WHEN 'ACCEPTED' THEN 2 ELSE 3 END
+          LIMIT 1
+        ) participant ON true
+        JOIN cmms.plants plant ON plant.tenant_id=sector.tenant_id AND plant.id=sector.plant_id
         WHERE (
-          ($3::boolean AND action.status='COMPLETED' AND execution.operator_id=$1)
+          ($3::boolean AND action.status='COMPLETED' AND (execution.operator_id=$1 OR participant.participant_role IS NOT NULL))
           OR (
             NOT $3::boolean AND (
-              action.status = 'READY'
-              OR (action.status IN ('IN_PROGRESS','BLOCKED') AND action.responsible_id = $1)
+              (action.status='READY' AND action.responsible_id IS NULL AND participant.participant_role IS NULL)
+              OR (action.status IN ('READY','IN_PROGRESS','BLOCKED') AND participant.participant_role IS NOT NULL)
             )
           )
         )
+          AND EXISTS (
+            SELECT 1 FROM iam.user_scope_assignments scope
+            WHERE scope.tenant_id=action.tenant_id AND scope.user_id=$1 AND scope.status='ACTIVE'
+              AND ((scope.scope_type='TENANT' AND scope.plant_id IS NULL)
+                OR (scope.scope_type='PLANT' AND scope.plant_id=plant.id)
+                OR (scope.scope_type='SECTOR' AND scope.sector_id=sector.id)
+                OR (scope.scope_type='LINE' AND scope.line_id=line.id)
+                OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id))
+          )
         ORDER BY CASE action.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                  CASE WHEN $3::boolean THEN execution.completed_at END DESC NULLS LAST,
                  action.generated_at, action.id LIMIT $2
@@ -1236,6 +1498,8 @@ export class OperationsRepository {
   async listMaintenanceActions(
     client: PoolClient,
     query: MaintenanceActionListQuery,
+    scopeUserId: string,
+    enforcePlantScope: boolean,
   ): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `
@@ -1281,13 +1545,26 @@ export class OperationsRepository {
                          OR work_order.code ILIKE '%' || $1 || '%')
           AND (cardinality($2::text[]) = 0 OR action.status = ANY($2::text[]))
           AND ($3::uuid IS NULL OR action.asset_id = $3)
+          AND (NOT $6::boolean OR EXISTS (
+            SELECT 1 FROM cmms.lines scoped_line
+            JOIN cmms.sectors scoped_sector ON scoped_sector.tenant_id=scoped_line.tenant_id AND scoped_sector.id=scoped_line.sector_id
+            WHERE scoped_line.tenant_id=asset.tenant_id AND scoped_line.id=asset.line_id
+              AND EXISTS (
+                SELECT 1 FROM iam.user_scope_assignments scope
+                WHERE scope.tenant_id=action.tenant_id AND scope.user_id=$5 AND scope.status='ACTIVE'
+                  AND ((scope.scope_type='TENANT') OR (scope.scope_type='PLANT' AND scope.plant_id=scoped_sector.plant_id)
+                    OR (scope.scope_type='SECTOR' AND scope.sector_id=scoped_sector.id)
+                    OR (scope.scope_type='LINE' AND scope.line_id=scoped_line.id)
+                    OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id))
+              )
+          ))
         ORDER BY CASE action.priority
                    WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2
                    WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                  action.generated_at DESC, action.id DESC
         LIMIT $4
       `,
-      [query.search, query.statuses, query.assetId, query.limit],
+      [query.search, query.statuses, query.assetId, query.limit, scopeUserId, enforcePlantScope],
     );
     return result.rows;
   }
@@ -1473,11 +1750,24 @@ export class OperationsRepository {
   async getExecutionDetail(client: PoolClient, id: string): Promise<OperationsRow | null> {
     const result = await client.query<OperationsRow>(
       `
-        SELECT execution.id, execution.status, execution.operator_id AS operador_id,
+        SELECT execution.id, execution.work_order_action_id, execution.status, execution.operator_id AS operador_id,
                operator.name AS operador_nome, execution.opened_at AS assumida_em,
                execution.started_at AS iniciada_em, execution.completed_at AS concluida_em,
                execution.duration_seconds AS duracao_segundos, execution.paused_at AS pausada_em,
                execution.paused_seconds AS segundos_pausados, execution.result AS resultado,
+               GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(execution.completed_at,clock_timestamp())-COALESCE(execution.started_at,execution.opened_at)))::bigint) AS calendar_duration_seconds,
+               COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(interval.ended_at,clock_timestamp())-interval.started_at)))::bigint
+                 FROM maintenance.execution_participant_work_intervals interval
+                 WHERE interval.tenant_id=execution.tenant_id AND interval.execution_id=execution.id),0) AS effective_work_seconds,
+               COALESCE(execution.paused_seconds,0) +
+               COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (clock_timestamp()-pause.started_at)))::bigint
+                 FROM maintenance.execution_global_pause_periods pause
+                 WHERE pause.tenant_id=execution.tenant_id AND pause.execution_id=execution.id AND pause.ended_at IS NULL),0) +
+               CASE WHEN execution.paused_at IS NOT NULL AND NOT EXISTS (
+                 SELECT 1 FROM maintenance.execution_global_pause_periods pause
+                 WHERE pause.tenant_id=execution.tenant_id AND pause.execution_id=execution.id AND pause.ended_at IS NULL
+               ) THEN GREATEST(0,EXTRACT(EPOCH FROM (clock_timestamp()-execution.paused_at))::bigint) ELSE 0 END
+               AS global_paused_seconds,
                execution.observation AS observacao,
                (SELECT history.payload FROM maintenance.history_events history
                 WHERE history.tenant_id=execution.tenant_id AND history.execution_id=execution.id
@@ -1492,6 +1782,23 @@ export class OperationsRepository {
                  ON support_user.tenant_id=support.tenant_id AND support_user.id=support.user_id
                WHERE support.tenant_id=execution.tenant_id AND support.execution_id=execution.id),
                '[]'::jsonb) AS tecnicos_auxiliares,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', participant.id, 'user_id', participant.user_id,
+                 'nome', participant_user.name, 'matricula', participant_user.employee_number,
+                 'papel', participant.participant_role, 'status', participant.invitation_status,
+                 'worked_seconds', COALESCE((SELECT SUM(EXTRACT(EPOCH FROM
+                   (COALESCE(interval.ended_at,clock_timestamp())-interval.started_at)))::bigint
+                   FROM maintenance.execution_participant_work_intervals interval
+                   WHERE interval.tenant_id=participant.tenant_id AND interval.participant_id=participant.id),0),
+                 'session_status', CASE WHEN EXISTS (
+                   SELECT 1 FROM maintenance.execution_participant_work_intervals interval
+                   WHERE interval.tenant_id=participant.tenant_id AND interval.participant_id=participant.id AND interval.ended_at IS NULL
+                 ) THEN 'WORKING' WHEN participant.invitation_status='INVITED' THEN 'INVITED' ELSE 'STOPPED' END
+               ) ORDER BY CASE participant.participant_role WHEN 'PRIMARY' THEN 0 ELSE 1 END,participant.created_at,participant.id)
+               FROM maintenance.work_order_action_participants participant
+               JOIN iam.users participant_user ON participant_user.tenant_id=participant.tenant_id AND participant_user.id=participant.user_id
+               WHERE participant.tenant_id=execution.tenant_id AND participant.execution_id=execution.id
+                 AND participant.invitation_status<>'REMOVED'), '[]'::jsonb) AS participants,
                work_order.operational_code AS ordem_codigo,
                work_order.code AS ordem_codigo_legado,
                work_order.execution_mode AS modo_execucao,
@@ -1757,11 +2064,12 @@ export class OperationsRepository {
     );
     await client.query(
       `UPDATE maintenance.work_order_actions action
-       SET started_at=COALESCE(action.started_at,clock_timestamp()), updated_at=clock_timestamp()
+       SET status='IN_PROGRESS',started_at=COALESCE(action.started_at,clock_timestamp()), updated_at=clock_timestamp()
        FROM maintenance.executions execution
        WHERE execution.id=$1 AND action.id=execution.work_order_action_id`,
       [executionId],
     );
+    await client.query(`UPDATE maintenance.work_orders work_order SET status='IN_PROGRESS',updated_at=clock_timestamp() FROM maintenance.executions execution WHERE execution.id=$1 AND work_order.id=execution.work_order_id`, [executionId]);
   }
 
   async openEquipmentStopForExecution(
@@ -2187,12 +2495,45 @@ export class OperationsRepository {
     return usage;
   }
 
-  async pauseExecution(client: PoolClient, executionId: string, reason: string): Promise<void> {
-    await client.query(`UPDATE maintenance.executions SET status='PAUSED', observation=concat_ws(E'\n', observation, 'Pausa: ' || $2) WHERE id=$1`, [executionId, reason]);
+  async pauseExecution(client: PoolClient, tenantId: string, executionId: string, userId: string, reasonCode: string, reasonDetail: string | null): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.executions SET status='PAUSED', observation=concat_ws(E'\n', observation, 'Pausa: ' || $2 || COALESCE(' · '||$3,'')) WHERE tenant_id=$1 AND id=$4`,
+      [tenantId, reasonCode, reasonDetail, executionId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.execution_global_pause_periods
+       (tenant_id,execution_id,paused_by,reason_code,reason_detail)
+       VALUES ($1,$2,$3,$4,$5)`, [tenantId, executionId, userId, reasonCode, reasonDetail],
+    );
+    await client.query(
+      `UPDATE maintenance.work_order_actions action SET status='BLOCKED',updated_at=clock_timestamp()
+       FROM maintenance.executions execution WHERE execution.tenant_id=$1 AND execution.id=$2
+         AND action.tenant_id=execution.tenant_id AND action.id=execution.work_order_action_id`, [tenantId, executionId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET status='BLOCKED',updated_at=clock_timestamp()
+       FROM maintenance.executions execution WHERE execution.tenant_id=$1 AND execution.id=$2
+         AND work_order.tenant_id=execution.tenant_id AND work_order.id=execution.work_order_id`, [tenantId, executionId],
+    );
+    await this.closeAllParticipantWorkIntervals(client, tenantId, executionId, 'GLOBAL_PAUSE');
   }
 
-  async resumeExecution(client: PoolClient, executionId: string): Promise<void> {
-    await client.query(`UPDATE maintenance.executions SET status='IN_PROGRESS' WHERE id=$1`, [executionId]);
+  async resumeExecution(client: PoolClient, tenantId: string, executionId: string, userId: string): Promise<void> {
+    await client.query(`UPDATE maintenance.executions SET status='IN_PROGRESS' WHERE tenant_id=$1 AND id=$2`, [tenantId, executionId]);
+    await client.query(
+      `UPDATE maintenance.execution_global_pause_periods SET ended_at=clock_timestamp(),resumed_by=$3
+       WHERE tenant_id=$1 AND execution_id=$2 AND ended_at IS NULL`, [tenantId, executionId, userId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_order_actions action SET status='IN_PROGRESS',updated_at=clock_timestamp()
+       FROM maintenance.executions execution WHERE execution.tenant_id=$1 AND execution.id=$2
+         AND action.tenant_id=execution.tenant_id AND action.id=execution.work_order_action_id`, [tenantId, executionId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET status='IN_PROGRESS',updated_at=clock_timestamp()
+       FROM maintenance.executions execution WHERE execution.tenant_id=$1 AND execution.id=$2
+         AND work_order.tenant_id=execution.tenant_id AND work_order.id=execution.work_order_id`, [tenantId, executionId],
+    );
   }
 
   async blockingExecutionItems(client: PoolClient, executionId: string): Promise<OperationsRow> {

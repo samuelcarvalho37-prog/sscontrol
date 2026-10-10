@@ -1226,6 +1226,22 @@ export function nodeActionRequest(
         path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}`,
         token,
       };
+    case "operator-actions.assume":
+      return { method: "POST", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/assume`, token };
+    case "operator-actions.participants":
+      return { method: "GET", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/participants`, token };
+    case "operator-actions.collaborators.invite":
+      return { method: "POST", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/collaborators`, body: { usuario_id: payload.usuario_id }, token };
+    case "operator-actions.collaborators.accept":
+    case "operator-actions.collaborators.decline":
+      return { method: "POST", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/collaborators/${encodeURIComponent(String(payload.participant_id))}/${action.endsWith("accept") ? "accept" : "decline"}`, token };
+    case "execution.sessions.start":
+    case "execution.sessions.resume":
+      return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/sessions/${action.endsWith("start") ? "start" : "resume"}`, token };
+    case "execution.sessions.pause":
+      return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/sessions/pause`, body: { motivo: payload.motivo }, token };
+    case "execution.sessions.end":
+      return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/sessions/end`, token };
     case "operator-actions.start":
       return {
         method: "POST",
@@ -1237,7 +1253,7 @@ export function nodeActionRequest(
       return {
         method: "POST",
         path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/pause`,
-        body: { motivo: payload.motivo },
+        body: { motivo_codigo: payload.motivo_codigo, motivo_detalhe: payload.motivo_detalhe },
         token,
       };
     case "maintenance.executions.resume":

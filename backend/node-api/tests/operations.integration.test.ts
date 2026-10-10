@@ -21,6 +21,9 @@ const ids = {
   production: randomUUID(),
   support: randomUUID(),
   supportSecond: randomUUID(),
+  supportThird: randomUUID(),
+  supportDecline: randomUUID(),
+  otherPlantTechnician: randomUUID(),
   adminRole: randomUUID(),
   validatorRole: randomUUID(),
   safetyRole: randomUUID(),
@@ -55,6 +58,10 @@ interface Identities {
   readonly operator: string;
   readonly production: string;
   readonly support: string;
+  readonly supportSecond: string;
+  readonly supportThird: string;
+  readonly supportDecline: string;
+  readonly otherPlantTechnician: string;
 }
 
 interface SeededIdentities extends Identities {
@@ -232,6 +239,10 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
   const operator = token();
   const production = token();
   const support = token();
+  const supportSecond = token();
+  const supportThird = token();
+  const supportDecline = token();
+  const otherPlantTechnician = token();
   const tenantSlug = `operations-${randomUUID()}`;
   await transaction(pool, async (client) => {
     await client.query(
@@ -267,6 +278,13 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
        VALUES ($1,$2,'USR-OPS-PRO','Produção Operações','ops.production@fabcontrol.local',false)`,
       [ids.production, tenantId],
     );
+    await client.query(`INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES ($1,$2,'USR-OPS-OTHER-PLANT','Técnico Outra Planta','ops.other.plant@fabcontrol.local',false)`, [ids.otherPlantTechnician, tenantId]);
+    await client.query(
+      `INSERT INTO iam.users (id,tenant_id,employee_number,name,email,first_access_required) VALUES
+       ($1,$3,'USR-OPS-SUP-03','Apoio Operações Três','ops.support-3@fabcontrol.local',false),
+       ($2,$3,'USR-OPS-SUP-04','Apoio Operações Quatro','ops.support-4@fabcontrol.local',false)`,
+      [ids.supportThird, ids.supportDecline, tenantId],
+    );
     await client.query(
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES
       ($1,$2,$8),($1,$3,$9),($1,$4,$10),($1,$5,$11),($1,$6,$11),($1,$7,$11)`,
@@ -288,6 +306,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES ($1,$2,$3)`,
       [tenantId, ids.production, ids.productionRole],
     );
+    await client.query(`INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES ($1,$2,$3)`, [tenantId, ids.otherPlantTechnician, ids.operatorRole]);
+    await client.query(
+      `INSERT INTO iam.user_roles (tenant_id,user_id,role_id) VALUES ($1,$2,$3),($1,$4,$3)`,
+      [tenantId, ids.supportThird, ids.operatorRole, ids.supportDecline],
+    );
     await client.query(
       `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
       SELECT $1,$2,id,'ALLOW' FROM iam.capabilities WHERE code=ANY($3::text[])`,
@@ -298,6 +321,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
           'maintenance.work-orders.read',
           'maintenance.work-orders.manage',
           'maintenance.work-orders.release',
+          'maintenance.actions.assign',
           'maintenance.executions.read',
           'analytics.technical.read',
         ],
@@ -369,6 +393,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
         ids.safetyTechnicalRole,
       ],
     );
+    await client.query(
+      `INSERT INTO iam.user_technical_assignments (tenant_id,user_id,technical_area_id,assigned_by) VALUES
+       ($1,$2,$4,$5),($1,$3,$4,$5),($1,$6,$4,$5),($1,$7,$4,$5),($1,$8,$4,$5),($1,$9,$4,$5)`,
+      [tenantId, ids.operator, ids.support, ids.qualityArea, ids.admin, ids.supportSecond, ids.otherPlantTechnician, ids.supportThird, ids.supportDecline],
+    );
     for (const [userId, session] of [
       [ids.admin, admin],
       [ids.quality, quality],
@@ -376,6 +405,10 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       [ids.operator, operator],
       [ids.production, production],
       [ids.support, support],
+      [ids.supportSecond, supportSecond],
+      [ids.supportThird, supportThird],
+      [ids.supportDecline, supportDecline],
+      [ids.otherPlantTechnician, otherPlantTechnician],
     ] as const) {
       await client.query(
         `INSERT INTO iam.sessions
@@ -388,6 +421,9 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       `INSERT INTO cmms.plants (id,tenant_id,tag,name) VALUES ($1,$2,'PLT-OPS','Planta Operações')`,
       [ids.plant, tenantId],
     );
+    const otherPlantId = randomUUID();
+    await client.query(`INSERT INTO cmms.plants (id,tenant_id,tag,name) VALUES ($1,$2,'PLT-OPS-2','Outra Planta')`, [otherPlantId, tenantId]);
+    await client.query(`INSERT INTO iam.user_scope_assignments (tenant_id,user_id,plant_id,scope_type,assigned_by) VALUES ($1,$2,$3,'PLANT',$4)`, [tenantId, ids.otherPlantTechnician, otherPlantId, ids.admin]);
     await client.query(
       `INSERT INTO cmms.sectors (id,tenant_id,plant_id,tag,name) VALUES ($1,$2,$3,'SET-OPS','Manutenção')`,
       [ids.sector, tenantId, ids.plant],
@@ -401,6 +437,11 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       (id,tenant_id,line_id,tag,qr_payload,name,asset_type,manufacturer,model,serial_number,criticality,lifecycle_status,technical_location)
       VALUES ($1,$2,$3,'EQ-OPS-001','FAB:ASSET:EQ-OPS-001','Prensa de teste','PRESS','Fab','P1','OPS001','HIGH','ACTIVE','Linha Operações')`,
       [ids.asset, tenantId, ids.line],
+    );
+    await client.query(
+      `INSERT INTO iam.user_scope_assignments (tenant_id,user_id,plant_id,scope_type,assigned_by) VALUES
+       ($1,$2,$3,'PLANT',$4),($1,$5,$3,'PLANT',$4),($1,$6,$3,'PLANT',$4),($1,$7,$3,'PLANT',$4),($1,$8,$3,'PLANT',$4)`,
+      [tenantId, ids.operator, ids.plant, ids.admin, ids.support, ids.supportSecond, ids.supportThird, ids.supportDecline],
     );
     await client.query(
       `INSERT INTO cmms.components
@@ -486,6 +527,10 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     operator: operator.raw,
     production: production.raw,
     support: support.raw,
+    supportSecond: supportSecond.raw,
+    supportThird: supportThird.raw,
+    supportDecline: supportDecline.raw,
+    otherPlantTechnician: otherPlantTechnician.raw,
     tenantSlug,
   };
 }
@@ -1246,6 +1291,39 @@ test(
     assert.equal(queue.json().data.itens.length, 1);
     const actionId: string = queue.json().data.itens[0].id;
     assert.equal(queue.json().data.itens[0].componente_tag, 'MOT-OPS-001');
+    const raceActionId = randomUUID();
+    await transaction(pool, async (client) => {
+      await client.query(
+        `INSERT INTO maintenance.work_order_actions
+         (id,tenant_id,work_order_id,asset_id,component_id,maintenance_plan_version_id,origin,action_type,title,description,priority,status,responsible_id,maintenance_stop_mode,technical_analysis)
+         SELECT $1,tenant_id,work_order_id,asset_id,component_id,maintenance_plan_version_id,'PHASE2_CLAIM_RACE',action_type,title,description,priority,'READY',NULL,maintenance_stop_mode,technical_analysis
+         FROM maintenance.work_order_actions WHERE id=$2`, [raceActionId, actionId],
+      );
+    });
+    const otherPlantQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.otherPlantTechnician) });
+    assert.equal(otherPlantQueue.statusCode, 200, otherPlantQueue.body);
+    const otherPlantQueueData = otherPlantQueue.json<{ data: { itens: readonly { id: string }[] } }>();
+    assert.equal(otherPlantQueueData.data.itens.some(item => item.id === raceActionId), false);
+    const otherPlantLegacyActions = await app.inject({ method: 'GET', url: '/v1/maintenance/actions', headers: bearer(identities.otherPlantTechnician) });
+    assert.equal(otherPlantLegacyActions.statusCode, 200, otherPlantLegacyActions.body);
+    const otherPlantLegacyActionData = otherPlantLegacyActions.json<{ data: { acoes: readonly { id: string }[] } }>();
+    assert.equal(otherPlantLegacyActionData.data.acoes.some(item => item.id === raceActionId), false);
+    const otherPlantLegacyDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/actions/${raceActionId}`, headers: bearer(identities.otherPlantTechnician) });
+    assert.equal(otherPlantLegacyDetail.statusCode, 404, otherPlantLegacyDetail.body);
+    const concurrentClaims = await Promise.all([ids.operator, ids.support].map((userId) => app.inject({
+      method: 'POST', url: `/v1/maintenance/operator-actions/${raceActionId}/assume`,
+      headers: bearer(userId === ids.operator ? identities.operator : identities.support),
+    })));
+    assert.deepEqual(concurrentClaims.map(response => response.statusCode).sort(), [200, 409]);
+    const winningUserId = concurrentClaims[0]?.statusCode === 200 ? ids.operator : ids.support;
+    await transaction(pool, async (client) => {
+      const winner = await client.query<{ user_id: string }>(`SELECT user_id FROM maintenance.work_order_action_participants WHERE tenant_id=$1 AND action_id=$2 AND participant_role='PRIMARY' AND invitation_status='PRIMARY'`, [tenantId, raceActionId]);
+      assert.equal(winner.rows[0]?.user_id, winningUserId);
+    });
+    const oldAssignmentAttempt = await app.inject({ method: 'PUT', url: `/v1/maintenance/actions/${raceActionId}/assignment`, headers: bearer(identities.admin), payload: { responsavel_id: ids.operator, tecnicos_apoio_ids: [] } });
+    assert.notEqual(oldAssignmentAttempt.statusCode, 200);
+    const legacyAssignment = await app.inject({ method: 'PUT', url: `/v1/maintenance/actions/${actionId}/assignment`, headers: bearer(identities.admin), payload: { responsavel_id: ids.operator, tecnicos_apoio_ids: [] } });
+    assert.equal(legacyAssignment.statusCode, 409, legacyAssignment.body);
 
     await transaction(pool, async (client) => {
       await client.query(
@@ -1262,8 +1340,8 @@ test(
       headers: bearer(identities.support),
     });
     assert.equal(supportQueue.statusCode, 200, supportQueue.body);
-    assert.equal(supportQueue.json().data.itens.length, 1);
-    assert.equal(supportQueue.json().data.itens[0].id, actionId);
+    const supportQueueData = supportQueue.json<{ data: { itens: readonly { id: string }[] } }>();
+    assert.equal(supportQueueData.data.itens.some(item => item.id === actionId), true);
     const supportContext = await app.inject({
       method: 'GET',
       url: `/v1/maintenance/operator-actions/${actionId}`,
@@ -1285,16 +1363,105 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(assumed.statusCode, 200, assumed.body);
-    const executionId: string = assumed.json().data.id;
-    assert.equal(assumed.json().data.itens.length, 4);
+    assert.equal(assumed.json().data.action_id, actionId);
+    assert.equal(assumed.json().data.responsavel_id, ids.operator);
+    await transaction(pool, async (client) => {
+      await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [randomUUID()]);
+      const invisibleParticipants = await client.query(
+        `SELECT id FROM maintenance.work_order_action_participants WHERE tenant_id=$1 AND action_id=$2`,
+        [tenantId, actionId],
+      );
+      assert.equal(invisibleParticipants.rowCount, 0);
+    });
 
     const started = await app.inject({
       method: 'POST',
-      url: `/v1/maintenance/executions/${executionId}/start`,
+      url: `/v1/maintenance/operator-actions/${actionId}/start`,
       headers: bearer(identities.operator),
       payload: { modo_parada: 'STOPPED' },
     });
     assert.equal(started.statusCode, 200, started.body);
+    const executionId: string = started.json().data.execucao.id;
+    const checklistItemId: string = started.json().data.execucao.itens[0].id;
+    await transaction(pool, (client) => client.query(
+      `UPDATE maintenance.executions SET paused_seconds=120 WHERE tenant_id=$1 AND id=$2`,
+      [tenantId, executionId],
+    ));
+    const invitedSupport = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.support } });
+    assert.equal(invitedSupport.statusCode, 200, invitedSupport.body);
+    const supportParticipantId: string = invitedSupport.json().data.participant_id;
+    const acceptedSupport = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators/${supportParticipantId}/accept`, headers: bearer(identities.support) });
+    assert.equal(acceptedSupport.statusCode, 200, acceptedSupport.body);
+    const writeWithoutSession = await app.inject({
+      method: 'PUT',
+      url: `/v1/maintenance/executions/${executionId}/items/${checklistItemId}/response`,
+      headers: bearer(identities.support),
+      payload: { resposta_texto: null, resposta_numero: null, resposta_booleano: true, resposta_opcao: null, observacao: null, nao_aplicavel: false },
+    });
+    assert.equal(writeWithoutSession.statusCode, 409, writeWithoutSession.body);
+    assert.equal(writeWithoutSession.json().error.code, 'EXECUTION_PARTICIPANT_SESSION_REQUIRED');
+    const invitedSecond = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.supportSecond } });
+    assert.equal(invitedSecond.statusCode, 200, invitedSecond.body);
+    const acceptedSecond = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators/${invitedSecond.json().data.participant_id}/accept`, headers: bearer(identities.supportSecond) });
+    assert.equal(acceptedSecond.statusCode, 200, acceptedSecond.body);
+    const inviteThird = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.supportThird } });
+    assert.equal(inviteThird.statusCode, 200, inviteThird.body);
+    const acceptedThird = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators/${inviteThird.json().data.participant_id}/accept`, headers: bearer(identities.supportThird) });
+    assert.equal(acceptedThird.statusCode, 200, acceptedThird.body);
+    const inviteDecline = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.supportDecline } });
+    assert.equal(inviteDecline.statusCode, 200, inviteDecline.body);
+    const declined = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators/${inviteDecline.json().data.participant_id}/decline`, headers: bearer(identities.supportDecline) });
+    assert.equal(declined.statusCode, 200, declined.body);
+    const declinedSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.supportDecline) });
+    assert.equal(declinedSession.statusCode, 403, declinedSession.body);
+    const otherPlantInvite = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.otherPlantTechnician } });
+    assert.equal(otherPlantInvite.statusCode, 422, otherPlantInvite.body);
+    const supportSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.support) });
+    assert.equal(supportSession.statusCode, 200, supportSession.body);
+    const collaboratorCompletion = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/operator-actions/${actionId}/complete`,
+      headers: bearer(identities.support),
+      payload: { resultado: 'Conclusão tentativa do colaborador.', observacao: null, modo_parada: 'STOPPED' },
+    });
+    assert.equal(collaboratorCompletion.statusCode, 403, collaboratorCompletion.body);
+    assert.equal(collaboratorCompletion.json().error.code, 'EXECUTION_PRIMARY_REQUIRED');
+    const pausedSupportSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/pause`, headers: bearer(identities.support), payload: { motivo: 'Aguardando ferramenta' } });
+    assert.equal(pausedSupportSession.statusCode, 200, pausedSupportSession.body);
+    const resumedSupportSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/resume`, headers: bearer(identities.support) });
+    assert.equal(resumedSupportSession.statusCode, 200, resumedSupportSession.body);
+    const endedSupportSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/end`, headers: bearer(identities.support) });
+    assert.equal(endedSupportSession.statusCode, 200, endedSupportSession.body);
+    const thirdSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.supportThird) });
+    assert.equal(thirdSession.statusCode, 200, thirdSession.body);
+    const nonParticipantSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.otherPlantTechnician) });
+    assert.equal(nonParticipantSession.statusCode, 403, nonParticipantSession.body);
+    const globallyPaused = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/pause`, headers: bearer(identities.operator), payload: { motivo_codigo: 'AGUARDANDO_PRODUCAO' } });
+    assert.equal(globallyPaused.statusCode, 200, globallyPaused.body);
+    const pausedDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/executions/${executionId}`, headers: bearer(identities.operator) });
+    assert.equal(pausedDetail.statusCode, 200, pausedDetail.body);
+    assert.ok(pausedDetail.json().data.global_paused_seconds >= 120);
+    const openAfterGlobalPause = await transaction(pool, (client) => client.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM maintenance.execution_participant_work_intervals WHERE tenant_id=$1 AND execution_id=$2 AND ended_at IS NULL`,
+      [tenantId, executionId],
+    ));
+    assert.equal(openAfterGlobalPause.rows[0]?.count, 0);
+    const globallyResumed = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/resume`, headers: bearer(identities.operator) });
+    assert.equal(globallyResumed.statusCode, 200, globallyResumed.body);
+    const resumedDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/executions/${executionId}`, headers: bearer(identities.operator) });
+    assert.equal(resumedDetail.statusCode, 200, resumedDetail.body);
+    assert.ok(resumedDetail.json().data.global_paused_seconds >= 120);
+    const openAfterGlobalResume = await transaction(pool, (client) => client.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM maintenance.execution_participant_work_intervals WHERE tenant_id=$1 AND execution_id=$2 AND ended_at IS NULL`,
+      [tenantId, executionId],
+    ));
+    assert.equal(openAfterGlobalResume.rows[0]?.count, 0);
+    const resumedPrimarySession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/resume`, headers: bearer(identities.operator) });
+    assert.equal(resumedPrimarySession.statusCode, 200, resumedPrimarySession.body);
+    const resumedThirdSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/resume`, headers: bearer(identities.supportThird) });
+    assert.equal(resumedThirdSession.statusCode, 200, resumedThirdSession.body);
+    const endedThirdSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/end`, headers: bearer(identities.supportThird) });
+    assert.equal(endedThirdSession.statusCode, 200, endedThirdSession.body);
     const pcmUrl = `/v1/analytics/technical-summary?inicio=${encodeURIComponent(new Date(Date.now()-86400000).toISOString())}&fim=${encodeURIComponent(new Date(Date.now()+60000).toISOString())}`;
     const activePcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
     assert.equal(activePcm.statusCode,200,activePcm.body);
@@ -1312,7 +1479,7 @@ test(
     assert.equal(resumedAtomically.json().data.execucao.id, executionId);
 
     const executionItems: readonly { id: string; tipo_resposta: string }[] =
-      started.json().data.itens;
+      started.json().data.execucao.itens;
     const confirmation = executionItems.find((item) => item.tipo_resposta === 'CONFIRMACAO')!;
     const inspection = executionItems.find((item) => item.tipo_resposta === 'OK_NOK')!;
     const parameter = executionItems.find((item) => item.tipo_resposta === 'PARAMETRO')!;
@@ -1555,6 +1722,7 @@ test(
     assert.equal(awaitingTechnicalReview.statusCode, 200, awaitingTechnicalReview.body);
     // IN_TECHNICAL_REVIEW é o valor canônico persistido para “aguardando validação”.
     assert.equal(awaitingTechnicalReview.json().data.status, 'IN_TECHNICAL_REVIEW');
+    const actionCountAfterExecution = awaitingTechnicalReview.json().data.acoes.length;
 
     await transaction(pool, async client => {
       assert.equal(await new MonitoringRepository().hasPendingPostInterventionRelease(client,ids.asset),true);
@@ -1580,7 +1748,7 @@ test(
       assert.equal(signedAfterExecution.statusCode, 200, signedAfterExecution.body);
       assert.equal(
         signedAfterExecution.json().data.acoes.length,
-        1,
+        actionCountAfterExecution,
         'Assinar a liberação não deve gerar outra ação',
       );
     }
@@ -1658,7 +1826,8 @@ test(
       headers: bearer(identities.operator),
     });
     assert.equal(emptyQueue.statusCode, 200, emptyQueue.body);
-    assert.equal(emptyQueue.json().data.itens.length, 0);
+    const emptyQueueData = emptyQueue.json<{ data: { itens: readonly { id: string }[] } }>();
+    assert.equal(emptyQueueData.data.itens.some(item => item.id === actionId), false);
 
     const reviewed = await app.inject({
       method: 'POST',
@@ -1810,6 +1979,8 @@ test(
     const normalAction = normalQueueBody.data.itens.find((item) => item.ordem_id === normalWorkOrderId);
     assert.ok(normalAction);
     const normalActionId: string = normalAction.id;
+    const normalClaim = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/assume`, headers: bearer(identities.operator) });
+    assert.equal(normalClaim.statusCode, 200, normalClaim.body);
     const normalStarted = await app.inject({
       method: 'POST', url: `/v1/maintenance/operator-actions/${normalActionId}/start`, headers: bearer(identities.operator),
       payload: { modo_parada: 'NO_STOP' },
@@ -2346,22 +2517,24 @@ test(
         (item) => item.ordem_id === workOrderId,
       );
       assert.ok(action);
+      const actionClaim = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${action.id}/assume`, headers: bearer(identities.operator) });
+      assert.equal(actionClaim.statusCode, 200, actionClaim.body);
       const assumedExecution = await app.inject({
         method: 'POST',
         url: `/v1/maintenance/operator-actions/${action.id}/assume`,
         headers: bearer(identities.operator),
       });
       assert.equal(assumedExecution.statusCode, 200, assumedExecution.body);
-      const executionId: string = assumedExecution.json().data.id;
       const startedExecution = await app.inject({
         method: 'POST',
-        url: `/v1/maintenance/executions/${executionId}/start`,
+        url: `/v1/maintenance/operator-actions/${action.id}/start`,
         headers: bearer(identities.operator),
         payload: { modo_parada: 'STOPPED' },
       });
       assert.equal(startedExecution.statusCode, 200, startedExecution.body);
+      const executionId: string = startedExecution.json().data.execucao.id;
       const items: readonly { readonly id: string; readonly tipo_resposta: string }[] =
-        startedExecution.json().data.itens;
+        startedExecution.json().data.execucao.itens;
       const confirmation = items.find((item) => item.tipo_resposta === 'CONFIRMACAO');
       const inspection = items.find((item) => item.tipo_resposta === 'OK_NOK');
       const parameter = items.find((item) => item.tipo_resposta === 'PARAMETRO');

@@ -25,6 +25,7 @@ interface Params {
   readonly materialUsageId?: string;
   readonly serviceId?: string;
   readonly requestId?: string;
+  readonly participantId?: string;
 }
 interface WorkOrderQuery {
   readonly busca?: string;
@@ -124,8 +125,11 @@ interface StartBody {
   readonly modo_parada: ExecutionStopMode;
 }
 interface PauseBody {
-  readonly motivo: string;
+  readonly motivo_codigo: import('./operations.types.js').ExecutionPauseReason;
+  readonly motivo_detalhe?: string;
 }
+interface PauseParticipantBody { readonly motivo: string; }
+interface InviteCollaboratorBody { readonly usuario_id: string; }
 interface ConsumeMaterialBody {
   readonly material_id: string;
   readonly quantidade: number;
@@ -475,6 +479,22 @@ export class OperationsController {
       await this.service.getOperatorAction(user(request), id(request.params, 'actionId')),
     );
 
+  listActionParticipants = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.operator-actions.participants',
+      await this.service.listActionParticipants(user(request), id(request.params, 'actionId')));
+
+  inviteCollaborator = async (request: FastifyRequest<{ Params: Params; Body: InviteCollaboratorBody }>) =>
+    successEnvelope(request, 'maintenance.operator-actions.collaborators.invite',
+      await this.service.inviteCollaborator(user(request), id(request.params, 'actionId'), request.body.usuario_id, audit(request)));
+
+  acceptCollaborator = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.operator-actions.collaborators.accept',
+      await this.service.respondToCollaboratorInvite(user(request), id(request.params, 'actionId'), id(request.params, 'participantId'), 'ACCEPT', audit(request)));
+
+  declineCollaborator = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.operator-actions.collaborators.decline',
+      await this.service.respondToCollaboratorInvite(user(request), id(request.params, 'actionId'), id(request.params, 'participantId'), 'DECLINE', audit(request)));
+
   reviewMaintenanceAction = async (
     request: FastifyRequest<{ Params: Params; Body: ActionReviewBody }>,
   ) =>
@@ -627,10 +647,27 @@ export class OperationsController {
       await this.service.pauseExecution(
         user(request),
         id(request.params, 'executionId'),
-        request.body.motivo,
+        request.body.motivo_codigo,
+        request.body.motivo_detalhe ?? null,
         audit(request),
       ),
     );
+
+  startParticipantSession = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.executions.sessions.start',
+      await this.service.startParticipantSession(user(request), id(request.params, 'executionId'), audit(request)));
+
+  pauseParticipantSession = async (request: FastifyRequest<{ Params: Params; Body: PauseParticipantBody }>) =>
+    successEnvelope(request, 'maintenance.executions.sessions.pause',
+      await this.service.pauseParticipantSession(user(request), id(request.params, 'executionId'), request.body.motivo, audit(request)));
+
+  resumeParticipantSession = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.executions.sessions.resume',
+      await this.service.startParticipantSession(user(request), id(request.params, 'executionId'), audit(request)));
+
+  endParticipantSession = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.executions.sessions.end',
+      await this.service.endParticipantSession(user(request), id(request.params, 'executionId'), audit(request)));
 
   resumeExecution = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(
