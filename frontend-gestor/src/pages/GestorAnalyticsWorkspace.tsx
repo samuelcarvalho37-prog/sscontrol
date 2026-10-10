@@ -53,6 +53,7 @@ const PERIOD_OPTIONS = [
 interface GestorAnalyticsWorkspaceProps {
   focusAssetId?: string
   focusOccurrenceId?: string
+  onClearFocusOccurrence?: () => void
   technicalContext: GestorTechnicalContext | null
   onOpenNotifications: () => void
   onOpenDecision: (
@@ -216,6 +217,7 @@ function isWithinPeriod(value: string | undefined, durationMs: number): boolean 
 export function GestorAnalyticsWorkspace({
   focusAssetId,
   focusOccurrenceId,
+  onClearFocusOccurrence,
   technicalContext,
   onOpenNotifications,
   onOpenDecision,
@@ -1243,9 +1245,13 @@ export function GestorAnalyticsWorkspace({
       {selectedOccurrence ? (
         <TechnicalAnalysisDialog
           occurrence={selectedOccurrence}
-          onClose={() => setSelectedOccurrence(null)}
+          onClose={() => {
+            setSelectedOccurrence(null)
+            onClearFocusOccurrence?.()
+          }}
           onChanged={async () => {
             setSelectedOccurrence(null)
+            onClearFocusOccurrence?.()
             await load(undefined, true)
           }}
         />

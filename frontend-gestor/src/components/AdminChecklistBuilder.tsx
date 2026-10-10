@@ -47,6 +47,7 @@ import { ValidationPolicySelector } from './ValidationPolicySelector'
 interface AdminChecklistBuilderProps {
   onSessionExpired: () => void
   focusTarget?: AdminNotificationTarget | null
+  allowCustomValidators?: boolean
 }
 
 const RESPONSE_TYPES: Array<{ value: ChecklistResponseType; label: string }> = [
@@ -317,6 +318,7 @@ function checklistDraftFromAnalysis(analysis: AdminTechnicalAnalysis): {
 export function AdminChecklistBuilder({
   onSessionExpired,
   focusTarget,
+  allowCustomValidators = true,
 }: AdminChecklistBuilderProps) {
   const workspaceRef = useRef<HTMLElement | null>(null)
   const handledFocusRef = useRef(0)
@@ -358,14 +360,15 @@ export function AdminChecklistBuilder({
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     const [nextModels, assetList, componentList, nextUsers, nextRoles] = await Promise.all([
       listAdminChecklistModels(signal), listAdminEntity('ativos', signal), listAdminEntity('componentes', signal),
-      listAdminUsers({ perfil: 'GESTOR', status: 'ATIVO' }, signal), listTechnicalRoles('', signal),
+      allowCustomValidators ? listAdminUsers({ perfil: 'GESTOR', status: 'ATIVO' }, signal) : Promise.resolve([]),
+      listTechnicalRoles('', signal),
     ])
     setModels(nextModels)
     setAssets(assetList.rows)
     setComponents(componentList.rows)
     setUsers(nextUsers)
     setRoles(nextRoles)
-  }, [])
+  }, [allowCustomValidators])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -875,7 +878,7 @@ export function AdminChecklistBuilder({
               <header><ShieldIcon /><span><strong>Filtro de assinatura</strong><small>Somente os validadores escolhidos poderão aprovar esta versão.</small></span></header>
               {error ? <div className="dashboard-error" role="alert"><strong>Revise o envio.</strong><span>{error}</span></div> : null}
               <div>
-                <ValidationPolicySelector value={routing} users={users} roles={roles} onChange={setRouting} />
+                <ValidationPolicySelector value={routing} users={users} roles={roles} onChange={setRouting} allowCustom={allowCustomValidators} />
                 <label><span>Separar criador e aprovador</span><select value={routing.exige_segregacao} onChange={(event) => setRouting((current) => ({ ...current, exige_segregacao: event.target.value }))}>{YES_NO.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
                 <label className="is-wide"><span>Orientação ao Gestor *</span><textarea rows={3} value={routing.comentario} onChange={(event) => setRouting((current) => ({ ...current, comentario: event.target.value }))} placeholder="Explique o risco, o objetivo e os pontos que precisam ser validados." /></label>
               </div>

@@ -194,7 +194,7 @@ export function createOperationsRoutes(
         ...secured,
         params: operationsIdentifierParamsSchema,
         body: requestChangesBodySchema,
-        summary: 'Devolve a OS ao Administrador com justificativa.',
+        summary: 'Devolve a OS ao PCM com justificativa.',
       },
       handler: controller.requestChanges,
     });

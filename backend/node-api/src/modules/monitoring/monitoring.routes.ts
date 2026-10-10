@@ -60,7 +60,7 @@ export function createMonitoringRoutes(
         ...secured,
         params: monitoringIdentifierParamsSchema,
         body: technicalAnalysisBodySchema,
-        summary: 'Emite análise técnica permanente ao Administrador.',
+        summary: 'Emite análise técnica permanente ao PCM.',
       },
       handler: controller.createTechnicalAnalysis,
     });
@@ -69,7 +69,7 @@ export function createMonitoringRoutes(
       schema: {
         ...secured,
         body: parameterActionRequestBodySchema,
-        summary: 'Converte uma leitura técnica em ocorrência e análise para o Administrador.',
+        summary: 'Converte uma leitura técnica em ocorrência e análise para o PCM.',
       },
       handler: controller.requestParameterAction,
     });

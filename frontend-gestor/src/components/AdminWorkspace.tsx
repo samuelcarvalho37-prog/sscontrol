@@ -110,6 +110,7 @@ const MODULES: WorkspaceModule[] = [
   { id: 'inventory', code: 'MP', label: 'Materiais e peças', description: 'Estoque técnico', Icon: PackageIcon, feature: 'CADASTROS' },
   { id: 'workforce', code: 'EQ', label: 'Equipes técnicas', description: 'Áreas, cargos e assinatura', Icon: UsersIcon, feature: 'GESTAO_TECNICA' },
   { id: 'operations', code: 'OS', label: 'Programação, intervenções e OS', description: 'Planejar, validar e liberar', Icon: WrenchIcon, feature: 'GESTAO_TECNICA' },
+  { id: 'plan-approvals', code: 'HP', label: 'Homologação de planos', description: 'Consultar e publicar planos em rascunho', Icon: ChecklistIcon, feature: 'GESTAO_TECNICA' },
   { id: 'analytics', code: 'BI', label: 'Indicadores', description: 'Confiabilidade, tempos e SLA', Icon: ChartIcon, feature: 'INDICADORES' },
   { id: 'documents', code: 'DT', label: 'Documentos', description: 'Arquivos e revisões', Icon: DocumentIcon, feature: 'DOCUMENTOS' },
   { id: 'imports', code: 'IM', label: 'Importar planilhas', description: 'Modelos e implantação', Icon: UploadIcon, feature: 'IMPORTACOES' },
@@ -120,7 +121,10 @@ const MODULES: WorkspaceModule[] = [
   { id: 'backup', code: 'BK', label: 'Continuidade', description: 'Backup e restauração', Icon: DatabaseIcon, feature: 'CONTINUIDADE' },
 ]
 
-const QUICK_ACCESS_MODULES: AdminModule[] = ['overview', 'checklists', 'operations', 'configuration']
+const QUICK_ACCESS_MODULES: AdminModule[] = ['overview', 'configuration']
+const ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>([
+  'structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations',
+])
 const COMPANY_PROFILE_CACHE_KEY = 'fab_control_admin_company_profile_v1'
 const DEFAULT_COMPANY_PROFILE: AdminCompanyProfile = {
   nome: 'Empresa Demonstração',
@@ -174,6 +178,11 @@ const MODULE_HEADINGS: Record<AdminModule, { eyebrow: string; title: string; sub
     eyebrow: 'PROGRAMAÇÃO',
     title: 'Planos de manutenção',
     subtitle: 'Programe preventivas, periodicidade, ativo, responsável e próxima execução.',
+  },
+  'plan-approvals': {
+    eyebrow: 'GOVERNANÇA DE PLANOS',
+    title: 'Homologação de planos',
+    subtitle: 'Consulte planos e publique rascunhos elegíveis; a operação da manutenção permanece com o PCM.',
   },
   inventory: {
     eyebrow: 'ALMOXARIFADO TÉCNICO',
@@ -421,19 +430,29 @@ export function AdminWorkspace({
     [commercialAccess],
   )
 
+  const visibleModules = useMemo(
+    () => MODULES.filter((module) => (
+      !ADMIN_MAINTENANCE_MODULES.has(module.id)
+      && (module.id !== 'plan-approvals' || session.user.capacidades?.includes('maintenance.plans.publish') === true)
+    )),
+    [session.user.capacidades],
+  )
+
   const isModuleAvailable = useCallback((moduleId: AdminModule) => {
     const module = getModule(moduleId)
+    if (ADMIN_MAINTENANCE_MODULES.has(moduleId)) return false
+    if (moduleId === 'plan-approvals' && !session.user.capacidades?.includes('maintenance.plans.publish')) return false
     if (!commercialAccess || !module.feature) return true
     return commercialAccess.status === 'ATIVA' && grantedFeatures.has(module.feature)
-  }, [commercialAccess, grantedFeatures])
+  }, [commercialAccess, grantedFeatures, session.user.capacidades])
 
   const filteredModules = useMemo(() => {
     const term = paletteQuery.trim().toLocaleLowerCase('pt-BR')
-    if (!term) return MODULES
-    return MODULES.filter((module) => (
+    if (!term) return visibleModules
+    return visibleModules.filter((module) => (
       `${module.code} ${module.label} ${module.description}`.toLocaleLowerCase('pt-BR').includes(term)
     ))
-  }, [paletteQuery])
+  }, [paletteQuery, visibleModules])
 
   const openModule = useCallback((module: AdminModule, notify = true) => {
     const requestedModule = module === 'maintenance' ? 'operations' : module
@@ -948,7 +967,7 @@ export function AdminWorkspace({
 
       <div className="admin-desktop-content">
         <nav className="admin-desktop-rail" aria-label="Aplicativos administrativos">
-          {MODULES.map(({ id, label, Icon }) => {
+          {visibleModules.map(({ id, label, Icon }) => {
             const windowItem = windows.find((item) => item.module === id)
             const focused = windowItem && windowItem.zIndex === Math.max(0, ...windows.map((item) => item.zIndex))
             const available = isModuleAvailable(id)

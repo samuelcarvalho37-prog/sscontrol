@@ -183,12 +183,9 @@ async function seed(pool: Pool): Promise<Tokens> {
         ids.managerRole,
         [
           'maintenance.occurrences.read',
-          'maintenance.occurrences.report',
           'maintenance.occurrences.triage',
           'maintenance.stops.read',
-          'maintenance.stops.manage',
           'maintenance.alerts.read',
-          'maintenance.alerts.manage',
           'workflow.notifications.read',
           'analytics.technical.read',
         ],
@@ -197,7 +194,13 @@ async function seed(pool: Pool): Promise<Tokens> {
         ids.pcmRole,
         [
           'maintenance.occurrences.read',
+          'maintenance.occurrences.triage',
+          'maintenance.stops.read',
+          'maintenance.stops.manage',
+          'maintenance.alerts.read',
+          'maintenance.alerts.manage',
           'workflow.notifications.read',
+          'analytics.technical.read',
         ],
       ],
       [
@@ -353,6 +356,14 @@ test(
     assert.equal(notifications.json().data.contadores.nao_lidas, 0);
     assert.equal(notifications.json().data.itens.length, 0);
 
+    const adminNotificationsForOccurrence = await app.inject({
+      method: 'GET',
+      url: '/v1/notifications?somente_nao_lidas=true',
+      headers: bearer(tokens.admin),
+    });
+    assert.equal(adminNotificationsForOccurrence.statusCode, 200, adminNotificationsForOccurrence.body);
+    assert.equal(adminNotificationsForOccurrence.json().data.itens.length, 0);
+
     const pcmNotifications = await app.inject({
       method: 'GET',
       url: '/v1/notifications?somente_nao_lidas=true',
@@ -403,7 +414,14 @@ test(
       headers: bearer(tokens.admin),
     });
     assert.equal(adminNotifications.statusCode, 200, adminNotifications.body);
-    assert.equal(adminNotifications.json().data.itens.length, 1);
+    assert.equal(adminNotifications.json().data.itens.length, 0);
+    const pcmAnalysisNotifications = await app.inject({
+      method: 'GET',
+      url: '/v1/notifications?somente_nao_lidas=true&contexto=TECHNICAL_ANALYSIS',
+      headers: bearer(tokens.pcm),
+    });
+    assert.equal(pcmAnalysisNotifications.statusCode, 200, pcmAnalysisNotifications.body);
+    assert.equal(pcmAnalysisNotifications.json().data.itens.length, 1);
 
     const parameterAction = await app.inject({
       method: 'POST',
@@ -449,7 +467,7 @@ test(
       const transition = await app.inject({
         method: 'POST',
         url: `/v1/maintenance/stops/${stopId}/transition`,
-        headers: bearer(tokens.manager),
+        headers: bearer(tokens.pcm),
         payload: {
           status,
           categoria_retorno: status === 'COMPLETED' ? 'REPARO_CONFIRMADO' : null,
@@ -484,7 +502,7 @@ test(
     const acknowledged = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/alerts/${ids.alert}/acknowledge`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(acknowledged.statusCode, 200, acknowledged.body);
     assert.equal(acknowledged.json().data.status, 'ACKNOWLEDGED');
@@ -492,7 +510,7 @@ test(
     const alertOccurrence = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/alerts/${ids.alert}/create-occurrence`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
       payload: { equipamento_parado: false },
     });
     assert.equal(alertOccurrence.statusCode, 200, alertOccurrence.body);
@@ -501,7 +519,7 @@ test(
     const analytics = await app.inject({
       method: 'GET',
       url: `/v1/analytics/technical-summary?inicio=${encodeURIComponent(new Date(Date.now() - 86_400_000).toISOString())}&fim=${encodeURIComponent(new Date(Date.now() + 60_000).toISOString())}&ativo_id=${ids.asset}`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(analytics.statusCode, 200, analytics.body);
     assert.equal(analytics.json().data.resumo.total_assets, 1);
@@ -512,7 +530,7 @@ test(
     const invalidTransition = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/stops/${stopId}/transition`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
       payload: {
         status: 'IN_MAINTENANCE',
         categoria_retorno: null,
@@ -525,7 +543,7 @@ test(
     const directStop = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/stops',
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
       payload: {
         ativo_id: ids.asset,
         componente_id: null,
@@ -542,7 +560,7 @@ test(
     const firstTreatment = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/stops/${directStopId}/create-treatment`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(firstTreatment.statusCode, 200, firstTreatment.body);
     assert.equal(firstTreatment.json().data.created, true);
@@ -551,7 +569,7 @@ test(
     const repeatedTreatment = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/stops/${directStopId}/create-treatment`,
-      headers: bearer(tokens.manager),
+      headers: bearer(tokens.pcm),
     });
     assert.equal(repeatedTreatment.statusCode, 200, repeatedTreatment.body);
     assert.equal(repeatedTreatment.json().data.already_exists, true);

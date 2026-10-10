@@ -13,6 +13,8 @@ interface AdminCatalogWorkspaceProps {
   scope: AdminCatalogScope
   onSessionExpired: () => void
   onOpenImports: () => void
+  showImports?: boolean
+  approvalOnly?: boolean
 }
 
 type FieldType = 'text' | 'number' | 'date' | 'select' | 'reference' | 'checklist'
@@ -394,6 +396,8 @@ export function AdminCatalogWorkspace({
   scope,
   onSessionExpired,
   onOpenImports,
+  showImports = true,
+  approvalOnly = false,
 }: AdminCatalogWorkspaceProps) {
   const scopeEntities = SCOPE_ENTITIES[scope]
   const [selectedEntity, setSelectedEntity] = useState<AdminEntity>(scopeEntities[0])
@@ -419,14 +423,14 @@ export function AdminCatalogWorkspace({
   }, [scope])
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
-    const entities = SCOPE_REFERENCES[scope]
+    const entities = approvalOnly ? ['planos' as AdminEntity] : SCOPE_REFERENCES[scope]
     const [lists, models] = await Promise.all([
       Promise.all(entities.map((entity) => listAdminEntity(entity, signal))),
-      scope === 'maintenance' ? listAdminChecklistModels(signal) : Promise.resolve([]),
+      scope === 'maintenance' && !approvalOnly ? listAdminChecklistModels(signal) : Promise.resolve([]),
     ])
     setRecords(Object.fromEntries(lists.map((list) => [list.entidade, list.rows])))
     setChecklistModels(models)
-  }, [scope])
+  }, [approvalOnly, scope])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -461,7 +465,7 @@ export function AdminCatalogWorkspace({
   })
 
   const definition = ENTITY_DEFINITIONS[selectedEntity]
-  const editingReadOnly = selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing))
+  const editingReadOnly = approvalOnly || (selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing)))
   const visibleRecords = useMemo(() => {
     const term = search.trim().toLowerCase()
     return (records[selectedEntity] ?? []).filter((record) => (
@@ -738,20 +742,22 @@ export function AdminCatalogWorkspace({
           const item = ENTITY_DEFINITIONS[entity]
           return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setSearch(''); setEditing(undefined); setActionRecord(null) }}><AssetIcon /><span><strong>{records[entity]?.length ?? 0}</strong><small>{item.label}</small></span></button>
         })}
-        <button type="button" className="admin-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
+        {showImports ? (
+          <button type="button" className="admin-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
+        ) : null}
       </section>
 
       <section className="admin-catalog-panel">
         <header>
           <div><span className="eyebrow">CADASTRO MESTRE</span><h2>{definition.label}</h2><p>{definition.description}</p></div>
-          <div><span className="manager-live-sync manager-live-sync--compact"><i aria-hidden="true" />Sincronização automática</span><button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button></div>
+          <div><span className="manager-live-sync manager-live-sync--compact"><i aria-hidden="true" />Sincronização automática</span>{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
         </header>
         {selectedEntity === 'planos' ? <div className="admin-plan-rule"><CheckIcon /><span><strong>Plano vinculado ao checklist</strong><small>O plano nasce em rascunho e só pode ser publicado com um checklist técnico já validado. A OS criada a partir dele seguirá para as assinaturas configuradas.</small></span></div> : null}
         <label className="admin-catalog-search"><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Buscar em ${definition.label.toLowerCase()}`} /></label>
         <div className="admin-catalog-table">
           <table>
             <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Ações</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}><span className={column.key === 'status' || column.key === 'workflow_status' ? `admin-catalog-chip admin-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span></td>)}<td><button className="admin-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />Gerenciar</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="admin-empty-state admin-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{EMPTY_STATE_CONTENT[selectedEntity].description}</span><button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button></div></td></tr>}</tbody>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}><span className={column.key === 'status' || column.key === 'workflow_status' ? `admin-catalog-chip admin-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span></td>)}<td><button className="admin-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Gerenciar'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="admin-empty-state admin-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>
@@ -775,10 +781,10 @@ export function AdminCatalogWorkspace({
 
               <section className="admin-entity-actions__commands">
                 <button type="button" disabled={actionBusy} onClick={() => { const record = actionRecord; setActionRecord(null); openEditor(record) }}>
-                  <AssetIcon /><span><strong>{selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? 'Visualizar cadastro' : 'Editar cadastro'}</strong><small>{selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? 'Versão protegida para consulta.' : 'Alterar dados técnicos e vínculos permitidos.'}</small></span>
+                  <AssetIcon /><span><strong>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Visualizar cadastro' : 'Editar cadastro'}</strong><small>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Consulta sem edição operacional.' : 'Alterar dados técnicos e vínculos permitidos.'}</small></span>
                 </button>
 
-                {selectedEntity === 'ativos' ? (
+                {!approvalOnly && selectedEntity === 'ativos' ? (
                   <>
                     {selectedStatus !== 'OPERANDO' ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('OPERANDO')}><CheckIcon /><span><strong>Colocar em operação</strong><small>Reativa o equipamento para novos fluxos.</small></span></button> : null}
                     {selectedStatus !== 'PARADO' ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('PARADO')}><StopIcon /><span><strong>Registrar parada</strong><small>Mantém o cadastro ativo, mas sinaliza indisponibilidade.</small></span></button> : null}
@@ -786,27 +792,27 @@ export function AdminCatalogWorkspace({
                   </>
                 ) : null}
 
-                {['plantas', 'setores', 'linhas', 'componentes', 'materiais'].includes(selectedEntity) ? (
+                {!approvalOnly && ['plantas', 'setores', 'linhas', 'componentes', 'materiais'].includes(selectedEntity) ? (
                   selectedStatus === 'INATIVO'
                     ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction(selectedEntity === 'componentes' ? 'OPERANDO' : 'ATIVO')}><CheckIcon /><span><strong>Reativar cadastro</strong><small>Volta a disponibilizá-lo nos novos cadastros.</small></span></button>
                     : <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('INATIVO')}><StopIcon /><span><strong>Desativar cadastro</strong><small>Preserva histórico e vínculos existentes.</small></span></button>
                 ) : null}
 
-                {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="admin-entity-actions__guidance"><CheckIcon /><span><strong>Versão protegida</strong><small>Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.</small></span></div> : null}
+                {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="admin-entity-actions__guidance"><CheckIcon /><span><strong>{approvalOnly ? 'Plano já homologado' : 'Versão protegida'}</strong><small>{approvalOnly ? 'A consulta é somente leitura. O PCM administra revisões técnicas e checklists.' : 'Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.'}</small></span></div> : null}
 
                 {selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
                   <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO', 'PUBLICAR')}>
-                    <CheckIcon /><span><strong>Publicar plano</strong><small>Valida o vínculo com o checklist e disponibiliza o plano para criar intervenções.</small></span>
+                    <CheckIcon /><span><strong>{approvalOnly ? 'Homologar e publicar plano' : 'Publicar plano'}</strong><small>{approvalOnly ? 'Confirma a revisão final, registra auditoria e libera o plano para o fluxo do PCM.' : 'Valida o vínculo com o checklist e disponibiliza o plano para criar intervenções.'}</small></span>
                   </button>
                 ) : null}
 
-                {selectedEntity === 'planos' && selectedWorkflow === 'VALIDADO' ? (
+                {!approvalOnly && selectedEntity === 'planos' && selectedWorkflow === 'VALIDADO' ? (
                   selectedStatus === 'INATIVO'
                     ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO')}><CheckIcon /><span><strong>Reativar plano</strong><small>Volta a disponibilizar o plano para novas intervenções.</small></span></button>
                     : <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('INATIVO')}><StopIcon /><span><strong>Desativar plano</strong><small>Preserva as OS e execuções já vinculadas.</small></span></button>
                 ) : null}
 
-                {canDeleteSelected ? (
+                {!approvalOnly && canDeleteSelected ? (
                   confirmDelete
                     ? <div className="admin-entity-actions__delete-confirm"><strong>{selectedEntity === 'planos' ? 'Arquivar este rascunho?' : 'Excluir definitivamente?'}</strong><span>{selectedEntity === 'planos' ? 'Ele deixará a biblioteca, mas continuará rastreável na auditoria.' : 'Esta ação só será aceita se o servidor confirmar que não existe qualquer vínculo operacional.'}</span><div><button type="button" disabled={actionBusy} onClick={() => setConfirmDelete(false)}>Voltar</button><button className="is-danger" type="button" disabled={actionBusy} onClick={() => void deleteRecord()}>{actionBusy ? 'Processando…' : selectedEntity === 'planos' ? 'Confirmar arquivamento' : 'Confirmar exclusão'}</button></div></div>
                     : <button className="is-danger" type="button" disabled={actionBusy} onClick={() => setConfirmDelete(true)}><StopIcon /><span><strong>{selectedEntity === 'planos' ? 'Arquivar rascunho' : 'Excluir cadastro'}</strong><small>{selectedEntity === 'planos' ? 'Remove da operação sem apagar a trilha de auditoria.' : 'Disponível somente para registro nunca utilizado.'}</small></span></button>

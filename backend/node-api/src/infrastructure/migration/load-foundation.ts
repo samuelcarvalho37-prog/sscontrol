@@ -41,6 +41,7 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
   const roles = [
     ['ADMIN', 'Administrador', 'Administração integral do ambiente.', 'ADMIN'],
     ['MANAGER', 'Gestor', 'Validação e acompanhamento técnico.', 'MANAGER'],
+    ['PCM', 'Planejamento e Controle da Manutenção', 'Administração e operação do domínio da manutenção.', 'MANAGER'],
     ['OPERATOR', 'Operador', 'Execução operacional no chão de fábrica.', 'OPERATOR'],
     ['SYSTEM', 'Sistema', 'Identidade técnica para eventos automatizados.', 'CUSTOM'],
   ] as const;
@@ -60,8 +61,29 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
     `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
      SELECT $1,$2,capability.id,'ALLOW' FROM iam.capabilities capability
      WHERE capability.status='ACTIVE'
+       AND capability.code = ANY($3::text[])
      ON CONFLICT (tenant_id,role_id,capability_id) DO UPDATE SET effect='ALLOW'`,
-    [context.tenantId, targetId(context, 'roles', 'ADMIN')],
+    [context.tenantId, targetId(context, 'roles', 'ADMIN'), [
+      'admin.identity.read',
+      'admin.identity.manage',
+      'admin.governance.read',
+      'admin.governance.manage',
+      'admin.configuration.manage',
+      'maintenance.occurrences.read',
+      'maintenance.stops.read',
+      'maintenance.alerts.read',
+      'maintenance.work-orders.read',
+      'maintenance.executions.read',
+      'maintenance.checklists.read',
+      'maintenance.plans.read',
+      'maintenance.plans.publish',
+      'cmms.structure.read',
+      'cmms.assets.read',
+      'cmms.parameters.read',
+      'cmms.materials.read',
+      'workflow.notifications.read',
+      'analytics.technical.read',
+    ]],
   );
   await context.client.query(
     `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
@@ -78,22 +100,48 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
         'cmms.materials.read',
         'cmms.readings.create',
         'maintenance.checklists.read',
-        'maintenance.checklists.review',
         'maintenance.plans.read',
         'maintenance.work-orders.read',
-        'maintenance.work-orders.review',
         'maintenance.executions.read',
         'maintenance.occurrences.read',
-        'maintenance.occurrences.report',
-        'maintenance.occurrences.triage',
         'maintenance.stops.read',
-        'maintenance.stops.manage',
         'maintenance.alerts.read',
-        'maintenance.alerts.manage',
         'workflow.notifications.read',
         'analytics.technical.read',
       ],
     ],
+  );
+  await context.client.query(
+    `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
+     SELECT $1,$2,capability.id,'ALLOW' FROM iam.capabilities capability
+     WHERE capability.code = ANY($3::text[])
+     ON CONFLICT (tenant_id,role_id,capability_id) DO UPDATE SET effect='ALLOW'`,
+    [context.tenantId, targetId(context, 'roles', 'PCM'), [
+      'cmms.structure.read', 'cmms.structure.manage',
+      'cmms.assets.read', 'cmms.assets.manage',
+      'cmms.parameters.read', 'cmms.parameters.manage',
+      'cmms.materials.read', 'cmms.materials.manage', 'cmms.readings.create',
+      'maintenance.checklists.read', 'maintenance.checklists.manage',
+      'maintenance.checklists.review', 'maintenance.checklists.publish',
+      'maintenance.plans.read', 'maintenance.plans.manage',
+      'maintenance.work-orders.read', 'maintenance.work-orders.manage',
+      'maintenance.work-orders.review', 'maintenance.work-orders.release',
+      'maintenance.actions.assign', 'maintenance.executions.read',
+      'maintenance.occurrences.read', 'maintenance.occurrences.triage',
+      'maintenance.stops.read', 'maintenance.stops.manage',
+      'maintenance.alerts.read', 'maintenance.alerts.manage',
+      'workflow.notifications.read', 'analytics.technical.read',
+    ]],
+  );
+  await context.client.query(
+    `DELETE FROM iam.role_capabilities role_capability
+     USING iam.capabilities capability
+     WHERE role_capability.tenant_id = $1
+       AND role_capability.role_id = $2
+       AND capability.id = role_capability.capability_id
+       AND capability.code = 'maintenance.plans.publish'
+       AND role_capability.effect = 'ALLOW'`,
+    [context.tenantId, targetId(context, 'roles', 'PCM')],
   );
   await context.client.query(
     `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
@@ -131,7 +179,11 @@ export async function loadUser(
   const id = targetId(context, 'usuarios', legacyId);
   const profile = upper(row.payload.perfil) ?? 'OPERADOR';
   const mappedRole = enumValue(profile, 'perfil', roleType);
-  const baseRoleCode = mappedRole === 'CUSTOM' ? 'SYSTEM' : mappedRole;
+  const baseRoleCode = mappedRole === 'CUSTOM'
+    ? 'SYSTEM'
+    : mappedRole === 'MANAGER'
+      ? 'PCM'
+      : mappedRole;
   const specialties = jsonValue(row.payload.especialidades_json, 'especialidades_json', []);
   if (!Array.isArray(specialties)) {
     throw new Error('especialidades_json deve ser uma lista.');

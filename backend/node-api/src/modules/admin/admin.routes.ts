@@ -64,17 +64,17 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
     });
 
     app.get('/v1/admin/technical-areas', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.read'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.read'),
       schema: { ...secured, querystring: technicalAreaQuerySchema },
       handler: controller.listAreas,
     });
     app.post('/v1/admin/technical-areas', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
       schema: { ...secured, body: saveTechnicalAreaBodySchema },
       handler: controller.createArea,
     });
     app.patch('/v1/admin/technical-areas/:areaId', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
       schema: {
         ...secured,
         params: adminIdentifierParamsSchema,
@@ -83,17 +83,17 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
       handler: controller.updateArea,
     });
     app.get('/v1/admin/technical-roles', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.read'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.read'),
       schema: { ...secured, querystring: technicalRoleQuerySchema },
       handler: controller.listRoles,
     });
     app.post('/v1/admin/technical-roles', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
       schema: { ...secured, body: saveTechnicalRoleBodySchema },
       handler: controller.createRole,
     });
     app.patch('/v1/admin/technical-roles/:roleId', {
-      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
       schema: {
         ...secured,
         params: adminIdentifierParamsSchema,
