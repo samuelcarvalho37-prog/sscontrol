@@ -19,6 +19,7 @@ export const operationsIdentifierParamsSchema = Type.Object(
     materialUsageId: Type.Optional(uuid),
     serviceId: Type.Optional(uuid),
     requestId: Type.Optional(uuid),
+    participantId: Type.Optional(uuid),
   },
   { additionalProperties: false },
 );
@@ -245,6 +246,24 @@ export const startExecutionBodySchema = Type.Object(
   { additionalProperties: false },
 );
 export const pauseExecutionBodySchema = Type.Object(
+  {
+    motivo_codigo: Type.Union([
+      Type.Literal('SUPER_URGENCIA'), Type.Literal('AGUARDANDO_PECA'),
+      Type.Literal('AGUARDANDO_PRODUCAO'), Type.Literal('AGUARDANDO_TERCEIRO'),
+      Type.Literal('CONTINUIDADE_PROXIMO_TURNO'), Type.Literal('DIAGNOSTICO_PENDENTE'),
+      Type.Literal('OUTRO'),
+    ]),
+    motivo_detalhe: Type.Optional(Type.String({ minLength: 3, maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+
+export const inviteCollaboratorBodySchema = Type.Object(
+  { usuario_id: uuid },
+  { additionalProperties: false },
+);
+
+export const pauseParticipantSessionBodySchema = Type.Object(
   { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
   { additionalProperties: false },
 );

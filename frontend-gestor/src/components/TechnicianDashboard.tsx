@@ -1,10 +1,16 @@
 import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
 import {
   completeOperatorAction,
+  claimOperatorAction,
   consumeOperatorMaterial,
   createImprovementRequest,
   listOperatorActions,
   listOperatorMaterials,
+  inviteActionCollaborator,
+  respondToCollaboratorInvite,
+  startParticipantSession,
+  pauseParticipantSession,
+  endParticipantSession,
   pauseExecution,
   resumeExecution,
   saveOperatorResponses,
@@ -13,7 +19,7 @@ import {
 } from '../services/api/operatorActions'
 import { createOperatorActionDetailLoader } from './operatorActionDetailLoader'
 import { completionButtonLabel, completionErrorMessage, requiresPostInterventionRelease, submitTechnicalCompletion } from './technicianCompletion'
-import type { ConsumableMaterial, EligibleSupportTechnician, Execution, ExecutionCompletionBlocker, ExecutionItem, ImprovementCategory, OperatorAction, OperatorActionDetail, StopMode, TechnicalCompletionInput } from '../types/operatorActions'
+import type { ConsumableMaterial, EligibleSupportTechnician, Execution, ExecutionCompletionBlocker, ExecutionItem, ExecutionParticipant, ImprovementCategory, OperatorAction, OperatorActionDetail, StopMode, TechnicalCompletionInput } from '../types/operatorActions'
 
 const stopModeLabels: Record<StopMode, string> = {
   NO_STOP: 'Sem parada',
@@ -134,9 +140,12 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const [error, setError] = useState('')
   const [mode, setMode] = useState<StopMode>('NO_STOP')
   const [pauseReason, setPauseReason] = useState('')
+  const [pauseReasonCode, setPauseReasonCode] = useState('AGUARDANDO_PRODUCAO')
   const [responses, setResponses] = useState<Record<string, { resposta: string; valor: string; observacao: string }>>({})
   const [completion, setCompletion] = useState<TechnicalCompletionInput>({ resultado: '', observacao: null, modo_parada: 'NO_STOP' })
   const [eligibleSupportTechnicians, setEligibleSupportTechnicians] = useState<EligibleSupportTechnician[]>([])
+  const [participants, setParticipants] = useState<ExecutionParticipant[]>([])
+  const [inviteUserId, setInviteUserId] = useState('')
   const [hasSupportTechnicians, setHasSupportTechnicians] = useState(false)
   const [supportTechnicianIds, setSupportTechnicianIds] = useState<[string, string]>(['', ''])
   const [blockers, setBlockers] = useState<ExecutionCompletionBlocker[]>([])
@@ -210,7 +219,7 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const visibleHistory = showAllHistory ? history : history.slice(0, 5)
 
   const detailLoader = useMemo(() => createOperatorActionDetailLoader((data, availableMaterials) => {
-    setSelected(data.acao); setExecution(data.execucao); setEligibleSupportTechnicians(data.tecnicos_elegiveis ?? []); setHasSupportTechnicians(Boolean(data.execucao?.tecnicos_auxiliares?.length)); setSupportTechnicianIds([data.execucao?.tecnicos_auxiliares?.[0]?.id ?? '', data.execucao?.tecnicos_auxiliares?.[1]?.id ?? '']); setMaterials(availableMaterials); setMaterialId(availableMaterials[0]?.id ?? ''); setMode(data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP'); setCompletion(current => ({ ...current, modo_parada: data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP' }))
+    setSelected(data.acao); setExecution(data.execucao); setEligibleSupportTechnicians(data.tecnicos_elegiveis ?? []); setParticipants(data.participantes ?? []); setMaterials(availableMaterials); setMaterialId(availableMaterials[0]?.id ?? ''); setMode(data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP'); setCompletion(current => ({ ...current, modo_parada: data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP' }))
   }, setBusy, setError, setExecution), [])
 
   useEffect(() => () => detailLoader.clear(), [detailLoader])
@@ -225,6 +234,30 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
     if (await detailLoader.start(selected.id, mode)) await reload()
   }
 
+  async function claim() {
+    if (!selected) return
+    setBusy(true); setError('')
+    try { await claimOperatorAction(selected.id); await reload(); await detailLoader.open(selected.id) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível assumir a OS.') }
+    finally { setBusy(false) }
+  }
+
+  async function invite() {
+    if (!selected || !inviteUserId) return
+    setBusy(true); setError('')
+    try { await inviteActionCollaborator(selected.id, inviteUserId); setInviteUserId(''); await detailLoader.open(selected.id) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível convidar o técnico.') }
+    finally { setBusy(false) }
+  }
+
+  async function answerInvite(participant: ExecutionParticipant, accept: boolean) {
+    if (!selected) return
+    setBusy(true); setError('')
+    try { await respondToCollaboratorInvite(selected.id, participant.id, accept); await detailLoader.open(selected.id); await reload() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível responder ao convite.') }
+    finally { setBusy(false) }
+  }
+
   async function pause() {
     if (!execution) return
     const reason = pauseReason.trim()
@@ -234,7 +267,7 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
     }
     setBusy(true); setError('')
     try {
-      setExecution(await pauseExecution(execution.id, reason))
+      setExecution(await pauseExecution(execution.id, pauseReasonCode, reason))
       setPauseReason('')
       await reload()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível pausar a execução.') }
@@ -248,6 +281,20 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
       setExecution(await resumeExecution(execution.id))
       await reload()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível retomar a execução.') }
+    finally { setBusy(false) }
+  }
+
+  async function updateParticipantSession(action: 'start' | 'pause' | 'end') {
+    if (!execution) return
+    if (action === 'pause' && pauseReason.trim().length < 3) { setError('Informe o motivo da pausa individual.'); return }
+    setBusy(true); setError('')
+    try {
+      const updated = action === 'start' ? await startParticipantSession(execution.id)
+        : action === 'pause' ? await pauseParticipantSession(execution.id, pauseReason.trim())
+          : await endParticipantSession(execution.id)
+      setExecution(updated)
+      if (selected) await detailLoader.open(selected.id)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar sua sessão de trabalho.') }
     finally { setBusy(false) }
   }
 
@@ -302,19 +349,10 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   async function validateAndComplete() {
     if (!selected) return
     setError(''); setBlockers([])
-    const selectedSupports = hasSupportTechnicians ? supportTechnicianIds.filter(Boolean) : []
-    if (hasSupportTechnicians && selectedSupports.length === 0) {
-      setError('Selecione ao menos um técnico auxiliar ou desmarque a participação em equipe.')
-      return
-    }
-    if (new Set(selectedSupports).size !== selectedSupports.length) {
-      setError('O mesmo técnico não pode ser informado duas vezes.')
-      return
-    }
     setBusy(true)
     try {
       const submitted = await submitTechnicalCompletion(
-        { ...completion, modo_parada: mode, tecnicos_auxiliares_ids: selectedSupports },
+        { ...completion, modo_parada: mode },
         async (normalized) => {
           const validation = await validateOperatorActionCompletion(selected.id)
           if (!validation.pode_concluir) {
@@ -343,7 +381,8 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   }
 
   const items = execution?.itens ?? selected?.checklist_itens ?? []
-  const isSupportTechnician = selected?.papel_na_equipe === 'APOIO'
+  const isSupportTechnician = selected?.papel_na_equipe === 'COLABORADOR'
+  const myParticipation = participants.find(participant => participant.sou_destinatario)
   const requiresPostIntervention = requiresPostInterventionRelease(selected?.analise_tecnica ?? null)
   const selectedSchedule = selected ? scheduleIndicator(selected.programada_para, execution?.concluida_em ?? execution?.iniciada_em ?? selected.finalizada_em ?? selected.iniciada_em, selected.status) : null
   const itemGroups = useMemo(() => {
@@ -367,11 +406,13 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
       <section className="technician-dashboard__panel" id="technician-actions"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">FILA DE EXECUÇÃO</span><h2>{actionFilter ? 'Ordens filtradas' : 'Ordens disponíveis'}</h2></div><span>{filteredActions.length} disponível(is)</span></div><p>Selecione uma OS para consultar o escopo e iniciar a execução. As mais urgentes aparecem primeiro.</p>{actionFilter ? <button type="button" className="technician-dashboard__clear-filter" onClick={() => setActionFilter(null)}>Limpar filtro</button> : null}{loading ? <p>Carregando suas ações…</p> : actions.length === 0 ? <p>Nenhuma ação executável foi encontrada para você.</p> : filteredActions.length === 0 ? <p>Nenhuma ordem corresponde a este filtro.</p> : <><div className="technician-dashboard__list">{visibleActions.map(action => { const schedule = scheduleIndicator(action.programada_para, null, action.status); return <button type="button" className="technician-action" onClick={() => void open(action.id)} key={action.id}><span className="technician-action__top"><strong>{action.ordem_codigo}</strong><em>{label(action.prioridade)}</em></span><strong>{action.titulo}</strong><span>{[action.ativo_tag, action.ativo_nome].filter(Boolean).join(' · ')}</span><small>{[action.setor_nome, action.linha_nome, label(action.tipo)].filter(Boolean).join(' · ')} · {date(action.programada_para)}</small><span className={`technician-schedule-indicator technician-schedule-indicator--${schedule.tone}`}>{schedule.label}</span></button> })}</div>{!actionFilter && prioritizedActions.length > visibleActions.length ? <button type="button" className="technician-dashboard__clear-filter" onClick={() => setShowAllActions(true)}>Mostrar as demais {prioritizedActions.length - visibleActions.length} OS</button> : null}</>}</section>
       <section className="technician-dashboard__panel technician-dashboard__history" aria-labelledby="technician-history-title"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">HISTÓRICO</span><h2 id="technician-history-title">Últimas execuções concluídas</h2></div><span>{history.length} recente(s)</span></div>{loading ? <p>Carregando histórico…</p> : history.length === 0 ? <p>Nenhuma execução concluída foi encontrada para este técnico.</p> : <><div className="technician-dashboard__list">{visibleHistory.map(action => <article className="technician-action technician-action--completed" key={action.id}><span className="technician-action__top"><strong>{action.ordem_codigo}</strong><em>Concluída</em></span><strong>{action.titulo}</strong><span>{[action.ativo_tag, action.ativo_nome].filter(Boolean).join(' · ')}</span><small>{[action.setor_nome, action.linha_nome, label(action.tipo)].filter(Boolean).join(' · ')} · Concluída em {date(action.concluida_em)}</small></article>)}</div>{history.length > visibleHistory.length ? <button type="button" className="technician-dashboard__clear-filter" onClick={() => setShowAllHistory(true)}>Ver histórico completo</button> : null}</>}</section>
     </> : <section className="technician-dashboard__detail">
+      {selected.status === 'READY' && selected.papel_na_equipe === null ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">FILA DISPONÍVEL</span><h2>Assumir OS</h2><p>O primeiro técnico elegível que assumir será o principal. O claim não inicia o trabalho.</p><button type="button" onClick={() => void claim()} disabled={busy}>{busy ? 'Assumindo…' : 'Assumir OS'}</button></section> : null}
+      <section className="technician-dashboard__panel"><span className="pcm-section-kicker">EQUIPE DA OS</span><h2>Participantes</h2>{participants.length === 0 ? <p>Nenhum colaborador foi convidado.</p> : <ul>{participants.map(participant => <li key={participant.id}><strong>{participant.nome}</strong> · {participant.papel === 'PRIMARY' ? 'Principal' : 'Colaborador'} · {label(participant.status)} · trabalhado {duration(participant.worked_seconds)}{participant.sou_destinatario && participant.status === 'INVITED' ? <span> <button type="button" disabled={busy} onClick={() => void answerInvite(participant, true)}>Aceitar</button> <button type="button" disabled={busy} onClick={() => void answerInvite(participant, false)}>Recusar</button></span> : null}</li>)}</ul>}{selected.papel_na_equipe === 'PRINCIPAL' ? <div className="technician-dashboard__report"><label>Convidar técnico elegível<select value={inviteUserId} onChange={event => setInviteUserId(event.target.value)} disabled={busy}><option value="">Selecione um técnico</option>{eligibleSupportTechnicians.filter(technician => !participants.some(participant => participant.user_id === technician.id)).map(technician => <option value={technician.id} key={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><button type="button" onClick={() => void invite()} disabled={busy || !inviteUserId}>Convidar colaborador</button></div> : null}{execution && execution.status === 'IN_PROGRESS' && myParticipation?.status !== 'INVITED' ? <div className="technician-dashboard__report"><p>Minha sessão: {myParticipation?.session_status === 'WORKING' ? 'Trabalhando' : 'Pausada'} · {duration(myParticipation?.worked_seconds)}</p>{myParticipation?.session_status === 'WORKING' ? <><label>Motivo para pausar minha sessão<input value={pauseReason} onChange={event => setPauseReason(event.target.value)} maxLength={500} /></label><button type="button" disabled={busy || pauseReason.trim().length < 3} onClick={() => void updateParticipantSession('pause')}>Pausar meu trabalho</button><button type="button" disabled={busy} onClick={() => void updateParticipantSession('end')}>Encerrar meu trabalho</button></> : <button type="button" disabled={busy} onClick={() => void updateParticipantSession('start')}>Iniciar/retomar meu trabalho</button>}</div> : null}</section>
       <button type="button" className="technician-dashboard__back" onClick={() => { detailLoader.clear(); setBusy(false); setSelected(null); setExecution(null); setBlockers([]) }}>← Voltar para minhas ordens</button>
       <div className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">{selected.ordem_codigo}</span><h2>{selected.titulo}</h2></div><span>{label(selected.status)}</span></div><p>{selected.descricao}</p>{selectedSchedule ? <div className={`technician-schedule-summary technician-schedule-summary--${selectedSchedule.tone}`}><strong>{selectedSchedule.label}</strong><span>{selectedSchedule.description}</span></div> : null}<dl className="technician-dashboard__facts"><Fact label="Equipamento" value={[selected.ativo_tag, selected.ativo_nome].filter(Boolean).join(' · ')} /><Fact label="Setor" value={[selected.setor_tag, selected.setor_nome].filter(Boolean).join(' · ')} /><Fact label="Linha" value={[selected.linha_tag, selected.linha_nome].filter(Boolean).join(' · ')} /><Fact label="Componente" value={[selected.componente_tag, selected.componente_nome].filter(Boolean).join(' · ')} /><Fact label="Prioridade" value={label(selected.prioridade)} /><Fact label="Tipo" value={label(selected.tipo)} /><Fact label="Modo" value={label(selected.modo_execucao)} /><Fact label="Programação" value={date(selected.programada_para)} /><Fact label="Tempo em aberto" value={elapsed(selected.gerada_em)} /></dl></div>
       <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MELHORIA</span><h2>Sugerir melhoria ao PCM</h2><p>Registre a oportunidade sem criar uma OS diretamente. O PCM fará a avaliação.</p><div className="technician-dashboard__report"><label>Categoria<select value={improvementCategory} disabled={busy} onChange={event => setImprovementCategory(event.target.value as ImprovementCategory)}><option value="MODIFICATION">Modificação</option><option value="MANUFACTURE">Fabricação</option><option value="INSTALLATION">Instalação</option><option value="ADEQUACY">Adequação</option><option value="OTHER">Outra</option></select></label><label>Sugestão<textarea value={improvementSuggestion} maxLength={4000} onChange={event => setImprovementSuggestion(event.target.value)} /></label><label>Motivo<textarea value={improvementReason} maxLength={4000} onChange={event => setImprovementReason(event.target.value)} /></label></div><button type="button" disabled={busy || improvementSuggestion.trim().length < 3 || improvementReason.trim().length < 3} onClick={() => void requestImprovement()}>Enviar solicitação ao PCM</button>{improvementNotice ? <p role="status">{improvementNotice}</p> : null}</section>
       {isSupportTechnician ? <><section className="technician-dashboard__panel"><span className="pcm-section-kicker">EQUIPE DE APOIO</span><h2>OS acompanhada em equipe</h2><p>Você foi atribuído como apoio. Consulte o checklist e o andamento desta OS; o técnico líder registra a execução e realiza a conclusão.</p></section><section className="technician-dashboard__panel"><span className="pcm-section-kicker">CHECKLIST</span><h2>{selected.checklist_nome}</h2><p>{items.length} etapa(s) disponível(is) para acompanhamento.</p><ol>{items.map(item => <li key={item.id}><strong>{item.sequencia}. {item.titulo}</strong>{item.instrucao ? <span> — {item.instrucao}</span> : null}</li>)}</ol></section></> : selected.status === 'BLOCKED' ? <section className="technician-dashboard__panel"><h2>Ação bloqueada</h2><p>Esta ação não está disponível para início. Consulte o PCM para tratar o bloqueio.</p></section> : execution?.status === 'COMPLETED' ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUÍDA</span><h2>Execução concluída</h2><p>A execução foi concluída e não aceita novas respostas, evidências ou finalização.</p><dl className="technician-dashboard__facts"><Fact label="Técnico principal" value={execution.operador_nome} /><Fact label="Técnicos auxiliares" value={execution.tecnicos_auxiliares?.map(technician => technician.nome).join(' · ') || 'Nenhum'} /><Fact label="Iniciada em" value={date(execution.iniciada_em)} /><Fact label="Finalizada em" value={date(execution.concluida_em)} /><Fact label="Tempo líquido" value={duration(execution.duracao_segundos)} /><Fact label="Pausas descontadas" value={duration(execution.segundos_pausados)} /></dl></section> : !execution || execution.status === 'OPEN' ? <section className="technician-dashboard__panel"><h2>Iniciar execução</h2><p>Informe a condição da parada antes de iniciar.</p><div className="technician-dashboard__modes">{(Object.keys(stopModeLabels) as StopMode[]).map(value => <label key={value}><input type="radio" checked={mode === value} onChange={() => setMode(value)} name="stop-mode" /> {stopModeLabels[value]}</label>)}</div><button type="button" onClick={() => void start()} disabled={busy}>Iniciar execução</button></section> : execution.status === 'PAUSED' ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">EXECUÇÃO PAUSADA</span><h2>O cronômetro está parado</h2><p>{execution.observacao || 'A execução está temporariamente pausada. Retome quando o trabalho puder continuar.'}</p><p>O período de pausa não será considerado no tempo de execução da OS.</p><button type="button" onClick={() => void resume()} disabled={busy}>{busy ? 'Retomando…' : 'Retomar execução'}</button></section> : <>
-        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONTROLE DE TEMPO</span><h2>Execução em andamento</h2><p>O tempo líquido da OS está sendo contabilizado. Se precisar interromper o trabalho, registre o motivo abaixo.</p><label className="technician-dashboard__pause"><span>Motivo da pausa</span><textarea value={pauseReason} onChange={event => setPauseReason(event.target.value)} placeholder="Ex.: aguardando liberação de segurança ou material" maxLength={500} /></label><button type="button" className="technician-dashboard__pause-button" onClick={() => void pause()} disabled={busy || pauseReason.trim().length < 3}>{busy ? 'Pausando…' : 'Pausar execução'}</button></section>
+        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONTROLE DE TEMPO</span><h2>Execução em andamento</h2><p>O tempo líquido da OS está sendo contabilizado. Se precisar interromper o trabalho, registre o motivo abaixo.</p><label>Motivo operacional<select value={pauseReasonCode} onChange={event => setPauseReasonCode(event.target.value)} disabled={busy}><option value="SUPER_URGENCIA">Super Urgência</option><option value="AGUARDANDO_PECA">Aguardando peça</option><option value="AGUARDANDO_PRODUCAO">Aguardando produção</option><option value="AGUARDANDO_TERCEIRO">Aguardando terceiro</option><option value="CONTINUIDADE_PROXIMO_TURNO">Continuidade no próximo turno</option><option value="DIAGNOSTICO_PENDENTE">Diagnóstico pendente</option><option value="OUTRO">Outro</option></select></label><label className="technician-dashboard__pause"><span>Detalhe da pausa</span><textarea value={pauseReason} onChange={event => setPauseReason(event.target.value)} placeholder="Descreva o motivo da interrupção" maxLength={500} /></label><button type="button" className="technician-dashboard__pause-button" onClick={() => void pause()} disabled={busy || pauseReason.trim().length < 3}>{busy ? 'Pausando…' : 'Pausar execução'}</button></section>
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MATERIAL E CUSTO</span><h2>Registrar saída de peça</h2><p>Ao confirmar, o estoque é baixado e o custo fica vinculado de forma permanente a esta OS.</p><div className="technician-dashboard__report"><label>Peça por SKU ou nome<select value={materialId} onChange={event => setMaterialId(event.target.value)} disabled={busy || materials.length === 0}>{materials.length === 0 ? <option value="">Nenhum material disponível em estoque</option> : materials.map(material => <option value={material.id} key={material.id}>{material.sku} · {material.nome_facil || material.nome} · {currency(material.valor_unitario)} · saldo {material.estoque_atual} {material.unidade}{material.situacao_estoque === 'LOW' ? ' · estoque baixo' : ''}</option>)}</select></label><label>Quantidade<input type="number" min="0.0001" step="0.0001" value={materialQuantity} onChange={event => setMaterialQuantity(event.target.value)} disabled={busy || materials.length === 0} /></label><label>Observação (opcional)<input value={materialObservation} onChange={event => setMaterialObservation(event.target.value)} maxLength={500} disabled={busy} /></label></div><button type="button" onClick={() => void consumeMaterial()} disabled={busy || !materialId}>{busy ? 'Registrando…' : 'Baixar material e registrar custo'}</button>{execution?.materiais?.length ? <div className="technician-dashboard__report"><strong>Materiais desta OS · total {currency(execution.custo_materiais_total)}</strong>{execution.materiais.map(material => <p key={material.id}>{material.sku} · {material.nome_facil || material.nome} — {material.quantidade} {material.unidade} · {currency(material.valor_unitario)} cada · <strong>{currency(material.custo_total)}</strong></p>)}</div> : <p>Nenhum material foi consumido nesta execução.</p>}</section>
         <section className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">CHECKLIST</span><h2>{selected.checklist_nome}</h2></div><span>{items.length} item(ns)</span></div>{itemGroups.map(([category, group]) => <section className="technician-checklist-group" key={category}><h3>{checklistCategoryLabel(category)}</h3>{group.map(item => <ChecklistItemBoundary key={item.id}><ChecklistItem item={item} disabled={busy} value={responses[item.id]} onChange={value => setResponses(current => ({ ...current, [item.id]: { ...(current[item.id] ?? { resposta: itemText(item), valor: item.resposta_numero?.toString() ?? '', observacao: item.observacao ?? '' }), ...value } }))} onSave={() => void save(item)} onUpload={file => void uploadEvidence(item, file)} /></ChecklistItemBoundary>)}</section>)}</section>
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUSÃO</span><h2>Relatório técnico</h2><section className="technician-dashboard__report" aria-label="Equipe da intervenção"><h3>Equipe da intervenção</h3><p><strong>Técnico principal:</strong> {execution.operador_nome}</p><label><input type="checkbox" checked={hasSupportTechnicians} disabled={busy} onChange={event => { setHasSupportTechnicians(event.target.checked); if (!event.target.checked) setSupportTechnicianIds(['', '']) }} /> Outros técnicos participaram?</label>{hasSupportTechnicians ? <><label>Técnico auxiliar 1<select value={supportTechnicianIds[0]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [event.target.value, current[1]])}><option value="">Selecione o auxiliar</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[1]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><label>Técnico auxiliar 2 (opcional)<select value={supportTechnicianIds[1]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [current[0], event.target.value])}><option value="">Nenhum</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[0]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label></> : null}</section><div className="technician-dashboard__report">{[['diagnostico_tecnico', 'Diagnóstico técnico · Obrigatório'], ['acao_realizada', 'Ação realizada · Obrigatório'], ['pecas_materiais', 'Peças / materiais · Obrigatório'], ['medicoes', 'Medições · Obrigatório']].map(([field, text]) => <label key={field}>{text}<textarea required aria-required="true" value={completion.relatorio_tecnico?.[field as keyof NonNullable<TechnicalCompletionInput['relatorio_tecnico']>] ?? ''} onChange={event => setCompletion(current => ({ ...current, relatorio_tecnico: { diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '', ...current.relatorio_tecnico, [field]: event.target.value } }))} /></label>)}<label>Resultado · Obrigatório<textarea required aria-required="true" value={completion.resultado} onChange={event => setCompletion(current => ({ ...current, resultado: event.target.value }))} /></label><label>Observação · Obrigatório<textarea required aria-required="true" value={completion.observacao ?? ''} onChange={event => setCompletion(current => ({ ...current, observacao: event.target.value }))} /></label></div>{blockers.length > 0 && <div className="technician-dashboard__blockers" role="alert"><strong>Conclusão bloqueada</strong><ul>{blockers.map(blocker => <li key={`${blocker.item_id}-${blocker.tipo}`}>{blocker.sequencia}. {blocker.titulo} — {blocker.mensagem}</li>)}</ul></div>}<button type="button" onClick={() => void validateAndComplete()} disabled={busy}>{completionButtonLabel(requiresPostIntervention, busy)}</button></section>
