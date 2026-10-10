@@ -21,9 +21,11 @@ import {
   operationsIdentifierParamsSchema,
   pauseExecutionBodySchema,
   pauseParticipantSessionBodySchema,
+  resolvePartShortageBodySchema,
   requestChangesBodySchema,
   signatureBodySchema,
   startExecutionBodySchema,
+  shiftHandoffBodySchema,
   submitReviewBodySchema,
   technicalDemandListQuerySchema,
   workOrderListQuerySchema,
@@ -351,6 +353,51 @@ export function createOperationsRoutes(
         summary: 'Retoma uma execução pausada sem contabilizar o tempo de pausa.',
       },
       handler: controller.resumeExecution,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/executions/:executionId/resume', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'PCM retoma execução dentro do escopo de planta.' },
+      handler: controller.resumeExecutionForWorkOrder,
+    });
+    app.get('/v1/maintenance/executions/:executionId/part-shortages', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.read'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Lista pendências de peça visíveis à equipe da execução.' },
+      handler: controller.listExecutionPartShortages,
+    });
+    app.post('/v1/maintenance/executions/:executionId/part-shortages', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, consumes: ['multipart/form-data'], params: operationsIdentifierParamsSchema, summary: 'Registra falta de peça sem pausar automaticamente a OS.' },
+      handler: controller.createPartShortage,
+    });
+    app.post('/v1/maintenance/executions/:executionId/shift-handoffs', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: shiftHandoffBodySchema, summary: 'Registra passagem de turno e encerra somente a sessão do solicitante.' },
+      handler: controller.createShiftHandoff,
+    });
+    app.get('/v1/maintenance/work-orders/:workOrderId/part-shortages', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Lista pendências de peça no escopo PCM.' },
+      handler: controller.listWorkOrderPartShortages,
+    });
+    app.get('/v1/maintenance/part-shortages', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      schema: { ...secured, summary: 'Lista pendências de peça visíveis no escopo PCM do usuário.' },
+      handler: controller.listPlantPartShortages,
+    });
+    app.get('/v1/maintenance/part-shortages/:shortageId', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, summary: 'Busca pendência de peça pelo ID no escopo de planta do PCM.' },
+      handler: controller.getPlantPartShortage,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/part-shortages/:shortageId/resolve', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: resolvePartShortageBodySchema, summary: 'Resolve pendência de peça com justificativa auditável.' },
+      handler: controller.resolvePartShortage,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/part-shortages/:shortageId/cancel', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: resolvePartShortageBodySchema, summary: 'Cancela pendência de peça com justificativa auditável.' },
+      handler: controller.cancelPartShortage,
     });
     app.post('/v1/maintenance/executions/:executionId/sessions/start', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),

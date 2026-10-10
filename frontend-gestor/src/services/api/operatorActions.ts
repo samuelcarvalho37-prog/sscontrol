@@ -12,6 +12,7 @@ import type {
   EligibleSupportTechnician,
   ImprovementCategory,
   ExecutionParticipant,
+  PartShortage,
 } from '../../types/operatorActions'
 import type { AdminEntityRecord } from '../../types/catalog'
 
@@ -82,6 +83,46 @@ export async function pauseParticipantSession(executionId: string, reason: strin
 export async function endParticipantSession(executionId: string): Promise<Execution> {
   const response = await callApi<Execution>('execution.sessions.end', { token: token(), execucao_id: executionId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   return requireData(response.data, 'execution.sessions.end')
+}
+
+export async function createPartShortage(executionId: string, input: {
+  partCode: string | null; description: string; quantity: number; unit: string;
+  observation: string | null; blocking: boolean; photo: File | null;
+}): Promise<Execution> {
+  const form = new FormData()
+  form.append('codigo_peca', input.partCode ?? '')
+  form.append('descricao', input.description)
+  form.append('quantidade', String(input.quantity))
+  form.append('unidade', input.unit)
+  form.append('observacao', input.observation ?? '')
+  form.append('impeditiva', String(input.blocking))
+  if (input.photo) form.append('foto', input.photo)
+  const response = await callApi<Execution>('execution.part-shortages.create', { token: token(), execucao_id: executionId, form_data: form }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  return requireData(response.data, 'execution.part-shortages.create')
+}
+
+export async function listPlantPartShortages(): Promise<PartShortage[]> {
+  const response=await callApi<{pendencias_peca?:PartShortage[]}>('maintenance.part-shortages.list',{token:token()},undefined,{timeoutMs:API_TIMEOUT_MS.DETAIL_READ})
+  return requireData(response.data,'maintenance.part-shortages.list').pendencias_peca ?? []
+}
+
+export async function getPlantPartShortage(shortageId:string):Promise<PartShortage>{
+  const response=await callApi<{pendencia_peca:PartShortage}>('maintenance.part-shortages.get',{token:token(),pendencia_id:shortageId},undefined,{timeoutMs:API_TIMEOUT_MS.DETAIL_READ})
+  return requireData(response.data,'maintenance.part-shortages.get').pendencia_peca
+}
+
+export async function transitionPartShortage(workOrderId:string, shortageId:string, transition:'resolve'|'cancel', justification:string):Promise<void>{
+  await callApi<Record<string,unknown>>(`work-orders.part-shortages.${transition}`,{token:token(),ordem_id:workOrderId,pendencia_id:shortageId,justificativa:justification},undefined,{timeoutMs:API_TIMEOUT_MS.CRITICAL_WRITE})
+}
+
+export async function createShiftHandoff(executionId:string,input:{equipmentCondition:string;pendingWork:string;recommendedNextStep:string;workPending:boolean}):Promise<Execution>{
+  const response=await callApi<Execution>('execution.shift-handoffs.create',{token:token(),execucao_id:executionId,condicao_equipamento:input.equipmentCondition,trabalho_pendente:input.pendingWork,proximo_passo:input.recommendedNextStep,ha_trabalho_pendente:input.workPending},undefined,{timeoutMs:API_TIMEOUT_MS.CRITICAL_WRITE})
+  return requireData(response.data,'execution.shift-handoffs.create')
+}
+
+export async function resumeExecutionForWorkOrder(workOrderId:string,executionId:string):Promise<Execution>{
+  const response=await callApi<Execution>('work-orders.execution.resume',{token:token(),ordem_id:workOrderId,execucao_id:executionId},undefined,{timeoutMs:API_TIMEOUT_MS.CRITICAL_WRITE})
+  return requireData(response.data,'work-orders.execution.resume')
 }
 
 export async function pauseExecution(executionId: string, motivoCodigo: string, motivoDetalhe: string | null): Promise<Execution> {

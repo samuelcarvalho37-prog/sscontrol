@@ -13,6 +13,8 @@ import {
   endParticipantSession,
   pauseExecution,
   resumeExecution,
+  createPartShortage,
+  createShiftHandoff,
   saveOperatorResponses,
   uploadExecutionEvidence,
   validateOperatorActionCompletion,
@@ -160,6 +162,17 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const [improvementSuggestion, setImprovementSuggestion] = useState('')
   const [improvementReason, setImprovementReason] = useState('')
   const [improvementNotice, setImprovementNotice] = useState('')
+  const [shortageCode,setShortageCode]=useState('')
+  const [shortageDescription,setShortageDescription]=useState('')
+  const [shortageQuantity,setShortageQuantity]=useState('1')
+  const [shortageUnit,setShortageUnit]=useState('un')
+  const [shortageObservation,setShortageObservation]=useState('')
+  const [shortageBlocking,setShortageBlocking]=useState(true)
+  const [shortagePhoto,setShortagePhoto]=useState<File|null>(null)
+  const [handoffCondition,setHandoffCondition]=useState('')
+  const [handoffPending,setHandoffPending]=useState('')
+  const [handoffNextStep,setHandoffNextStep]=useState('')
+  const [handoffHasPending,setHandoffHasPending]=useState(true)
 
   const reload = useCallback(async () => {
     setLoading(true); setError('')
@@ -298,6 +311,31 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
     finally { setBusy(false) }
   }
 
+  async function reportPartShortage(){
+    if(!execution) return
+    const quantity=Number(shortageQuantity)
+    if(shortageDescription.trim().length<3 || !Number.isFinite(quantity) || quantity<=0 || !shortageUnit.trim()) {setError('Informe descrição, quantidade positiva e unidade da peça.');return}
+    setBusy(true);setError('')
+    try{
+      setExecution(await createPartShortage(execution.id,{partCode:shortageCode.trim()||null,description:shortageDescription.trim(),quantity,unit:shortageUnit.trim(),observation:shortageObservation.trim()||null,blocking:shortageBlocking,photo:shortagePhoto}))
+      setShortageCode('');setShortageDescription('');setShortageQuantity('1');setShortageObservation('');setShortagePhoto(null)
+      if(selected) await detailLoader.open(selected.id)
+    }catch(cause){setError(cause instanceof Error?cause.message:'Não foi possível registrar a falta de peça.')}
+    finally{setBusy(false)}
+  }
+
+  async function submitShiftHandoff(){
+    if(!execution || !handoffCondition.trim() || !handoffPending.trim() || handoffNextStep.trim().length<3){setError('Informe a condição do equipamento, o trabalho pendente e o próximo passo.');return}
+    setBusy(true);setError('')
+    try{
+      setExecution(await createShiftHandoff(execution.id,{equipmentCondition:handoffCondition.trim(),pendingWork:handoffPending.trim(),recommendedNextStep:handoffNextStep.trim(),workPending:handoffHasPending}))
+      setHandoffCondition('');setHandoffPending('');setHandoffNextStep('')
+      if(selected) await detailLoader.open(selected.id)
+      await reload()
+    }catch(cause){setError(cause instanceof Error?cause.message:'Não foi possível registrar a passagem de turno.')}
+    finally{setBusy(false)}
+  }
+
   async function refreshBlockers(actionId: string | undefined) {
     if (!actionId) return
     try { setBlockers((await validateOperatorActionCompletion(actionId)).pendencias ?? []) }
@@ -408,6 +446,8 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
     </> : <section className="technician-dashboard__detail">
       {selected.status === 'READY' && selected.papel_na_equipe === null ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">FILA DISPONÍVEL</span><h2>Assumir OS</h2><p>O primeiro técnico elegível que assumir será o principal. O claim não inicia o trabalho.</p><button type="button" onClick={() => void claim()} disabled={busy}>{busy ? 'Assumindo…' : 'Assumir OS'}</button></section> : null}
       <section className="technician-dashboard__panel"><span className="pcm-section-kicker">EQUIPE DA OS</span><h2>Participantes</h2>{participants.length === 0 ? <p>Nenhum colaborador foi convidado.</p> : <ul>{participants.map(participant => <li key={participant.id}><strong>{participant.nome}</strong> · {participant.papel === 'PRIMARY' ? 'Principal' : 'Colaborador'} · {label(participant.status)} · trabalhado {duration(participant.worked_seconds)}{participant.sou_destinatario && participant.status === 'INVITED' ? <span> <button type="button" disabled={busy} onClick={() => void answerInvite(participant, true)}>Aceitar</button> <button type="button" disabled={busy} onClick={() => void answerInvite(participant, false)}>Recusar</button></span> : null}</li>)}</ul>}{selected.papel_na_equipe === 'PRINCIPAL' ? <div className="technician-dashboard__report"><label>Convidar técnico elegível<select value={inviteUserId} onChange={event => setInviteUserId(event.target.value)} disabled={busy}><option value="">Selecione um técnico</option>{eligibleSupportTechnicians.filter(technician => !participants.some(participant => participant.user_id === technician.id)).map(technician => <option value={technician.id} key={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><button type="button" onClick={() => void invite()} disabled={busy || !inviteUserId}>Convidar colaborador</button></div> : null}{execution && execution.status === 'IN_PROGRESS' && myParticipation?.status !== 'INVITED' ? <div className="technician-dashboard__report"><p>Minha sessão: {myParticipation?.session_status === 'WORKING' ? 'Trabalhando' : 'Pausada'} · {duration(myParticipation?.worked_seconds)}</p>{myParticipation?.session_status === 'WORKING' ? <><label>Motivo para pausar minha sessão<input value={pauseReason} onChange={event => setPauseReason(event.target.value)} maxLength={500} /></label><button type="button" disabled={busy || pauseReason.trim().length < 3} onClick={() => void updateParticipantSession('pause')}>Pausar meu trabalho</button><button type="button" disabled={busy} onClick={() => void updateParticipantSession('end')}>Encerrar meu trabalho</button></> : <button type="button" disabled={busy} onClick={() => void updateParticipantSession('start')}>Iniciar/retomar meu trabalho</button>}</div> : null}</section>
+      {execution ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">PEÇAS PENDENTES</span><h2>Falta de peça</h2><p>Registrar uma pendência não pausa a OS nem movimenta estoque. Se ainda houver trabalho possível, a equipe pode continuar.</p>{execution.part_shortages?.length?<ul>{execution.part_shortages.map(shortage=><li key={shortage.id}><strong>{shortage.codigo_peca||'Peça sem código'}</strong> · {shortage.descricao} · {shortage.quantidade} {shortage.unidade} · {shortage.impeditiva?'Impeditiva':'Não impeditiva'} · {label(shortage.status)}{shortage.evidence_url?<a href={shortage.evidence_url} target="_blank" rel="noreferrer"> · Abrir foto</a>:null}{shortage.justificativa?` · ${shortage.justificativa}`:''}</li>)}</ul>:<p>Nenhuma falta de peça registrada nesta OS.</p>}{execution.status==='IN_PROGRESS' && myParticipation?.session_status==='WORKING'?<div className="technician-dashboard__report"><label>Código da peça (opcional)<input value={shortageCode} maxLength={120} onChange={event=>setShortageCode(event.target.value)} disabled={busy}/></label><label>Descrição<input value={shortageDescription} maxLength={500} onChange={event=>setShortageDescription(event.target.value)} disabled={busy}/></label><label>Quantidade necessária<input type="number" min="0.0001" step="0.0001" value={shortageQuantity} onChange={event=>setShortageQuantity(event.target.value)} disabled={busy}/></label><label>Unidade<input value={shortageUnit} maxLength={40} onChange={event=>setShortageUnit(event.target.value)} disabled={busy}/></label><label>Observação<input value={shortageObservation} maxLength={2000} onChange={event=>setShortageObservation(event.target.value)} disabled={busy}/></label><label><input type="checkbox" checked={shortageBlocking} onChange={event=>setShortageBlocking(event.target.checked)} disabled={busy}/> Impede concluir enquanto não tratada</label><label>Foto opcional<input type="file" accept="image/*" capture="environment" onChange={event=>setShortagePhoto(event.target.files?.[0]??null)} disabled={busy}/></label><button type="button" onClick={()=>void reportPartShortage()} disabled={busy}>{busy?'Registrando…':'Registrar falta de peça'}</button></div>:null}</section>:null}
+      {execution?.status==='IN_PROGRESS' && myParticipation?.session_status==='WORKING'?<section className="technician-dashboard__panel"><span className="pcm-section-kicker">PASSAGEM DE TURNO</span><h2>Encerrar meu turno</h2><p>Somente sua sessão será encerrada. Se você for o último em atividade e houver trabalho pendente, a OS será pausada para continuidade no próximo turno.</p><label>Condição do equipamento<textarea value={handoffCondition} maxLength={2000} onChange={event=>setHandoffCondition(event.target.value)} disabled={busy}/></label><label>Atividades/trabalho pendente<textarea value={handoffPending} maxLength={4000} onChange={event=>setHandoffPending(event.target.value)} disabled={busy}/></label><label>Próximo passo recomendado<textarea value={handoffNextStep} maxLength={2000} onChange={event=>setHandoffNextStep(event.target.value)} disabled={busy}/></label><label><input type="checkbox" checked={handoffHasPending} onChange={event=>setHandoffHasPending(event.target.checked)} disabled={busy}/> Ainda há trabalho pendente</label><button type="button" onClick={()=>void submitShiftHandoff()} disabled={busy||handoffCondition.trim().length<3||!handoffPending.trim()||handoffNextStep.trim().length<3}>{busy?'Registrando…':'Encerrar meu turno'}</button>{execution.shift_handoffs?.length?<ul>{execution.shift_handoffs.map(handoff=><li key={handoff.id}>{handoff.tecnico} · {date(handoff.registrado_em)} · próximo passo: {handoff.proximo_passo}</li>)}</ul>:null}</section>:null}
       <button type="button" className="technician-dashboard__back" onClick={() => { detailLoader.clear(); setBusy(false); setSelected(null); setExecution(null); setBlockers([]) }}>← Voltar para minhas ordens</button>
       <div className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">{selected.ordem_codigo}</span><h2>{selected.titulo}</h2></div><span>{label(selected.status)}</span></div><p>{selected.descricao}</p>{selectedSchedule ? <div className={`technician-schedule-summary technician-schedule-summary--${selectedSchedule.tone}`}><strong>{selectedSchedule.label}</strong><span>{selectedSchedule.description}</span></div> : null}<dl className="technician-dashboard__facts"><Fact label="Equipamento" value={[selected.ativo_tag, selected.ativo_nome].filter(Boolean).join(' · ')} /><Fact label="Setor" value={[selected.setor_tag, selected.setor_nome].filter(Boolean).join(' · ')} /><Fact label="Linha" value={[selected.linha_tag, selected.linha_nome].filter(Boolean).join(' · ')} /><Fact label="Componente" value={[selected.componente_tag, selected.componente_nome].filter(Boolean).join(' · ')} /><Fact label="Prioridade" value={label(selected.prioridade)} /><Fact label="Tipo" value={label(selected.tipo)} /><Fact label="Modo" value={label(selected.modo_execucao)} /><Fact label="Programação" value={date(selected.programada_para)} /><Fact label="Tempo em aberto" value={elapsed(selected.gerada_em)} /></dl></div>
       <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MELHORIA</span><h2>Sugerir melhoria ao PCM</h2><p>Registre a oportunidade sem criar uma OS diretamente. O PCM fará a avaliação.</p><div className="technician-dashboard__report"><label>Categoria<select value={improvementCategory} disabled={busy} onChange={event => setImprovementCategory(event.target.value as ImprovementCategory)}><option value="MODIFICATION">Modificação</option><option value="MANUFACTURE">Fabricação</option><option value="INSTALLATION">Instalação</option><option value="ADEQUACY">Adequação</option><option value="OTHER">Outra</option></select></label><label>Sugestão<textarea value={improvementSuggestion} maxLength={4000} onChange={event => setImprovementSuggestion(event.target.value)} /></label><label>Motivo<textarea value={improvementReason} maxLength={4000} onChange={event => setImprovementReason(event.target.value)} /></label></div><button type="button" disabled={busy || improvementSuggestion.trim().length < 3 || improvementReason.trim().length < 3} onClick={() => void requestImprovement()}>Enviar solicitação ao PCM</button>{improvementNotice ? <p role="status">{improvementNotice}</p> : null}</section>

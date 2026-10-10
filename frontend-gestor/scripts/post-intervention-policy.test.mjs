@@ -123,6 +123,27 @@ test('não transforma ocorrência operacional em pendência de Qualidade ou Segu
   }
 });
 
+test('notificação de falta de peça do PCM abre a pendência pelo ID interno', async () => {
+  const { notificationNavigation, notificationActionLabel } = await notificationPolicyModule();
+  const notification = {
+    tipo: 'PART_SHORTAGE_REPORTED',
+    entidade_tipo: 'WORK_ORDER_PART_SHORTAGE',
+    entidade_id: 'shortage-internal-id',
+    titulo: 'Falta de peça · OS-00000011',
+  };
+  assert.deepEqual(notificationNavigation(notification, 'PCM'), {
+    kind: 'part-shortage',
+    id: 'shortage-internal-id',
+  });
+  assert.deepEqual(notificationNavigation(notification, 'GESTOR'), {
+    kind: 'part-shortage',
+    id: 'shortage-internal-id',
+  });
+  assert.equal(notificationNavigation(notification, 'TECNICO'), null);
+  assert.equal(notificationActionLabel(notification, 'PCM'), 'Ver contexto');
+  assert.equal(notificationNavigation(notification, 'PCM').id.includes('OS-00000011'), false);
+});
+
 test('notificação explícita de pós-intervenção abre a demanda exata e mantém deep-link após refresh', async () => {
   const {
     notificationNavigation,

@@ -135,6 +135,22 @@ export interface EvidenceUploadInput {
   readonly capturedAt: string | null;
 }
 
+export interface PartShortageInput {
+  readonly partCode: string | null;
+  readonly description: string;
+  readonly quantity: number;
+  readonly unit: string;
+  readonly observation: string | null;
+  readonly blocking: boolean;
+}
+
+export interface ShiftHandoffInput {
+  readonly equipmentCondition: string;
+  readonly pendingWork: string;
+  readonly recommendedNextStep: string;
+  readonly workPending: boolean;
+}
+
 export interface CompletionInput {
   readonly technicalReport?: Readonly<{
     diagnostico_tecnico: string;
