@@ -130,7 +130,6 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
           'maintenance.checklists.publish',
           'maintenance.plans.read',
           'maintenance.plans.manage',
-          'maintenance.plans.publish',
         ],
       ],
     );
@@ -161,6 +160,36 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
         ],
       ],
     );
+    const planCapabilityGrants = await client.query<{
+      role_code: string;
+      capability_code: string;
+    }>(
+      `
+        SELECT role.code AS role_code, capability.code AS capability_code
+        FROM iam.role_capabilities role_capability
+        JOIN iam.roles role
+          ON role.tenant_id = role_capability.tenant_id
+         AND role.id = role_capability.role_id
+        JOIN iam.capabilities capability
+          ON capability.id = role_capability.capability_id
+        WHERE role_capability.tenant_id = $1
+          AND role.id = ANY($2::uuid[])
+          AND capability.code = ANY($3::text[])
+          AND role_capability.effect = 'ALLOW'
+        ORDER BY role.code, capability.code
+      `,
+      [
+        tenantId,
+        [ids.adminRole, ids.platformAdminRole],
+        ['maintenance.plans.read', 'maintenance.plans.manage', 'maintenance.plans.publish'],
+      ],
+    );
+    assert.deepEqual(planCapabilityGrants.rows, [
+      { role_code: 'ADMIN', capability_code: 'maintenance.plans.publish' },
+      { role_code: 'ADMIN', capability_code: 'maintenance.plans.read' },
+      { role_code: 'PCM', capability_code: 'maintenance.plans.manage' },
+      { role_code: 'PCM', capability_code: 'maintenance.plans.read' },
+    ]);
     await client.query(
       `
         INSERT INTO iam.technical_areas (
@@ -638,6 +667,21 @@ test(
     });
     assert.equal(createPlanResponse.statusCode, 200, createPlanResponse.body);
     const planId: string = createPlanResponse.json().data.id;
+
+    const pcmCanEditPlan = await app.inject({
+      method: 'PATCH',
+      url: `/v1/maintenance/plans/${planId}`,
+      headers: adminHeaders,
+      payload: { nome: 'Plano periódico integral revisado pelo PCM' },
+    });
+    assert.equal(pcmCanEditPlan.statusCode, 200, pcmCanEditPlan.body);
+
+    const pcmCannotPublishPlan = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/plans/${planId}/publish`,
+      headers: adminHeaders,
+    });
+    assert.equal(pcmCannotPublishPlan.statusCode, 403, pcmCannotPublishPlan.body);
 
     const adminCannotCreatePlan = await app.inject({
       method: 'POST',

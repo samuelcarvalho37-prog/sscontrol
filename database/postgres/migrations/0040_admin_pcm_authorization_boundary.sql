@@ -49,7 +49,6 @@ DECLARE
   'maintenance.checklists.publish',
   'maintenance.plans.read',
   'maintenance.plans.manage',
-  'maintenance.plans.publish',
   'cmms.structure.read',
   'cmms.structure.manage',
   'cmms.assets.read',
@@ -158,6 +157,30 @@ BEGIN
       AND role.status = 'ACTIVE'
       AND capability.status = 'ACTIVE'
     ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW';
+
+    -- PCM manages plan content but cannot self-publish. Remove pre-existing
+    -- role and direct-user ALLOW grants while leaving ADMIN publication intact.
+    DELETE FROM iam.role_capabilities role_capability
+    USING iam.roles role, iam.capabilities capability
+    WHERE role_capability.tenant_id = tenant_record.id
+      AND role.tenant_id = role_capability.tenant_id
+      AND role.id = role_capability.role_id
+      AND role.code = 'PCM'
+      AND capability.id = role_capability.capability_id
+      AND capability.code = 'maintenance.plans.publish'
+      AND role_capability.effect = 'ALLOW';
+
+    DELETE FROM iam.user_capabilities user_capability
+    USING iam.user_roles user_role, iam.roles role, iam.capabilities capability
+    WHERE user_capability.tenant_id = tenant_record.id
+      AND user_role.tenant_id = user_capability.tenant_id
+      AND user_role.user_id = user_capability.user_id
+      AND role.tenant_id = user_role.tenant_id
+      AND role.id = user_role.role_id
+      AND role.code = 'PCM'
+      AND capability.id = user_capability.capability_id
+      AND capability.code = 'maintenance.plans.publish'
+      AND user_capability.effect = 'ALLOW';
 
     IF NOT EXISTS (
       SELECT 1 FROM iam.roles role

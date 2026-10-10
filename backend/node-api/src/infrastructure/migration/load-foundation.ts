@@ -123,7 +123,7 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
       'cmms.materials.read', 'cmms.materials.manage', 'cmms.readings.create',
       'maintenance.checklists.read', 'maintenance.checklists.manage',
       'maintenance.checklists.review', 'maintenance.checklists.publish',
-      'maintenance.plans.read', 'maintenance.plans.manage', 'maintenance.plans.publish',
+      'maintenance.plans.read', 'maintenance.plans.manage',
       'maintenance.work-orders.read', 'maintenance.work-orders.manage',
       'maintenance.work-orders.review', 'maintenance.work-orders.release',
       'maintenance.actions.assign', 'maintenance.executions.read',
@@ -132,6 +132,16 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
       'maintenance.alerts.read', 'maintenance.alerts.manage',
       'workflow.notifications.read', 'analytics.technical.read',
     ]],
+  );
+  await context.client.query(
+    `DELETE FROM iam.role_capabilities role_capability
+     USING iam.capabilities capability
+     WHERE role_capability.tenant_id = $1
+       AND role_capability.role_id = $2
+       AND capability.id = role_capability.capability_id
+       AND capability.code = 'maintenance.plans.publish'
+       AND role_capability.effect = 'ALLOW'`,
+    [context.tenantId, targetId(context, 'roles', 'PCM')],
   );
   await context.client.query(
     `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
