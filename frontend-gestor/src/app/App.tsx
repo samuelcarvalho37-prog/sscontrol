@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
 import { PcmDashboard } from '../components/PcmDashboard'
+import { PcmMaintenanceWorkspace } from '../components/PcmMaintenanceWorkspace'
 import { TechnicianDashboard } from '../components/TechnicianDashboard'
 import {
   AppNavigation,
@@ -131,6 +132,8 @@ export function App() {
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
   const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
+  const canManageMaintenance = ['PCM', 'GESTOR'].includes(normalizedProfile)
+    && Boolean(session?.user.capacidades?.includes('maintenance.plans.manage'))
   const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
 
@@ -498,6 +501,7 @@ export function App() {
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
+              onClearFocusOccurrence={() => setAnalyticsFocusOccurrence('')}
               technicalContext={technicalContext}
               onOpenNotifications={() => setNotificationOpen(true)}
               onOpenDecision={(kind, id) => {
@@ -518,6 +522,9 @@ export function App() {
             }
             </>
           ) : null}
+          {section === 'maintenance' && canManageMaintenance ? (
+            <PcmMaintenanceWorkspace onSessionExpired={expireSession} />
+          ) : null}
           {section === 'scan' ? (
             <GestorQrWorkspace
               onOpenAsset={(assetId) => handleOpenAnalytics(assetId)}
@@ -536,6 +543,7 @@ export function App() {
           canValidate={technicalContext?.pode_validar ?? false}
           isTechnician={isTechnician}
           canReadAnalytics={canReadAnalytics}
+          canManageMaintenance={canManageMaintenance}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}
         />

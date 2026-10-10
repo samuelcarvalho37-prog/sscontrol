@@ -241,7 +241,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     );
     await client.query(
       `INSERT INTO iam.roles (id,tenant_id,code,name,description,role_type,protected) VALUES
-      ($1,$5,'OPS_ADMIN','Administrador','Administra o fluxo.','ADMIN',true),
+      ($1,$5,'PCM','Planejamento e Controle da Manutenção','Administra o fluxo.','MANAGER',true),
       ($2,$5,'QUALIDADE','Qualidade','Valida requisitos de qualidade.','MANAGER',true),
       ($3,$5,'SEGURANCA','Segurança','Valida requisitos de segurança.','MANAGER',true),
       ($4,$5,'TECNICO','Operador','Executa o fluxo.','OPERATOR',true)`,
@@ -512,7 +512,7 @@ test(
         `INSERT INTO maintenance.operational_occurrences
          (id,tenant_id,asset_id,occurrence_type,title,description,severity,reported_by,reporter_role_snapshot)
          VALUES ($1,$2,$3,'MECHANICAL_FAILURE','Falha mecânica para conversão concorrente',
-           'Ocorrência isolada usada para validar conversão idempotente em OS.','HIGH',$4,'ADMIN:ADMIN')`,
+           'Ocorrência isolada usada para validar conversão idempotente em OS.','HIGH',$4,'PCM:MANAGER')`,
         [occurrenceId, tenantId, ids.asset, ids.admin],
       );
       await client.query(
@@ -521,7 +521,7 @@ test(
           action_payload,audience,deduplication_key)
          VALUES ($1,$2,'OCCURRENCE_REPORTED','Falha mecânica para conversão concorrente',
            'Ocorrência aguarda conversão.','OPERATIONAL_OCCURRENCE',$3::uuid,'HIGH','ACTIVE',
-           jsonb_build_object('entityId',$3::text),jsonb_build_object('roleTypes',jsonb_build_array('ADMIN')),$4)`,
+           jsonb_build_object('entityId',$3::text),jsonb_build_object('roleCodes',jsonb_build_array('PCM')),$4)`,
         [
           occurrenceNotificationId,
           tenantId,
@@ -546,7 +546,7 @@ test(
             action_payload,audience,deduplication_key)
            VALUES ($1,$2,'OCCURRENCE_REPORTED','Ocorrência operacional histórica',
              'Notificação legada não deve chegar à fila de validação.',$3,$4::uuid,'HIGH','ACTIVE',
-             jsonb_build_object('entityId',$4::text),jsonb_build_object('roleTypes',jsonb_build_array('ADMIN')),$5)`,
+             jsonb_build_object('entityId',$4::text),jsonb_build_object('roleCodes',jsonb_build_array('PCM')),$5)`,
           [notificationId, tenantId, entityType, occurrenceId, `occurrence:${occurrenceId}:${entityType}`],
         );
         await client.query(

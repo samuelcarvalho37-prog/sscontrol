@@ -240,7 +240,7 @@ export function TechnicalAnalysisDialog({
         await sendGestorTechnicalAnalysis(result.analise.id);
       }
       await onChanged(
-        "Análise estruturada enviada ao Administrador com etapas, segurança e critérios de aceite.",
+        "Análise estruturada enviada ao PCM com etapas, segurança e critérios de aceite.",
       );
     } catch (cause) {
       setError(
@@ -386,7 +386,7 @@ export function TechnicalAnalysisDialog({
                   <span>
                     <strong>Modelo de checklist</strong>
                     <small>
-                      O Admin recebe a estrutura pronta para completar.
+                      O PCM recebe a estrutura pronta para completar.
                     </small>
                   </span>
                 </button>
@@ -565,7 +565,7 @@ export function TechnicalAnalysisDialog({
                   ? "Enviando…"
                   : recommendOrder
                     ? "Solicitar criação da OS"
-                    : "Enviar análise ao Administrador"}
+                    : "Enviar análise ao PCM"}
               </button>
             ) : null}
           </div>

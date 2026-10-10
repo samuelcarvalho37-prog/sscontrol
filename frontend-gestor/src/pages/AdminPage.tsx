@@ -8,8 +8,6 @@ import { AdminChecklistBuilder } from '../components/AdminChecklistBuilder'
 import { AdminTechnicalStructure } from '../components/AdminTechnicalStructure'
 import { AdminInterventionsWorkspace } from '../components/AdminInterventionsWorkspace'
 import { AdminAnalyticsWorkspace } from '../components/AdminAnalyticsWorkspace'
-import { PcmDashboard } from '../components/PcmDashboard'
-import { usesNodeApi } from '../services/api/config'
 import { AdminDocumentsWorkspace } from '../components/AdminDocumentsWorkspace'
 import { AdminGovernanceWorkspace } from '../components/AdminGovernanceWorkspace'
 import { AdminBackupWorkspace } from '../components/AdminBackupWorkspace'
@@ -48,6 +46,7 @@ export type AdminModule =
   | 'assets'
   | 'checklists'
   | 'maintenance'
+  | 'plan-approvals'
   | 'inventory'
   | 'workforce'
   | 'operations'
@@ -128,7 +127,7 @@ export function AdminPage({
   }, [])
 
   useEffect(() => {
-    if (['configuration', 'imports', 'structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations', 'analytics', 'documents', 'governance', 'backup'].includes(tab)) {
+    if (['configuration', 'imports', 'structure', 'assets', 'checklists', 'maintenance', 'plan-approvals', 'inventory', 'workforce', 'operations', 'analytics', 'documents', 'governance', 'backup'].includes(tab)) {
       setLoading(false)
       return undefined
     }
@@ -342,12 +341,6 @@ export function AdminPage({
             <section className="admin-command-control-panel">
               <header><div><span className="eyebrow">CONTROLES CENTRAIS</span><h2>Governança do sistema</h2></div><span className={`manager-live-sync manager-live-sync--compact${refreshing ? ' is-syncing' : ''}`}><i aria-hidden="true" />{refreshing ? 'Sincronizando' : 'Ao vivo'}</span></header>
               <div className="admin-command-module-grid">
-                <button type="button" onClick={() => setTab('structure')}><AssetIcon /><span><strong>Estrutura fabril</strong><small>Plantas, setores e linhas com vínculos controlados.</small></span><b>Assistida</b></button>
-                <button type="button" onClick={() => setTab('assets')}><AssetIcon /><span><strong>Cadastro técnico</strong><small>Equipamentos, componentes, criticidade e localização.</small></span><b>Rastreável</b></button>
-                <button type="button" onClick={() => setTab('checklists')}><CheckIcon /><span><strong>Construtor de checklist</strong><small>Etapas dinâmicas, evidências e filtro técnico.</small></span><b>Validado</b></button>
-                <button type="button" onClick={() => setTab('operations')}><SettingsIcon /><span><strong>Programação, intervenções e OS</strong><small>Planos, gatilhos, demandas planejadas e não planejadas.</small></span><b>Unificada</b></button>
-                <button type="button" onClick={() => setTab('inventory')}><AssetIcon /><span><strong>Materiais e peças</strong><small>Itens, unidades, saldo e estoque mínimo.</small></span><b>Controlado</b></button>
-                <button type="button" onClick={() => setTab('workforce')}><UsersIcon /><span><strong>Áreas e cargos técnicos</strong><small>Destinos, especialistas e permissão de assinatura.</small></span><b>Roteável</b></button>
                 <button type="button" onClick={() => setTab('analytics')}><SettingsIcon /><span><strong>Indicadores e relatórios</strong><small>Disponibilidade, falhas, MTTR, MTBF, lead time e SLA.</small></span><b>Calculado</b></button>
                 <button type="button" onClick={() => setTab('documents')}><AssetIcon /><span><strong>Documentos técnicos</strong><small>Arquivos privados, validade e revisões imutáveis.</small></span><b>Versionado</b></button>
                 <button type="button" onClick={() => setTab('governance')}><ShieldIcon /><span><strong>Auditoria e monitoramento</strong><small>Integridade, eventos e alterações com dados sensíveis protegidos.</small></span><b>Observável</b></button>
@@ -374,13 +367,13 @@ export function AdminPage({
           <section className="admin-command-flow-panel">
             <header><span className="eyebrow">FLUXO CORPORATIVO</span><h2>Como a governança chega ao chão de fábrica</h2></header>
             <div className="admin-command-flow">
-              <article><b>01</b><span><strong>Administrador</strong><small>Cria planos, modelos e políticas.</small></span></article>
+              <article><b>01</b><span><strong>Administrador</strong><small>Governa identidades, permissões, auditoria e suporte.</small></span></article>
               <i aria-hidden="true">→</i>
-              <article><b>02</b><span><strong>Filtro técnico</strong><small>Gestor valida, encaminha e solicita assinatura.</small></span></article>
+              <article><b>02</b><span><strong>PCM</strong><small>Analisa ocorrências, prepara e libera ordens.</small></span></article>
               <i aria-hidden="true">→</i>
-              <article><b>03</b><span><strong>Especialista</strong><small>Qualidade, manutenção ou segurança libera.</small></span></article>
+              <article><b>03</b><span><strong>Manutenção</strong><small>Executa a ordem e registra evidências.</small></span></article>
               <i aria-hidden="true">→</i>
-              <article><b>04</b><span><strong>Operador</strong><small>Executa a ordem e registra evidências.</small></span></article>
+              <article><b>04</b><span><strong>Administrador</strong><small>Acompanha indicadores sem assumir a operação.</small></span></article>
             </div>
           </section>
         </section>
@@ -395,6 +388,16 @@ export function AdminPage({
       {tab === 'assets' ? <AdminCatalogWorkspace scope="assets" onSessionExpired={onSessionExpired} onOpenImports={() => setTab('imports')} /> : null}
 
       {tab === 'inventory' ? <AdminCatalogWorkspace scope="inventory" onSessionExpired={onSessionExpired} onOpenImports={() => setTab('imports')} /> : null}
+
+      {tab === 'plan-approvals' ? (
+        <AdminCatalogWorkspace
+          scope="maintenance"
+          approvalOnly
+          onSessionExpired={onSessionExpired}
+          onOpenImports={() => undefined}
+          showImports={false}
+        />
+      ) : null}
 
       {tab === 'checklists' ? (
         <AdminChecklistBuilder
@@ -414,7 +417,7 @@ export function AdminPage({
         />
       ) : null}
 
-      {tab === 'analytics' ? (usesNodeApi() ? <PcmDashboard onSessionExpired={onSessionExpired} /> : <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} />) : null}
+      {tab === 'analytics' ? <AdminAnalyticsWorkspace onSessionExpired={onSessionExpired} /> : null}
 
       {tab === 'documents' ? <AdminDocumentsWorkspace onSessionExpired={onSessionExpired} /> : null}
 

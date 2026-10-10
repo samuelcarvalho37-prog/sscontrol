@@ -14,13 +14,14 @@ const tenantId = randomUUID();
 
 const ids = {
   admin: randomUUID(), quality: randomUUID(), safety: randomUUID(), maintenance: randomUUID(),
-  adminRole: randomUUID(), validatorRole: randomUUID(), qualityArea: randomUUID(), safetyArea: randomUUID(), maintenanceArea: randomUUID(),
+  adminRole: randomUUID(), platformAdmin: randomUUID(), platformAdminRole: randomUUID(), validatorRole: randomUUID(), qualityArea: randomUUID(), safetyArea: randomUUID(), maintenanceArea: randomUUID(),
   qualityTechnicalRole: randomUUID(), safetyTechnicalRole: randomUUID(), maintenanceTechnicalRole: randomUUID(),
   plant: randomUUID(), sector: randomUUID(), line: randomUUID(), asset: randomUUID(), component: randomUUID(), parameter: randomUUID(),
 } as const;
 
 interface TestIdentities {
   readonly adminToken: string;
+  readonly platformAdminToken: string;
   readonly qualityToken: string;
   readonly safetyToken: string;
   readonly tenantSlug: string;
@@ -62,6 +63,7 @@ function sessionToken(): { readonly raw: string; readonly hash: string } {
 
 async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
   const admin = sessionToken();
+  const platformAdmin = sessionToken();
   const quality = sessionToken();
   const safety = sessionToken();
   const tenantSlug = `planning-tests-${randomUUID()}`;
@@ -82,10 +84,11 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
           id, tenant_id, code, name, description, role_type, protected
         )
         VALUES
-          ($1, $3, 'PLANNING_ADMIN', 'Administrador', 'Teste integral.', 'ADMIN', true),
-          ($2, $3, 'PLANNING_VALIDATOR', 'Validador técnico', 'Teste integral.', 'MANAGER', true)
+          ($1, $3, 'PCM', 'Planejamento e Controle da Manutenção', 'Teste integral.', 'MANAGER', true),
+          ($2, $3, 'PLANNING_VALIDATOR', 'Validador técnico', 'Teste integral.', 'MANAGER', true),
+          ($4, $3, 'ADMIN', 'Administrador de homologação', 'Aprovação de plano.', 'ADMIN', true)
       `,
-      [ids.adminRole, ids.validatorRole, tenantId],
+      [ids.adminRole, ids.validatorRole, tenantId, ids.platformAdminRole],
     );
     await client.query(
       `
@@ -93,11 +96,12 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
           id, tenant_id, employee_number, name, email, first_access_required
         )
         VALUES
-          ($1, $4, 'USR-PLN-ADM', 'Admin Planejamento', 'planning.admin@fabcontrol.local', false),
+          ($1, $4, 'USR-PLN-PCM', 'PCM Planejamento', 'planning.pcm@fabcontrol.local', false),
           ($2, $4, 'USR-PLN-QUA', 'Validador Qualidade', 'planning.quality@fabcontrol.local', false),
-          ($3, $4, 'USR-PLN-SEG', 'Validador Segurança', 'planning.safety@fabcontrol.local', false)
+          ($3, $4, 'USR-PLN-SEG', 'Validador Segurança', 'planning.safety@fabcontrol.local', false),
+          ($5, $4, 'USR-PLN-ADMIN', 'Administrador homologador', 'planning.admin@fabcontrol.local', false)
       `,
-      [ids.admin, ids.quality, ids.safety, tenantId],
+      [ids.admin, ids.quality, ids.safety, tenantId, ids.platformAdmin],
     );
     await client.query(
       `
@@ -105,9 +109,10 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
         VALUES
           ($1, $2, $5),
           ($1, $3, $6),
-          ($1, $4, $6)
+          ($1, $4, $6),
+          ($1, $7, $8)
       `,
-      [tenantId, ids.admin, ids.quality, ids.safety, ids.adminRole, ids.validatorRole],
+      [tenantId, ids.admin, ids.quality, ids.safety, ids.adminRole, ids.validatorRole, ids.platformAdmin, ids.platformAdminRole],
     );
     await client.query(
       `
@@ -128,6 +133,15 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
           'maintenance.plans.publish',
         ],
       ],
+    );
+    await client.query(
+      `
+        INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
+        SELECT $1, $2, capability.id, 'ALLOW'
+        FROM iam.capabilities capability
+        WHERE capability.code = ANY($3::text[])
+      `,
+      [tenantId, ids.platformAdminRole, ['maintenance.plans.read', 'maintenance.plans.publish']],
     );
     await client.query(
       `
@@ -228,6 +242,7 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
     );
     for (const [userId, tokenHash] of [
       [ids.admin, admin.hash],
+      [ids.platformAdmin, platformAdmin.hash],
       [ids.quality, quality.hash],
       [ids.safety, safety.hash],
     ] as const) {
@@ -309,6 +324,7 @@ async function seedPlanningScenario(pool: Pool): Promise<TestIdentities> {
 
   return {
     adminToken: admin.raw,
+    platformAdminToken: platformAdmin.raw,
     qualityToken: quality.raw,
     safetyToken: safety.raw,
     tenantSlug,
@@ -352,6 +368,7 @@ test(
       logger: false,
     });
     const adminHeaders = bearer(identities.adminToken);
+    const approvalHeaders = bearer(identities.platformAdminToken);
 
     context.after(async () => {
       await app.close();
@@ -593,33 +610,50 @@ test(
       /só podem ser alteradas em uma revisão editável/iu,
     );
 
+    const planPayload = {
+      codigo: 'PLN-PLN-001',
+      nome: 'Plano periódico integral',
+      ativo_id: ids.asset,
+      componente_id: ids.component,
+      tipo: 'PREVENTIVE',
+      checklist_versao_id: publishedVersionId,
+      criticidade: 'HIGH',
+      tipo_disparo: 'PERIODICITY',
+      valor_disparo: null,
+      unidade_disparo: 'DAYS',
+      recorrencia_dias: 30,
+      duracao_estimada_minutos: 60,
+      exige_loto: true,
+      exige_evidencia: true,
+      maximo_sessoes: 1,
+      modo_parada: 'MANDATORY_STOP',
+      analise_tecnica: { objetivo: 'Homologar plano periódico.' },
+      area_tecnica_id: ids.qualityArea,
+    };
     const createPlanResponse = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/plans',
       headers: adminHeaders,
-      payload: {
-        codigo: 'PLN-PLN-001',
-        nome: 'Plano periódico integral',
-        ativo_id: ids.asset,
-        componente_id: ids.component,
-        tipo: 'PREVENTIVE',
-        checklist_versao_id: publishedVersionId,
-        criticidade: 'HIGH',
-        tipo_disparo: 'PERIODICITY',
-        valor_disparo: null,
-        unidade_disparo: 'DAYS',
-        recorrencia_dias: 30,
-        duracao_estimada_minutos: 60,
-        exige_loto: true,
-        exige_evidencia: true,
-        maximo_sessoes: 1,
-        modo_parada: 'MANDATORY_STOP',
-        analise_tecnica: { objetivo: 'Homologar plano periódico.' },
-        area_tecnica_id: ids.qualityArea,
-      },
+      payload: planPayload,
     });
     assert.equal(createPlanResponse.statusCode, 200, createPlanResponse.body);
     const planId: string = createPlanResponse.json().data.id;
+
+    const adminCannotCreatePlan = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/plans',
+      headers: approvalHeaders,
+      payload: { ...planPayload, codigo: 'PLN-PLN-ADMIN-DENIED' },
+    });
+    assert.equal(adminCannotCreatePlan.statusCode, 403, adminCannotCreatePlan.body);
+
+    const adminPlanList = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/plans?busca=integral',
+      headers: approvalHeaders,
+    });
+    assert.equal(adminPlanList.statusCode, 200, adminPlanList.body);
+    assert.equal(adminPlanList.json().data.itens[0].id, planId);
 
     const planListResponse = await app.inject({
       method: 'GET',
@@ -636,10 +670,18 @@ test(
     const publishPlanResponse = await app.inject({
       method: 'POST',
       url: `/v1/maintenance/plans/${planId}/publish`,
-      headers: adminHeaders,
+      headers: approvalHeaders,
     });
     assert.equal(publishPlanResponse.statusCode, 200, publishPlanResponse.body);
     assert.equal(publishPlanResponse.json().data.versao_atual.status, 'PUBLISHED');
+
+    const adminCannotEditPlan = await app.inject({
+      method: 'PATCH',
+      url: `/v1/maintenance/plans/${planId}`,
+      headers: approvalHeaders,
+      payload: { status_ciclo_vida: 'INACTIVE' },
+    });
+    assert.equal(adminCannotEditPlan.statusCode, 403, adminCannotEditPlan.body);
 
     const planRevisionResponse = await app.inject({
       method: 'POST',

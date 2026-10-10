@@ -57,7 +57,7 @@ async function seedAuthorizedSession(pool: Pool): Promise<{
         INSERT INTO iam.roles (
           id, tenant_id, code, name, description, role_type, protected
         )
-        VALUES ($1, $2, 'CATALOG_ADMIN', 'Administrador do catálogo', 'Teste integral.', 'ADMIN', true)
+        VALUES ($1, $2, 'PCM', 'Planejamento e Controle da Manutenção', 'Teste integral.', 'MANAGER', true)
       `,
       [roleId, tenantId],
     );

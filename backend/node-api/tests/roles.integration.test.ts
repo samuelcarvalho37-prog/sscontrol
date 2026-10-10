@@ -78,6 +78,8 @@ test(
             ? 'ADMIN'
             : code === 'GESTOR_TECNICO'
               ? 'MANAGER'
+              : code === 'PCM'
+                ? 'MANAGER'
               : code === 'OPERADOR'
                 ? 'OPERATOR'
                 : 'CUSTOM';
@@ -106,7 +108,24 @@ test(
           OR ($3='ADMIN' AND code IN ('admin.identity.read','admin.identity.manage'))`,
           [tenantId, roleId, code],
         );
+        if (code === 'PCM') {
+          await client.query(
+            `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id)
+             SELECT $1,$2,id FROM iam.capabilities
+             WHERE code IN ('maintenance.occurrences.triage','maintenance.work-orders.manage',
+               'maintenance.work-orders.release','maintenance.plans.manage',
+               'maintenance.checklists.manage','cmms.structure.manage')`,
+            [tenantId, roleId],
+          );
+        }
       }
+      await client.query(
+        `INSERT INTO iam.user_capabilities (tenant_id,user_id,capability_id,effect)
+         SELECT $1,$2,id,'ALLOW' FROM iam.capabilities
+         WHERE code IN ('maintenance.occurrences.triage','maintenance.work-orders.manage',
+           'maintenance.work-orders.release')`,
+        [tenantId, users.get('ADMIN')],
+      );
     });
     const app = await buildApp({ environment, logger: false });
     t.after(async () => {
@@ -114,6 +133,7 @@ test(
       await pool.end();
     });
     let adminToken = '';
+    let legacyManagerToken = '';
     let technicianToken = '';
     for (const code of codes) {
       const response = await app.inject({
@@ -128,7 +148,17 @@ test(
       assert.equal(user.primaryRoleCode, code);
       assert.deepEqual(user.roleCodes, [code]);
       assert.ok(user.capacidades.includes('cmms.structure.read'));
+      if (code === 'ADMIN') {
+        assert.ok(user.capacidades.includes('maintenance.work-orders.release'));
+      }
+      if (code === 'PCM') {
+        assert.ok(user.capacidades.includes('maintenance.occurrences.triage'));
+        assert.ok(user.capacidades.includes('maintenance.work-orders.release'));
+        assert.ok(user.capacidades.includes('maintenance.plans.manage'));
+        assert.ok(user.capacidades.includes('maintenance.checklists.manage'));
+      }
       if (code === 'ADMIN') adminToken = data.access_token;
+      if (code === 'GESTOR_TECNICO') legacyManagerToken = data.access_token;
       if (code === 'TECNICO') technicianToken = data.access_token;
       const session = await app.inject({
         method: 'GET',
@@ -145,6 +175,89 @@ test(
       assert.equal(denied.statusCode, code === 'ADMIN' ? 200 : 403, denied.body);
     }
     const headers = { authorization: `Bearer ${adminToken}` };
+    const adminOperationalAttempt = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/occurrences/${randomUUID()}/technical-analysis`,
+      headers,
+      payload: {
+        titulo: 'Tentativa administrativa',
+        diagnostico: 'Teste de autorização sem alteração funcional.',
+        risco: 'Nenhum.',
+        causa_provavel: null,
+        recomendacao: 'Não executar.',
+        recomenda_checklist: false,
+        recomenda_ordem_servico: false,
+        prioridade: 'LOW',
+        relatorio: {},
+      },
+    });
+    assert.equal(adminOperationalAttempt.statusCode, 403, adminOperationalAttempt.body);
+    assert.equal(adminOperationalAttempt.json().error.code, 'AUTH_ROLE_OPERATION_FORBIDDEN');
+    const adminCreateWorkOrderAttempt = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers,
+      payload: {
+        tipo_origem: 'ADMIN_TEST',
+        entidade_origem_id: null,
+        tipo_trabalho: 'CORRECTIVE',
+        modo_execucao: 'INTERNAL',
+        titulo: 'Tentativa administrativa de criar OS',
+        descricao: 'Deve ser bloqueada antes de qualquer gravação.',
+        prioridade: 'MEDIUM',
+        responsavel_id: null,
+        programada_para: null,
+        analise_tecnica: {},
+      },
+    });
+    assert.equal(adminCreateWorkOrderAttempt.statusCode, 403, adminCreateWorkOrderAttempt.body);
+    assert.equal(adminCreateWorkOrderAttempt.json().error.code, 'AUTH_ROLE_OPERATION_FORBIDDEN');
+    const adminReleaseWorkOrderAttempt = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/work-orders/${randomUUID()}/release`,
+      headers,
+    });
+    assert.equal(adminReleaseWorkOrderAttempt.statusCode, 403, adminReleaseWorkOrderAttempt.body);
+    assert.equal(adminReleaseWorkOrderAttempt.json().error.code, 'AUTH_ROLE_OPERATION_FORBIDDEN');
+    const pcmToken = (await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { matricula: 'PCM', senha: password },
+    })).json().data.access_token as string;
+    const pcmOperationalRequest = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/occurrences/${randomUUID()}/technical-analysis`,
+      headers: { authorization: `Bearer ${pcmToken}` },
+      payload: {
+        titulo: 'Teste de operação PCM',
+        diagnostico: 'O perfil PCM passa pela autorização operacional.',
+        risco: 'Nenhum.',
+        causa_provavel: null,
+        recomendacao: 'Não executar.',
+        recomenda_checklist: false,
+        recomenda_ordem_servico: false,
+        prioridade: 'LOW',
+        relatorio: {},
+      },
+    });
+    assert.equal(pcmOperationalRequest.statusCode, 404, pcmOperationalRequest.body);
+    const legacyManagerOperationalRequest = await app.inject({
+      method: 'POST',
+      url: `/v1/maintenance/occurrences/${randomUUID()}/technical-analysis`,
+      headers: { authorization: `Bearer ${legacyManagerToken}` },
+      payload: {
+        titulo: 'Tentativa sem capability',
+        diagnostico: 'Teste de bloqueio.',
+        risco: 'Nenhum.',
+        causa_provavel: null,
+        recomendacao: 'Não executar.',
+        recomenda_checklist: false,
+        recomenda_ordem_servico: false,
+        prioridade: 'LOW',
+        relatorio: {},
+      },
+    });
+    assert.equal(legacyManagerOperationalRequest.statusCode, 403, legacyManagerOperationalRequest.body);
     const matrix = await app.inject({ method: 'GET', url: '/v1/admin/permissions', headers });
     assert.equal(matrix.statusCode, 200, matrix.body);
     const profiles = profilesSchema.parse(matrix.json().data.perfis);

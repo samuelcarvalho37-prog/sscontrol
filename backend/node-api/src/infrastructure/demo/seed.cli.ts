@@ -245,9 +245,30 @@ async function seedIdentities(
       SELECT $1, $2, capability.id, 'ALLOW'
       FROM iam.capabilities capability
       WHERE capability.status = 'ACTIVE'
-      ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
+        AND capability.code = ANY($3::text[])
+      ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
     `,
-    [tenantId, ids.adminRole],
+    [tenantId, ids.adminRole, [
+      'admin.identity.read',
+      'admin.identity.manage',
+      'admin.governance.read',
+      'admin.governance.manage',
+      'admin.configuration.manage',
+      'maintenance.occurrences.read',
+      'maintenance.stops.read',
+      'maintenance.alerts.read',
+      'maintenance.work-orders.read',
+      'maintenance.executions.read',
+      'maintenance.checklists.read',
+      'maintenance.plans.read',
+      'maintenance.plans.publish',
+      'cmms.structure.read',
+      'cmms.assets.read',
+      'cmms.parameters.read',
+      'cmms.materials.read',
+      'analytics.technical.read',
+      'workflow.notifications.read',
+    ]],
   );
 
   for (const capabilityCode of [
@@ -255,11 +276,15 @@ async function seedIdentities(
     'cmms.assets.read',
     'cmms.parameters.read',
     'cmms.materials.read',
-    'cmms.readings.create',
     'maintenance.checklists.read',
     'maintenance.plans.read',
     'maintenance.work-orders.read',
     'maintenance.executions.read',
+    'maintenance.occurrences.read',
+    'maintenance.stops.read',
+    'maintenance.alerts.read',
+    'workflow.notifications.read',
+    'analytics.technical.read',
   ]) {
     await client.query(
       `
@@ -286,6 +311,34 @@ async function seedIdentities(
   await client.query(
     `
       INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
+      SELECT $1, $2, capability.id, 'ALLOW'
+      FROM iam.capabilities capability
+      WHERE capability.status = 'ACTIVE'
+        AND capability.code = ANY($3::text[])
+      ON CONFLICT (tenant_id, role_id, capability_id) DO UPDATE SET effect = 'ALLOW'
+    `,
+    [tenantId, ids.pcmRole, [
+      'cmms.structure.read', 'cmms.structure.manage',
+      'cmms.assets.read', 'cmms.assets.manage',
+      'cmms.parameters.read', 'cmms.parameters.manage',
+      'cmms.materials.read', 'cmms.materials.manage',
+      'cmms.readings.create',
+      'maintenance.checklists.read', 'maintenance.checklists.manage',
+      'maintenance.checklists.review', 'maintenance.checklists.publish',
+      'maintenance.plans.read', 'maintenance.plans.manage', 'maintenance.plans.publish',
+      'maintenance.work-orders.read', 'maintenance.work-orders.manage',
+      'maintenance.work-orders.review', 'maintenance.work-orders.release',
+      'maintenance.actions.assign', 'maintenance.executions.read',
+      'maintenance.occurrences.read', 'maintenance.occurrences.triage',
+      'maintenance.stops.read', 'maintenance.stops.manage',
+      'maintenance.alerts.read', 'maintenance.alerts.manage',
+      'workflow.notifications.read', 'analytics.technical.read',
+    ]],
+  );
+
+  await client.query(
+    `
+      INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
       SELECT $1, role.id, capability.id, 'ALLOW'
       FROM iam.roles role
       JOIN iam.capabilities capability ON capability.code IN (
@@ -308,21 +361,8 @@ async function seedIdentities(
       WHERE capability.code = 'maintenance.checklists.review'
       ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
     `,
-    [tenantId, ids.managerRole],
+    [tenantId, ids.pcmRole],
   );
-
-  for (const capabilityCode of ['maintenance.work-orders.review']) {
-    await client.query(
-      `
-        INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
-        SELECT $1, $2, capability.id, 'ALLOW'
-        FROM iam.capabilities capability
-        WHERE capability.code = $3
-        ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
-      `,
-      [tenantId, ids.managerRole, capabilityCode],
-    );
-  }
 
   for (const capabilityCode of [
     'maintenance.checklists.review',
@@ -347,12 +387,8 @@ async function seedIdentities(
 
   for (const capabilityCode of [
     'maintenance.occurrences.read',
-    'maintenance.occurrences.report',
-    'maintenance.occurrences.triage',
     'maintenance.stops.read',
-    'maintenance.stops.manage',
     'maintenance.alerts.read',
-    'maintenance.alerts.manage',
     'workflow.notifications.read',
     'analytics.technical.read',
   ]) {

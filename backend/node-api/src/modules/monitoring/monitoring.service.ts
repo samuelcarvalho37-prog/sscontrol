@@ -205,9 +205,8 @@ export class MonitoringService {
           priority: input.severity,
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `occurrence:${occurrenceId}:reported`,
-          // QUALIDADE and SEGURANCA use the MANAGER role_type for capability
-          // inheritance, but a production occurrence is a PCM triage item.
-          roles: ['ADMIN'],
+          // Operational occurrence triage belongs to PCM, never to ADMIN.
+          roles: [],
           roleCodes: ['PCM'],
         });
         return detail;
@@ -279,7 +278,7 @@ export class MonitoringService {
           user.id,
           roleSnapshot(user),
           'TECHNICAL_ANALYSIS_SENT',
-          `Análise técnica enviada ao Administrador: ${input.title}`,
+          `Análise técnica enviada ao PCM: ${input.title}`,
           { occurrenceId, analysisId, recommendsChecklist: input.recommendsChecklist },
         );
         await this.repository.writeAudit(
@@ -287,7 +286,7 @@ export class MonitoringService {
           user.tenantId,
           user.id,
           audit,
-          'TECHNICAL_ANALYSIS_SENT_TO_ADMIN',
+          'TECHNICAL_ANALYSIS_SENT_TO_PCM',
           'TECHNICAL_ANALYSIS',
           analysisId,
           detail,
@@ -301,7 +300,8 @@ export class MonitoringService {
           priority: input.priority,
           actionRoute: `/workflow/technical-analyses/${analysisId}`,
           deduplicationKey: `technical-analysis:${analysisId}:sent`,
-          roles: ['ADMIN'],
+          roles: [],
+          roleCodes: ['PCM'],
         });
         return detail;
       },
@@ -574,7 +574,8 @@ export class MonitoringService {
           priority,
           actionRoute: `/workflow/technical-analyses/${analysisId}`,
           deduplicationKey: `parameter-reading:${input.readingId}:${input.requestType}`,
-          roles: ['ADMIN'],
+          roles: [],
+          roleCodes: ['PCM'],
         });
         return {
           requested: true,
@@ -684,7 +685,7 @@ export class MonitoringService {
           priority: 'CRITICAL',
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `equipment-stop:${stopId}:treatment`,
-          roles: ['ADMIN'],
+          roles: [],
           roleCodes: ['PCM'],
         });
         return {
@@ -751,7 +752,7 @@ export class MonitoringService {
           priority: 'CRITICAL',
           actionRoute: `/maintenance/stops/${stopId}`,
           deduplicationKey: `equipment-stop:${stopId}:opened`,
-          roles: ['ADMIN'],
+          roles: [],
           roleCodes: ['PCM'],
         });
         return detail;
@@ -836,7 +837,8 @@ export class MonitoringService {
             priority: 'INFO',
             actionRoute: `/maintenance/stops/${stopId}`,
             deduplicationKey: `equipment-stop:${stopId}:completed`,
-            roles: ['ADMIN', 'MANAGER'],
+            roles: [],
+            roleCodes: ['PCM'],
           });
         }
         return detail;
@@ -990,7 +992,7 @@ export class MonitoringService {
           priority: occurrenceInput.severity,
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `alert:${alertId}:occurrence`,
-          roles: ['ADMIN'],
+          roles: [],
           roleCodes: ['PCM'],
         });
         return detail;
