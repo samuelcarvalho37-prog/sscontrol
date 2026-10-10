@@ -7,6 +7,7 @@ function upper(value: unknown): string {
 export type NotificationNavigation =
   | { kind: 'occurrence'; id: string }
   | { kind: 'technical-demand'; id: string }
+  | { kind: 'part-shortage'; id: string }
   | null
 
 export function isQualitySafetyProfile(profile: string): boolean {
@@ -57,6 +58,10 @@ export function notificationNavigation(
   const entityType = upper(notification.entidade_tipo)
   const id = String(notification.entidade_id ?? '').trim()
   if (!id) return null
+
+  if (entityType === 'WORK_ORDER_PART_SHORTAGE' && ['PCM', 'GESTOR'].includes(upper(profile))) {
+    return { kind: 'part-shortage', id }
+  }
 
   if (isOperationalOccurrenceNotification(notification)) {
     return isNotificationActionableForProfile(notification, profile)

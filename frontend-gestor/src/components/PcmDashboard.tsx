@@ -6,6 +6,7 @@ import { getGestorActionDetail, getGestorNotifications, isGestorAuthenticationEr
 import { createExternalService, getAdminIntervention, listAdminInterventions, listImprovementRequests, saveAdminIntervention, sendAdminInterventionForValidation, updateMaterialUsageCost } from '../services/api/interventions'
 import type { ImprovementRequestSummary } from '../services/api/interventions'
 import { releaseMaintenanceWorkOrder } from '../services/api/maintenanceAssignments'
+import { PcmPartShortagesPanel } from './PcmPartShortagesPanel'
 import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
@@ -581,7 +582,7 @@ interface ExecutablePlan {
   recurrenceDays: number | null
 }
 
-export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => void }) {
+export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { onSessionExpired: () => void; partShortageFocusId?: string }) {
   const [days, setDays] = useState('30')
   const [refresh, setRefresh] = useState(0)
   const [data, setData] = useState<PcmData | null>(null)
@@ -2149,6 +2150,7 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
           </details>
         </>
       )}
+      <PcmPartShortagesPanel onSessionExpired={onSessionExpired} focusShortageId={partShortageFocusId} />
       <InsightDialog insight={insight} onClose={() => setInsight(null)} />
     </section>
   )

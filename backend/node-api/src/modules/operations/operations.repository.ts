@@ -17,6 +17,8 @@ import type {
   WorkOrderInput,
   WorkOrderCorrectionInput,
   WorkOrderListQuery,
+  PartShortageInput,
+  ShiftHandoffInput,
 } from './operations.types.js';
 
 export interface OperationsRow extends QueryResultRow {
@@ -315,7 +317,7 @@ export class OperationsRepository {
     );
   }
 
-  async closeParticipantWorkInterval(client: PoolClient, tenantId: string, executionId: string, userId: string, reason: 'PAUSE'|'GLOBAL_PAUSE'|'COMPLETED'|'LEFT', pauseReason: string | null): Promise<boolean> {
+  async closeParticipantWorkInterval(client: PoolClient, tenantId: string, executionId: string, userId: string, reason: 'PAUSE'|'GLOBAL_PAUSE'|'COMPLETED'|'LEFT'|'SHIFT_HANDOFF', pauseReason: string | null): Promise<boolean> {
     const result = await client.query(
       `UPDATE maintenance.execution_participant_work_intervals
        SET ended_at=clock_timestamp(),ended_reason=$4,pause_reason=$5
@@ -323,6 +325,189 @@ export class OperationsRepository {
       [tenantId, executionId, userId, reason, pauseReason],
     );
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async insertPartShortage(client: PoolClient, tenantId: string, execution: OperationsRow, userId: string, input: PartShortageInput, evidenceId: string | null): Promise<OperationsRow> {
+    const result = await client.query<OperationsRow>(
+      `INSERT INTO maintenance.work_order_part_shortages
+       (tenant_id,work_order_id,action_id,execution_id,reported_by,part_code,description,quantity,unit,observation,blocking,evidence_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id,tenant_id,work_order_id,action_id,execution_id,reported_by,part_code,description,
+         quantity,unit,observation,blocking,evidence_id,status,created_at`,
+      [tenantId,execution.work_order_id,execution.work_order_action_id,execution.id,userId,input.partCode,
+        input.description,input.quantity,input.unit,input.observation,input.blocking,evidenceId],
+    );
+    return required(result.rows, 'A pendência de peça não foi registrada.');
+  }
+
+  async listPartShortages(client: PoolClient, tenantId: string, filter: { executionId?: string; workOrderId?: string }): Promise<OperationsRow[]> {
+    const result = await client.query<OperationsRow>(
+      `SELECT shortage.id,shortage.work_order_id,shortage.action_id,shortage.execution_id,
+        shortage.reported_by,reporter.name AS reported_by_name,shortage.part_code,shortage.description,
+        shortage.quantity,shortage.unit,shortage.observation,shortage.blocking,shortage.evidence_id,
+        shortage.status,shortage.resolution_note,shortage.resolved_by,resolver.name AS resolved_by_name,
+        shortage.resolved_at,shortage.created_at,shortage.updated_at,
+        storage_object.original_name AS evidence_name,
+        CASE WHEN storage_object.provider='LOCAL_PRIVATE'
+          THEN '/v1/maintenance/evidence-files/'||storage_object.id::text ELSE NULL END AS evidence_url
+       FROM maintenance.work_order_part_shortages shortage
+       JOIN iam.users reporter ON reporter.tenant_id=shortage.tenant_id AND reporter.id=shortage.reported_by
+       LEFT JOIN iam.users resolver ON resolver.tenant_id=shortage.tenant_id AND resolver.id=shortage.resolved_by
+       LEFT JOIN maintenance.evidence evidence ON evidence.tenant_id=shortage.tenant_id AND evidence.id=shortage.evidence_id
+       LEFT JOIN platform.storage_objects storage_object ON storage_object.tenant_id=evidence.tenant_id AND storage_object.id=evidence.storage_object_id
+       WHERE shortage.tenant_id=$1 AND ($2::uuid IS NULL OR shortage.execution_id=$2)
+         AND ($3::uuid IS NULL OR shortage.work_order_id=$3)
+       ORDER BY shortage.created_at DESC,shortage.id`,
+      [tenantId,filter.executionId ?? null,filter.workOrderId ?? null],
+    );
+    return result.rows;
+  }
+
+  async listPlantPartShortages(client: PoolClient, tenantId: string, userId: string, shortageId?: string): Promise<OperationsRow[]> {
+    const result=await client.query<OperationsRow>(
+      `SELECT shortage.id,shortage.work_order_id,work_order.operational_code AS work_order_code,
+        shortage.action_id,shortage.execution_id,execution.status AS execution_status,
+        shortage.reported_by,reporter.name AS reported_by_name,shortage.part_code AS codigo_peca,
+        shortage.description AS descricao,shortage.quantity AS quantidade,shortage.unit AS unidade,
+        shortage.observation AS observacao,shortage.blocking AS impeditiva,shortage.evidence_id,
+        shortage.status,shortage.resolution_note,shortage.resolved_by,resolver.name AS resolved_by_name,
+        shortage.resolved_at,shortage.created_at,storage_object.original_name AS evidence_name,
+        CASE WHEN storage_object.provider='LOCAL_PRIVATE' THEN '/v1/maintenance/evidence-files/'||storage_object.id::text ELSE NULL END AS evidence_url
+       FROM maintenance.work_order_part_shortages shortage
+       JOIN maintenance.work_orders work_order ON work_order.tenant_id=shortage.tenant_id AND work_order.id=shortage.work_order_id
+       JOIN maintenance.executions execution ON execution.tenant_id=shortage.tenant_id AND execution.id=shortage.execution_id
+       JOIN cmms.assets asset ON asset.tenant_id=work_order.tenant_id AND asset.id=work_order.asset_id
+       JOIN cmms.lines line ON line.tenant_id=asset.tenant_id AND line.id=asset.line_id
+       JOIN cmms.sectors sector ON sector.tenant_id=line.tenant_id AND sector.id=line.sector_id
+       JOIN iam.users reporter ON reporter.tenant_id=shortage.tenant_id AND reporter.id=shortage.reported_by
+       LEFT JOIN iam.users resolver ON resolver.tenant_id=shortage.tenant_id AND resolver.id=shortage.resolved_by
+       LEFT JOIN maintenance.evidence evidence ON evidence.tenant_id=shortage.tenant_id AND evidence.id=shortage.evidence_id
+       LEFT JOIN platform.storage_objects storage_object ON storage_object.tenant_id=evidence.tenant_id AND storage_object.id=evidence.storage_object_id
+       WHERE shortage.tenant_id=$1 AND ($3::uuid IS NULL OR shortage.id=$3::uuid) AND EXISTS (
+         SELECT 1 FROM iam.user_scope_assignments scope
+         WHERE scope.tenant_id=$1 AND scope.user_id=$2 AND scope.status='ACTIVE'
+           AND ((scope.scope_type='TENANT' AND scope.plant_id IS NULL)
+             OR (scope.scope_type='PLANT' AND scope.plant_id=sector.plant_id)
+             OR (scope.scope_type='SECTOR' AND scope.sector_id=sector.id)
+             OR (scope.scope_type='LINE' AND scope.line_id=line.id)
+             OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id)))
+       ORDER BY (shortage.status='OPEN') DESC,shortage.created_at DESC LIMIT CASE WHEN $3::uuid IS NULL THEN 100 ELSE 1 END`,[tenantId,userId,shortageId ?? null]);
+    return result.rows;
+  }
+
+  async findPartShortage(client: PoolClient, tenantId: string, workOrderId: string, shortageId: string, lock = false): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.work_order_part_shortages
+       WHERE tenant_id=$1 AND work_order_id=$2 AND id=$3 ${lock ? 'FOR UPDATE' : ''}`,
+      [tenantId,workOrderId,shortageId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async transitionPartShortage(client: PoolClient, tenantId: string, shortageId: string, userId: string, status: 'RESOLVED'|'CANCELLED', note: string): Promise<void> {
+    const result = await client.query(
+      `UPDATE maintenance.work_order_part_shortages
+       SET status=$4,resolution_note=$5,resolved_by=$3,resolved_at=clock_timestamp(),updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND id=$2 AND status='OPEN'`,
+      [tenantId,shortageId,userId,status,note],
+    );
+    if (result.rowCount !== 1) throw new Error('A pendência deixou de estar aberta durante a atualização.');
+  }
+
+  async countOpenBlockingPartShortages(client: PoolClient, tenantId: string, executionId: string): Promise<number> {
+    const result = await client.query<{ total: number }>(
+      `SELECT count(*)::integer AS total FROM maintenance.work_order_part_shortages
+       WHERE tenant_id=$1 AND execution_id=$2 AND status='OPEN' AND blocking`, [tenantId,executionId],
+    );
+    return result.rows[0]?.total ?? 0;
+  }
+
+  async openGlobalPauseReason(client: PoolClient, tenantId: string, executionId: string): Promise<string | null> {
+    const result = await client.query<{ reason_code: string }>(
+      `SELECT reason_code FROM maintenance.execution_global_pause_periods
+       WHERE tenant_id=$1 AND execution_id=$2 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+      [tenantId,executionId],
+    );
+    return result.rows[0]?.reason_code ?? null;
+  }
+
+  async insertShortageEvidence(client: PoolClient, tenantId: string, execution: OperationsRow, userId: string, input: EvidenceInput): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO maintenance.evidence
+       (tenant_id,execution_id,work_order_action_id,execution_checklist_item_id,asset_id,component_id,evidence_type,storage_object_id,observation,user_id,captured_at)
+       VALUES ($1,$2,$3,NULL,$4,$5,'PHOTO',$6,$7,$8,COALESCE($9,clock_timestamp())) RETURNING id`,
+      [tenantId,execution.id,execution.work_order_action_id,execution.asset_id,execution.component_id,
+        input.storageObjectId,input.observation,userId,input.capturedAt],
+    );
+    return required(result.rows, 'A foto da pendência não foi vinculada.').id;
+  }
+
+  async notifyPlantPcmOfShortage(client: PoolClient, tenantId: string, shortage: OperationsRow, execution: OperationsRow): Promise<void> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO workflow.notifications
+       (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience,deduplication_key)
+       SELECT $1,'PART_SHORTAGE_REPORTED','Falta de peça · '||work_order.operational_code,
+         'Peça pendente na OS '||work_order.operational_code||': '||$4,
+         'WORK_ORDER_PART_SHORTAGE',$2::uuid,'HIGH','/pcm?partShortageId='||$3::text,
+         jsonb_build_object('entityType','WORK_ORDER_PART_SHORTAGE','entityId',$3::text),
+         jsonb_build_object('roleCode','PCM','plantId',sector.plant_id::text),'part-shortage:'||$3::text
+       FROM maintenance.work_orders work_order
+       JOIN cmms.assets asset ON asset.tenant_id=work_order.tenant_id AND asset.id=work_order.asset_id
+       JOIN cmms.lines line ON line.tenant_id=asset.tenant_id AND line.id=asset.line_id
+       JOIN cmms.sectors sector ON sector.tenant_id=line.tenant_id AND sector.id=line.sector_id
+       WHERE work_order.tenant_id=$1 AND work_order.id=$5
+       ON CONFLICT (tenant_id,deduplication_key)
+         WHERE deduplication_key IS NOT NULL AND status='ACTIVE' DO NOTHING RETURNING id`,
+      [tenantId,shortage.id,shortage.id,shortage.description,execution.work_order_id],
+    );
+    const notificationId = result.rows[0]?.id;
+    if (!notificationId) return;
+    await client.query(
+      `INSERT INTO workflow.notification_recipients
+       (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+       SELECT DISTINCT $1::uuid,$2::uuid,account.id,'DELIVERED',clock_timestamp(),clock_timestamp(),1
+       FROM iam.users account
+       JOIN iam.user_roles user_role ON user_role.tenant_id=account.tenant_id AND user_role.user_id=account.id
+       JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+       JOIN iam.user_scope_assignments scope ON scope.tenant_id=account.tenant_id AND scope.user_id=account.id
+       JOIN cmms.assets asset ON asset.tenant_id=$1::uuid AND asset.id=$3::uuid
+       JOIN cmms.lines line ON line.tenant_id=asset.tenant_id AND line.id=asset.line_id
+       JOIN cmms.sectors sector ON sector.tenant_id=line.tenant_id AND sector.id=line.sector_id
+       WHERE account.tenant_id=$1::uuid AND account.status='ACTIVE' AND account.deleted_at IS NULL
+         AND role.code='PCM' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+         AND user_role.valid_from<=clock_timestamp() AND (user_role.valid_until IS NULL OR user_role.valid_until>clock_timestamp())
+         AND scope.status='ACTIVE'
+         AND ((scope.scope_type='TENANT' AND scope.plant_id IS NULL)
+           OR (scope.scope_type='PLANT' AND scope.plant_id=sector.plant_id)
+           OR (scope.scope_type='SECTOR' AND scope.sector_id=sector.id)
+           OR (scope.scope_type='LINE' AND scope.line_id=line.id)
+           OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id))
+       ON CONFLICT (tenant_id,notification_id,user_id) DO NOTHING`,
+      [tenantId,notificationId,execution.asset_id],
+    );
+  }
+
+  async insertShiftHandoff(client: PoolClient, tenantId: string, execution: OperationsRow, userId: string, input: ShiftHandoffInput): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO maintenance.execution_shift_handoffs
+       (tenant_id,work_order_id,action_id,execution_id,participant_id,user_id,equipment_condition,pending_work,recommended_next_step)
+       SELECT $1,$2,$3,$4,participant.id,$5,$6,$7,$8
+       FROM maintenance.work_order_action_participants participant
+       WHERE participant.tenant_id=$1 AND participant.action_id=$3 AND participant.user_id=$5
+         AND participant.invitation_status IN ('PRIMARY','ACCEPTED') RETURNING id`,
+      [tenantId,execution.work_order_id,execution.work_order_action_id,execution.id,userId,
+        input.equipmentCondition,input.pendingWork,input.recommendedNextStep],
+    );
+    return required(result.rows, 'A passagem de turno não foi registrada.').id;
+  }
+
+  async countOtherOpenParticipantIntervals(client: PoolClient, tenantId: string, executionId: string, userId: string): Promise<number> {
+    const result = await client.query<{ total: number }>(
+      `SELECT count(*)::integer AS total FROM maintenance.execution_participant_work_intervals
+       WHERE tenant_id=$1 AND execution_id=$2 AND user_id<>$3 AND ended_at IS NULL`,
+      [tenantId,executionId,userId],
+    );
+    return result.rows[0]?.total ?? 0;
   }
 
   async closeAllParticipantWorkIntervals(client: PoolClient, tenantId: string, executionId: string, reason: 'GLOBAL_PAUSE'|'COMPLETED'): Promise<void> {
@@ -1663,6 +1848,14 @@ export class OperationsRepository {
     return result.rows[0] ?? null;
   }
 
+  async findActionByWorkOrder(client: PoolClient, workOrderId: string): Promise<OperationsRow | null> {
+    const result = await client.query<OperationsRow>(
+      `SELECT * FROM maintenance.work_order_actions WHERE work_order_id=$1
+       ORDER BY generated_at DESC,id DESC LIMIT 1`, [workOrderId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async createExecution(
     client: PoolClient,
     tenantId: string,
@@ -1814,6 +2007,32 @@ export class OperationsRepository {
                WHERE usage.execution_id = execution.id), '[]'::jsonb) AS materiais,
                COALESCE((SELECT SUM(usage.total_cost) FROM maintenance.material_usage usage
                  WHERE usage.execution_id = execution.id), 0) AS custo_materiais_total,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', shortage.id, 'codigo_peca', shortage.part_code, 'descricao', shortage.description,
+                 'quantidade', shortage.quantity, 'unidade', shortage.unit, 'observacao', shortage.observation,
+                 'impeditiva', shortage.blocking, 'status', shortage.status, 'evidence_id', shortage.evidence_id,
+                 'evidence_name', storage_object.original_name,
+                 'evidence_url', CASE WHEN storage_object.provider='LOCAL_PRIVATE'
+                   THEN '/v1/maintenance/evidence-files/'||storage_object.id::text ELSE NULL END,
+                 'registrado_por', reporter.name, 'registrado_em', shortage.created_at,
+                 'resolvido_por', resolver.name, 'resolvido_em', shortage.resolved_at,
+                 'justificativa', shortage.resolution_note
+               ) ORDER BY shortage.created_at DESC)
+               FROM maintenance.work_order_part_shortages shortage
+               JOIN iam.users reporter ON reporter.tenant_id=shortage.tenant_id AND reporter.id=shortage.reported_by
+               LEFT JOIN iam.users resolver ON resolver.tenant_id=shortage.tenant_id AND resolver.id=shortage.resolved_by
+               LEFT JOIN maintenance.evidence evidence ON evidence.tenant_id=shortage.tenant_id AND evidence.id=shortage.evidence_id
+               LEFT JOIN platform.storage_objects storage_object ON storage_object.tenant_id=evidence.tenant_id AND storage_object.id=evidence.storage_object_id
+               WHERE shortage.tenant_id=execution.tenant_id AND shortage.execution_id=execution.id), '[]'::jsonb) AS part_shortages,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                 'id', handoff.id, 'participante_id', handoff.participant_id, 'user_id', handoff.user_id,
+                 'tecnico', handoff_user.name, 'condicao_equipamento', handoff.equipment_condition,
+                 'trabalho_pendente', handoff.pending_work, 'proximo_passo', handoff.recommended_next_step,
+                 'registrado_em', handoff.created_at
+               ) ORDER BY handoff.created_at DESC)
+               FROM maintenance.execution_shift_handoffs handoff
+               JOIN iam.users handoff_user ON handoff_user.tenant_id=handoff.tenant_id AND handoff_user.id=handoff.user_id
+               WHERE handoff.tenant_id=execution.tenant_id AND handoff.execution_id=execution.id), '[]'::jsonb) AS shift_handoffs,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', item.id, 'sequencia', item.sequence, 'titulo', item.title_snapshot,
                  'instrucao', item.instruction_snapshot, 'tipo_resposta', item.response_type_code,
@@ -1971,15 +2190,14 @@ export class OperationsRepository {
       `SELECT storage_object.id, storage_object.provider, storage_object.bucket,
               storage_object.object_key, storage_object.original_name,
               storage_object.media_type, storage_object.byte_size,
-              storage_object.checksum_sha256
+              storage_object.checksum_sha256,evidence.work_order_action_id AS action_id
        FROM platform.storage_objects storage_object
+       JOIN maintenance.evidence evidence ON evidence.tenant_id=storage_object.tenant_id
+         AND evidence.storage_object_id=storage_object.id
        WHERE storage_object.id=$1
          AND storage_object.status='AVAILABLE'
          AND storage_object.deleted_at IS NULL
-         AND EXISTS (
-           SELECT 1 FROM maintenance.evidence evidence
-           WHERE evidence.storage_object_id=storage_object.id
-         )`,
+         `,
       [objectId],
     );
     return result.rows[0] ?? null;
@@ -2542,6 +2760,9 @@ export class OperationsRepository {
               count(*) FILTER (WHERE required AND status NOT IN ('ANSWERED','NOT_APPLICABLE'))::integer AS pendentes,
               count(*) FILTER (WHERE evidence_required AND evidence_count < GREATEST(minimum_evidence_photos,1))::integer AS evidencias_pendentes,
               count(*) FILTER (WHERE blocks_completion AND status='NONCOMPLIANT')::integer AS nao_conformes_bloqueantes,
+              (SELECT count(*)::integer FROM maintenance.work_order_part_shortages shortage
+               WHERE shortage.tenant_id=(SELECT tenant_id FROM maintenance.executions WHERE id=$1)
+                 AND shortage.execution_id=$1 AND shortage.status='OPEN' AND shortage.blocking) AS part_shortages_bloqueantes,
               COALESCE((
                 SELECT jsonb_agg(
                   jsonb_build_object(
@@ -2585,7 +2806,15 @@ export class OperationsRepository {
                   WHERE item.blocks_completion AND item.status = 'NONCOMPLIANT'
                 ) pending
                 WHERE item.execution_id = $1
-              ), '[]'::jsonb) AS pendencias
+              ), '[]'::jsonb) || COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                  'tipo','PENDENCIA_PECA_IMPEDITIVA','shortage_id',shortage.id,
+                  'mensagem','Pendência impeditiva de peça: '||shortage.description
+                ) ORDER BY shortage.created_at)
+                FROM maintenance.work_order_part_shortages shortage
+                WHERE shortage.tenant_id=(SELECT tenant_id FROM maintenance.executions WHERE id=$1)
+                  AND shortage.execution_id=$1 AND shortage.status='OPEN' AND shortage.blocking
+              ),'[]'::jsonb) AS pendencias
        FROM maintenance.execution_checklist_items WHERE execution_id=$1`,
       [executionId],
     );

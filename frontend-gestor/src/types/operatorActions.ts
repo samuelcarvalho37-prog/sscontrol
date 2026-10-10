@@ -51,6 +51,48 @@ export interface ExecutionParticipant {
   sou_destinatario?: boolean
 }
 
+export interface PartShortage {
+  id: string
+  work_order_id: string
+  work_order_code?: string
+  execution_status?: string
+  action_id: string
+  execution_id: string
+  reported_by: string
+  reported_by_name?: string
+  codigo_peca: string | null
+  descricao: string
+  quantidade: number
+  unidade: string
+  observacao: string | null
+  impeditiva: boolean
+  evidence_id: string | null
+  evidence_name: string | null
+  evidence_url: string | null
+  status: 'OPEN' | 'RESOLVED' | 'CANCELLED'
+  resolution_note: string | null
+  resolved_by: string | null
+  resolved_by_name: string | null
+  resolved_at: string | null
+  created_at?: string
+  registrado_por?: string
+  registrado_em?: string
+  resolvido_por?: string | null
+  resolvido_em?: string | null
+  justificativa?: string | null
+}
+
+export interface ExecutionShiftHandoff {
+  id: string
+  participante_id: string
+  user_id: string
+  tecnico: string
+  condicao_equipamento: string
+  trabalho_pendente: string
+  proximo_passo: string
+  registrado_em: string
+}
+
 export interface ExecutionItem {
   id: string
   sequencia: number
@@ -100,6 +142,8 @@ export interface Execution {
   effective_work_seconds?: number
   global_paused_seconds?: number
   participants?: ExecutionParticipant[]
+  part_shortages?: PartShortage[]
+  shift_handoffs?: ExecutionShiftHandoff[]
   resultado: string | null
   observacao: string | null
   modo_parada: StopMode | null

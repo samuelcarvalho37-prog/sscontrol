@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { AppError } from '../../core/errors/app-error.js';
@@ -26,6 +28,7 @@ interface Params {
   readonly serviceId?: string;
   readonly requestId?: string;
   readonly participantId?: string;
+  readonly shortageId?: string;
 }
 interface WorkOrderQuery {
   readonly busca?: string;
@@ -129,6 +132,13 @@ interface PauseBody {
   readonly motivo_detalhe?: string;
 }
 interface PauseParticipantBody { readonly motivo: string; }
+interface ResolvePartShortageBody { readonly justificativa: string; }
+interface ShiftHandoffBody {
+  readonly condicao_equipamento: string;
+  readonly trabalho_pendente: string;
+  readonly proximo_passo: string;
+  readonly ha_trabalho_pendente: boolean;
+}
 interface InviteCollaboratorBody { readonly usuario_id: string; }
 interface ConsumeMaterialBody {
   readonly material_id: string;
@@ -679,6 +689,83 @@ export class OperationsController {
         audit(request),
       ),
     );
+
+  resumeExecutionForWorkOrder = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.work-orders.executions.resume',
+      await this.service.resumeExecutionForWorkOrder(
+        user(request), id(request.params, 'workOrderId'), id(request.params, 'executionId'), audit(request)));
+
+  listExecutionPartShortages = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.executions.part-shortages.list',
+      await this.service.listExecutionPartShortages(user(request), id(request.params, 'executionId')));
+
+  listWorkOrderPartShortages = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.work-orders.part-shortages.list',
+      await this.service.listWorkOrderPartShortages(user(request), id(request.params, 'workOrderId')));
+
+  listPlantPartShortages = async (request: FastifyRequest) =>
+    successEnvelope(request, 'maintenance.part-shortages.list', await this.service.listPlantPartShortages(user(request)));
+
+  getPlantPartShortage = async (request: FastifyRequest<{ Params: Params }>) =>
+    successEnvelope(request, 'maintenance.part-shortages.get', await this.service.getPlantPartShortage(user(request), id(request.params, 'shortageId')));
+
+  createPartShortage = async (request: FastifyRequest<{ Params: Params }>) => {
+    const fields: Record<string, unknown> = {};
+    let uploadedFile: { readonly filename: string; readonly mimetype: string; readonly buffer: Buffer } | null = null;
+    for await (const part of request.parts({
+      limits: { fileSize: request.server.environment.storage.maxEvidenceBytes + 1, files: 1, fields: 6, parts: 7 },
+    })) {
+      if (part.type === 'file') {
+        const buffer = await part.toBuffer();
+        if (part.file.truncated || buffer.byteLength > request.server.environment.storage.maxEvidenceBytes) {
+          throw new AppError({ code: 'FILE_TOO_LARGE', message: 'A foto excede o tamanho máximo permitido.', statusCode: 413 });
+        }
+        uploadedFile = { filename: part.filename, mimetype: part.mimetype, buffer };
+      } else {
+        fields[part.fieldname] = { value: part.value };
+      }
+    }
+    const detail = await this.service.createPartShortage(
+      user(request),
+      id(request.params, 'executionId'),
+      {
+        partCode: multipartText(fields, 'codigo_peca'),
+        description: multipartText(fields, 'descricao') ?? '',
+        quantity: Number(multipartText(fields, 'quantidade')),
+        unit: multipartText(fields, 'unidade') ?? '',
+        observation: multipartText(fields, 'observacao'),
+        blocking: multipartText(fields, 'impeditiva') === 'true',
+      },
+      uploadedFile ? {
+        originalName: uploadedFile.filename,
+        mediaType: uploadedFile.mimetype,
+        stream: Readable.from(uploadedFile.buffer),
+        observation: multipartText(fields, 'observacao'),
+        capturedAt: null,
+      } : null,
+      audit(request),
+    );
+    return successEnvelope(request, 'maintenance.executions.part-shortages.create', detail);
+  };
+
+  resolvePartShortage = async (request: FastifyRequest<{ Params: Params; Body: ResolvePartShortageBody }>) =>
+    successEnvelope(request, 'maintenance.work-orders.part-shortages.resolve',
+      await this.service.transitionPartShortage(user(request), id(request.params, 'workOrderId'),
+        id(request.params, 'shortageId'), 'RESOLVED', request.body.justificativa, audit(request)));
+
+  cancelPartShortage = async (request: FastifyRequest<{ Params: Params; Body: ResolvePartShortageBody }>) =>
+    successEnvelope(request, 'maintenance.work-orders.part-shortages.cancel',
+      await this.service.transitionPartShortage(user(request), id(request.params, 'workOrderId'),
+        id(request.params, 'shortageId'), 'CANCELLED', request.body.justificativa, audit(request)));
+
+  createShiftHandoff = async (request: FastifyRequest<{ Params: Params; Body: ShiftHandoffBody }>) =>
+    successEnvelope(request, 'maintenance.executions.shift-handoff',
+      await this.service.createShiftHandoff(user(request), id(request.params, 'executionId'), {
+        equipmentCondition: request.body.condicao_equipamento,
+        pendingWork: request.body.trabalho_pendente,
+        recommendedNextStep: request.body.proximo_passo,
+        workPending: request.body.ha_trabalho_pendente,
+      }, audit(request)));
 
   answerItem = async (request: FastifyRequest<{ Params: Params; Body: ResponseBody }>) =>
     successEnvelope(

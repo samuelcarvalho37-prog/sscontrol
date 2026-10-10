@@ -20,6 +20,7 @@ export const operationsIdentifierParamsSchema = Type.Object(
     serviceId: Type.Optional(uuid),
     requestId: Type.Optional(uuid),
     participantId: Type.Optional(uuid),
+    shortageId: Type.Optional(uuid),
   },
   { additionalProperties: false },
 );
@@ -265,6 +266,21 @@ export const inviteCollaboratorBodySchema = Type.Object(
 
 export const pauseParticipantSessionBodySchema = Type.Object(
   { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
+  { additionalProperties: false },
+);
+
+export const resolvePartShortageBodySchema = Type.Object(
+  { justificativa: Type.String({ minLength: 3, maxLength: 2_000 }) },
+  { additionalProperties: false },
+);
+
+export const shiftHandoffBodySchema = Type.Object(
+  {
+    condicao_equipamento: Type.String({ minLength: 3, maxLength: 2_000 }),
+    trabalho_pendente: Type.String({ minLength: 1, maxLength: 4_000 }),
+    proximo_passo: Type.String({ minLength: 3, maxLength: 2_000 }),
+    ha_trabalho_pendente: Type.Boolean(),
+  },
   { additionalProperties: false },
 );
 

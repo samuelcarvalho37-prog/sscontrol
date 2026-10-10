@@ -111,6 +111,7 @@ export function App() {
   })
   const [analyticsFocusAsset, setAnalyticsFocusAsset] = useState('')
   const [analyticsFocusOccurrence, setAnalyticsFocusOccurrence] = useState('')
+  const [partShortageFocusId, setPartShortageFocusId] = useState('')
   const [detailedAnalytics, setDetailedAnalytics] = useState(false)
   const [adminModule, setAdminModule] = useState<AdminModule>('overview')
   const [validationCount, setValidationCount] = useState(0)
@@ -278,6 +279,12 @@ export function App() {
     if (destination?.kind === 'technical-demand') {
       preserveValidationDemandInUrl(destination.id)
       handleOpenDecision('demands', { kind: 'demand', id: destination.id })
+      return
+    }
+    if (destination?.kind === 'part-shortage') {
+      setPartShortageFocusId(destination.id)
+      setDetailedAnalytics(false)
+      setSection('validations')
       return
     }
     if (destination?.kind === 'occurrence') {
@@ -497,7 +504,7 @@ export function App() {
               <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
               <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
             </div>}
-            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} /> :
+            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}

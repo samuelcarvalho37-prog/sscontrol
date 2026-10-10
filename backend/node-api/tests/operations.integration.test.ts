@@ -184,6 +184,18 @@ function multipartPhoto(file: Buffer, fileName = 'condicao-final.jpg', mediaType
   return { body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
+function multipartFields(fields: Readonly<Record<string,string>>, photo?: Buffer) {
+  const boundary=`vorqix-${randomUUID()}`;
+  const fieldParts=Object.entries(fields).map(([name,value])=>Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,'utf8'));
+  const fileParts=photo ? [
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="foto"; filename="peca.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,'utf8'),
+    photo,
+    Buffer.from('\r\n','utf8'),
+  ] : [];
+  const body=Buffer.concat([...fieldParts,...fileParts,Buffer.from(`--${boundary}--\r\n`,'utf8')]);
+  return {body,contentType:`multipart/form-data; boundary=${boundary}`};
+}
+
 async function transaction<T>(
   pool: Pool,
   operation: (client: PoolClient) => Promise<T>,
@@ -440,8 +452,8 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
     );
     await client.query(
       `INSERT INTO iam.user_scope_assignments (tenant_id,user_id,plant_id,scope_type,assigned_by) VALUES
-       ($1,$2,$3,'PLANT',$4),($1,$5,$3,'PLANT',$4),($1,$6,$3,'PLANT',$4),($1,$7,$3,'PLANT',$4),($1,$8,$3,'PLANT',$4)`,
-      [tenantId, ids.operator, ids.plant, ids.admin, ids.support, ids.supportSecond, ids.supportThird, ids.supportDecline],
+       ($1,$2,$3,'PLANT',$4),($1,$5,$3,'PLANT',$4),($1,$6,$3,'PLANT',$4),($1,$7,$3,'PLANT',$4),($1,$8,$3,'PLANT',$4),($1,$9,$3,'PLANT',$4)`,
+      [tenantId, ids.operator, ids.plant, ids.admin, ids.support, ids.supportSecond, ids.supportThird, ids.supportDecline, ids.admin],
     );
     await client.query(
       `INSERT INTO cmms.components
@@ -1988,6 +2000,67 @@ test(
     assert.equal(normalStarted.statusCode, 200, normalStarted.body);
     assert.equal(normalStarted.json().data.execucao.operador_id, ids.operator);
     const normalExecutionId: string = normalStarted.json().data.execucao.id;
+    const shortageMultipart=multipartFields({codigo_peca:'MAT-TEST-01',descricao:'Rolamento indisponível',quantidade:'2',unidade:'un',observacao:'Aguardando reposição',impeditiva:'true'},Buffer.from([0xff,0xd8,0xff,0xd9]));
+    const shortageCreated=await app.inject({
+      method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/part-shortages`,
+      headers:{...bearer(identities.operator),'content-type':shortageMultipart.contentType},payload:shortageMultipart.body,
+    });
+    assert.equal(shortageCreated.statusCode,200,shortageCreated.body);
+    const shortageCreatedBody=shortageCreated.json<{readonly data:{readonly status:string;readonly part_shortages:readonly {readonly id:string;readonly evidence_id:string|null}[]}}>();
+    assert.equal(shortageCreatedBody.data.status,'IN_PROGRESS','registrar falta não pausa automaticamente a OS');
+    assert.equal(shortageCreatedBody.data.part_shortages.length,1);
+    const shortageId:string=shortageCreatedBody.data.part_shortages[0]!.id;
+    assert.ok(shortageCreatedBody.data.part_shortages[0]!.evidence_id,'foto opcional é vinculada à pendência');
+    const pcmShortageInbox=await app.inject({method:'GET',url:'/v1/maintenance/part-shortages',headers:bearer(identities.admin)});
+    assert.equal(pcmShortageInbox.statusCode,200,pcmShortageInbox.body);
+    const pcmShortageInboxBody=pcmShortageInbox.json<{readonly data:{readonly pendencias_peca:readonly {readonly id:string}[]}}>();
+    assert.equal(pcmShortageInboxBody.data.pendencias_peca.some((item)=>item.id===shortageId),true);
+    await transaction(pool,client=>client.query(
+      `INSERT INTO maintenance.work_order_part_shortages
+         (tenant_id,work_order_id,action_id,execution_id,reported_by,description,quantity,unit,blocking,status,created_at)
+       SELECT $1,$2,$3,$4,$5,'Pendência recente de teste fora da primeira página.',1,'un',false,'OPEN',
+              clock_timestamp() + series * interval '1 second'
+       FROM generate_series(1,101) AS series`,
+      [tenantId,normalWorkOrderId,normalActionId,normalExecutionId,ids.operator],
+    ));
+    const firstShortagePage=await app.inject({method:'GET',url:'/v1/maintenance/part-shortages',headers:bearer(identities.admin)});
+    assert.equal(firstShortagePage.statusCode,200,firstShortagePage.body);
+    assert.equal(firstShortagePage.json<{readonly data:{readonly pendencias_peca:readonly {readonly id:string}[]}}>().data.pendencias_peca.some((item)=>item.id===shortageId),false,'pendência antiga fica fora da primeira página');
+    const targetedShortage=await app.inject({method:'GET',url:`/v1/maintenance/part-shortages/${shortageId}`,headers:bearer(identities.admin)});
+    assert.equal(targetedShortage.statusCode,200,targetedShortage.body);
+    const targetedShortageBody=targetedShortage.json<{readonly data:{readonly pendencia_peca:{readonly id:string;readonly codigo_peca:string|null;readonly descricao:string}}}>();
+    assert.equal(targetedShortageBody.data.pendencia_peca.id,shortageId);
+    assert.equal(targetedShortageBody.data.pendencia_peca.codigo_peca,'MAT-TEST-01');
+    assert.equal(targetedShortageBody.data.pendencia_peca.descricao,'Rolamento indisponível');
+    const missingShortage=await app.inject({method:'GET',url:`/v1/maintenance/part-shortages/${randomUUID()}`,headers:bearer(identities.admin)});
+    assert.equal(missingShortage.statusCode,404,missingShortage.body);
+    const nonPcmShortage=await app.inject({method:'GET',url:`/v1/maintenance/part-shortages/${shortageId}`,headers:bearer(identities.production)});
+    assert.equal(nonPcmShortage.statusCode,403,nonPcmShortage.body);
+    const shortageNotificationRecipients=await transaction(pool,client=>client.query<{readonly recipient_count:number;readonly pcm_only:boolean}>(
+      `SELECT count(*)::integer AS recipient_count,bool_and(role.code='PCM') AS pcm_only
+       FROM workflow.notifications notification
+       JOIN workflow.notification_recipients recipient ON recipient.tenant_id=notification.tenant_id AND recipient.notification_id=notification.id
+       JOIN iam.user_roles user_role ON user_role.tenant_id=recipient.tenant_id AND user_role.user_id=recipient.user_id
+       JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+       WHERE notification.tenant_id=$1 AND notification.entity_id=$2`,[tenantId,shortageId]));
+    assert.equal(Number(shortageNotificationRecipients.rows[0]?.recipient_count),1);
+    assert.equal(shortageNotificationRecipients.rows[0]?.pcm_only,true);
+    const shortagePause=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/pause`,headers:bearer(identities.operator),payload:{motivo_codigo:'AGUARDANDO_PECA',motivo_detalhe:'Sem condição segura de continuar.'}});
+    assert.equal(shortagePause.statusCode,200,shortagePause.body);
+    const deniedShortageResume=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${normalWorkOrderId}/executions/${normalExecutionId}/resume`,headers:bearer(identities.admin)});
+    assert.equal(deniedShortageResume.statusCode,409,deniedShortageResume.body);
+    const resolvedShortage=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${normalWorkOrderId}/part-shortages/${shortageId}/resolve`,headers:bearer(identities.admin),payload:{justificativa:'Peça separada para esta manutenção.'}});
+    assert.equal(resolvedShortage.statusCode,200,resolvedShortage.body);
+    const stillPaused=await app.inject({method:'GET',url:`/v1/maintenance/executions/${normalExecutionId}`,headers:bearer(identities.operator)});
+    assert.equal(stillPaused.statusCode,200,stillPaused.body);
+    assert.equal(stillPaused.json<{readonly data:{readonly status:string}}>().data.status,'PAUSED','resolver a pendência não retoma automaticamente a OS');
+    const pcmResume=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${normalWorkOrderId}/executions/${normalExecutionId}/resume`,headers:bearer(identities.admin)});
+    assert.equal(pcmResume.statusCode,200,pcmResume.body);
+    const pcmResumeBody=pcmResume.json<{readonly data:{readonly status:string;readonly participants:readonly {readonly session_status:string}[]}}>();
+    assert.equal(pcmResumeBody.data.status,'IN_PROGRESS');
+    assert.equal(pcmResumeBody.data.participants.every((participant)=>participant.session_status!=='WORKING'),true,'retomada global não abre sessões individuais');
+    const restartedSession=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/sessions/start`,headers:bearer(identities.operator)});
+    assert.equal(restartedSession.statusCode,200,restartedSession.body);
     const productionOccurrenceForAuthorization = await app.inject({
       method: 'POST', url: '/v1/maintenance/occurrences', headers: bearer(identities.production),
       payload: {
@@ -2060,6 +2133,18 @@ test(
       payload: { objeto_armazenamento_id: ids.storageObject, tipo: 'PHOTO', observacao: 'Evidência normal.', capturada_em: null },
     });
     assert.equal(normalEvidenceSaved.statusCode, 200, normalEvidenceSaved.body);
+    const completionShortageMultipart=multipartFields({codigo_peca:'MAT-TEST-02',descricao:'Vedação necessária',quantidade:'1',unidade:'un',observacao:'Pendência impeditiva',impeditiva:'true'});
+    const completionShortage=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/part-shortages`,headers:{...bearer(identities.operator),'content-type':completionShortageMultipart.contentType},payload:completionShortageMultipart.body});
+    assert.equal(completionShortage.statusCode,200,completionShortage.body);
+    const completionShortageId:string=completionShortage.json<{readonly data:{readonly part_shortages:readonly {readonly id:string;readonly codigo_peca:string|null}[]}}>().data.part_shortages.find((shortage)=>shortage.codigo_peca==='MAT-TEST-02')!.id;
+    const blockedByShortage=await app.inject({method:'GET',url:`/v1/maintenance/executions/${normalExecutionId}/validation`,headers:bearer(identities.operator)});
+    assert.equal(blockedByShortage.statusCode,200,blockedByShortage.body);
+    assert.equal(blockedByShortage.json().data.pode_concluir,false);
+    assert.equal(blockedByShortage.json().data.pendencias_peca_impeditivas,1);
+    const completionRejectedByShortage=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/complete`,headers:bearer(identities.operator),payload:{resultado:'Tentativa bloqueada',observacao:null,modo_parada:'NO_STOP'}});
+    assert.equal(completionRejectedByShortage.statusCode,409,completionRejectedByShortage.body);
+    const resolvedCompletionShortage=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${normalWorkOrderId}/part-shortages/${completionShortageId}/resolve`,headers:bearer(identities.admin),payload:{justificativa:'Material conferido e aplicado.'}});
+    assert.equal(resolvedCompletionShortage.statusCode,200,resolvedCompletionShortage.body);
     const normalCompleted = await app.inject({
       method: 'POST', url: `/v1/maintenance/executions/${normalExecutionId}/complete`, headers: bearer(identities.operator),
       payload: {
@@ -2091,6 +2176,48 @@ test(
     assert.equal(normalClosed.statusCode, 200, normalClosed.body);
     assert.equal(normalClosed.json().data.status, 'COMPLETED');
     assert.equal(normalClosed.json().data.acoes[0].status, 'COMPLETED');
+    const handoffWorkOrder=await app.inject({method:'POST',url:'/v1/maintenance/work-orders',headers:bearer(identities.admin),payload:{
+      plano_versao_id:ids.planVersion,ativo_id:ids.asset,tipo_origem:'TEST',entidade_origem_id:null,
+      tipo_trabalho:'PREVENTIVE',modo_execucao:'INTERNAL',titulo:'OS de passagem de turno',
+      descricao:'Validação de encerramento por participante e da pausa do último técnico.',prioridade:'MEDIUM',
+      responsavel_id:null,programada_para:null,analise_tecnica:{resultado_esperado:'Continuidade preservada.'},
+    }});
+    assert.equal(handoffWorkOrder.statusCode,200,handoffWorkOrder.body);
+    const handoffWorkOrderId:string=handoffWorkOrder.json().data.id;
+    const handoffReview=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${handoffWorkOrderId}/submit-review`,headers:bearer(identities.admin),payload:{politica_assinatura:'QUALIDADE',assinaturas_exigidas:1,primeira_resposta_ate:null,resolucao_ate:null}});
+    assert.equal(handoffReview.statusCode,200,handoffReview.body);
+    const handoffRelease=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${handoffWorkOrderId}/release`,headers:bearer(identities.admin)});
+    assert.equal(handoffRelease.statusCode,200,handoffRelease.body);
+    const handoffActionId:string=handoffRelease.json().data.acoes[0].id;
+    const handoffClaim=await app.inject({method:'POST',url:`/v1/maintenance/operator-actions/${handoffActionId}/assume`,headers:bearer(identities.operator)});
+    assert.equal(handoffClaim.statusCode,200,handoffClaim.body);
+    const handoffStarted=await app.inject({method:'POST',url:`/v1/maintenance/operator-actions/${handoffActionId}/start`,headers:bearer(identities.operator),payload:{modo_parada:'NO_STOP'}});
+    assert.equal(handoffStarted.statusCode,200,handoffStarted.body);
+    const handoffExecutionId:string=handoffStarted.json().data.execucao.id;
+    const collaboratorInvite=await app.inject({method:'POST',url:`/v1/maintenance/operator-actions/${handoffActionId}/collaborators`,headers:bearer(identities.operator),payload:{usuario_id:ids.support}});
+    assert.equal(collaboratorInvite.statusCode,200,collaboratorInvite.body);
+    const collaboratorAccept=await app.inject({method:'POST',url:`/v1/maintenance/operator-actions/${handoffActionId}/collaborators/${collaboratorInvite.json().data.participant_id}/accept`,headers:bearer(identities.support)});
+    assert.equal(collaboratorAccept.statusCode,200,collaboratorAccept.body);
+    const collaboratorSession=await app.inject({method:'POST',url:`/v1/maintenance/executions/${handoffExecutionId}/sessions/start`,headers:bearer(identities.support)});
+    assert.equal(collaboratorSession.statusCode,200,collaboratorSession.body);
+    const primaryHandoff=await app.inject({method:'POST',url:`/v1/maintenance/executions/${handoffExecutionId}/shift-handoffs`,headers:bearer(identities.operator),payload:{condicao_equipamento:'Equipamento estável para continuidade.',trabalho_pendente:'Ajuste final de torque.',proximo_passo:'Conferir torque e registrar medição.',ha_trabalho_pendente:true}});
+    assert.equal(primaryHandoff.statusCode,200,primaryHandoff.body);
+    const primaryHandoffBody=primaryHandoff.json<{readonly data:{readonly status:string;readonly participants:readonly {readonly user_id:string;readonly session_status:string}[]}}>();
+    assert.equal(primaryHandoffBody.data.status,'IN_PROGRESS','passagem do principal não pausa enquanto colaborador está trabalhando');
+    assert.equal(primaryHandoffBody.data.participants.find((participant)=>participant.user_id===ids.support)?.session_status,'WORKING');
+    const finalHandoff=await app.inject({method:'POST',url:`/v1/maintenance/executions/${handoffExecutionId}/shift-handoffs`,headers:bearer(identities.support),payload:{condicao_equipamento:'Equipamento estável e seguro.',trabalho_pendente:'Conferir torque no próximo turno.',proximo_passo:'Validar torque e encerrar checklist.',ha_trabalho_pendente:true}});
+    assert.equal(finalHandoff.statusCode,200,finalHandoff.body);
+    const finalHandoffBody=finalHandoff.json<{readonly data:{readonly status:string;readonly participants:readonly {readonly session_status:string}[]}}>();
+    assert.equal(finalHandoffBody.data.status,'PAUSED','último participante com trabalho pendente pausa globalmente');
+    assert.equal(finalHandoffBody.data.participants.every((participant)=>participant.session_status!=='WORKING'),true);
+    const handoffResume=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${handoffWorkOrderId}/executions/${handoffExecutionId}/resume`,headers:bearer(identities.admin)});
+    assert.equal(handoffResume.statusCode,200,handoffResume.body);
+    const handoffResumeBody=handoffResume.json<{readonly data:{readonly status:string;readonly participants:readonly {readonly session_status:string}[]}}>();
+    assert.equal(handoffResumeBody.data.status,'IN_PROGRESS');
+    assert.equal(handoffResumeBody.data.participants.every((participant)=>participant.session_status!=='WORKING'),true,'turno seguinte requer sessões novas explícitas');
+    const handoffResumeAudit=await transaction(pool,client=>client.query<{readonly total:number}>(
+      `SELECT count(*)::integer AS total FROM maintenance.execution_shift_handoffs WHERE tenant_id=$1 AND execution_id=$2`,[tenantId,handoffExecutionId]));
+    assert.equal(Number(handoffResumeAudit.rows[0]?.total),2);
     const pendingCostsAfterCompletion = await transaction(pool, (client) => client.query<{
       readonly realized_total: string;
       readonly materials_pending_price: number;

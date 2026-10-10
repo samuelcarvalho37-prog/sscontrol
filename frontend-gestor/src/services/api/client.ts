@@ -132,7 +132,7 @@ async function executeAppsScriptCall<T>(
 interface NodeActionRequest {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
-  body?: Record<string, unknown>;
+  body?: Record<string, unknown> | FormData;
   token?: string;
   transform?: (data: Record<string, unknown>) => unknown;
 }
@@ -1242,6 +1242,26 @@ export function nodeActionRequest(
       return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/sessions/pause`, body: { motivo: payload.motivo }, token };
     case "execution.sessions.end":
       return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/sessions/end`, token };
+    case "execution.part-shortages.list":
+      return { method: "GET", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/part-shortages`, token };
+    case "execution.part-shortages.create":
+      return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/part-shortages`, body: payload.form_data as FormData, token };
+    case "execution.shift-handoffs.create":
+      return { method: "POST", path: `/v1/maintenance/executions/${encodeURIComponent(String(payload.execucao_id))}/shift-handoffs`, body: {
+        condicao_equipamento: payload.condicao_equipamento,
+        trabalho_pendente: payload.trabalho_pendente,
+        proximo_passo: payload.proximo_passo,
+        ha_trabalho_pendente: payload.ha_trabalho_pendente,
+      }, token };
+    case "maintenance.part-shortages.list":
+      return { method: "GET", path: "/v1/maintenance/part-shortages", token };
+    case "maintenance.part-shortages.get":
+      return { method: "GET", path: `/v1/maintenance/part-shortages/${encodeURIComponent(String(payload.pendencia_id))}`, token };
+    case "work-orders.part-shortages.resolve":
+    case "work-orders.part-shortages.cancel":
+      return { method: "POST", path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/part-shortages/${encodeURIComponent(String(payload.pendencia_id))}/${action.endsWith("resolve") ? "resolve" : "cancel"}`, body: { justificativa: payload.justificativa }, token };
+    case "work-orders.execution.resume":
+      return { method: "POST", path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/executions/${encodeURIComponent(String(payload.execucao_id))}/resume`, token };
     case "operator-actions.start":
       return {
         method: "POST",
@@ -2420,12 +2440,12 @@ async function executeNodeCall<T>(
 
   try {
     const headers: Record<string, string> = { Accept: "application/json", ...developmentTenantHeader() };
-    if (request.body) headers["Content-Type"] = "application/json";
+    if (request.body && !(request.body instanceof FormData)) headers["Content-Type"] = "application/json";
     if (request.token) headers.Authorization = `Bearer ${request.token}`;
     const response = await fetch(`${nodeBaseUrl(apiUrl)}${request.path}`, {
       method: request.method,
       headers,
-      body: request.body ? JSON.stringify(request.body) : undefined,
+      body: request.body ? (request.body instanceof FormData ? request.body : JSON.stringify(request.body)) : undefined,
       signal: controller.signal,
     });
     const envelope = (await response.json()) as ApiEnvelope<

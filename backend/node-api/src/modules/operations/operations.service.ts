@@ -34,6 +34,8 @@ import type {
   WorkOrderCorrectionInput,
   WorkOrderInput,
   WorkOrderListQuery,
+  PartShortageInput,
+  ShiftHandoffInput,
 } from './operations.types.js';
 
 function error(code: string, message: string, statusCode: number, details?: unknown): AppError {
@@ -1667,7 +1669,8 @@ export class OperationsService {
         if (
           completion.respostas_pendentes > 0 ||
           completion.evidencias_pendentes > 0 ||
-          completion.nao_conformes_bloqueantes > 0
+          completion.nao_conformes_bloqueantes > 0 ||
+          completion.pendencias_peca_impeditivas > 0
         ) {
           throw error(
             'MAINTENANCE_ACTION_REVIEW_BLOCKED',
@@ -1878,6 +1881,7 @@ export class OperationsService {
       if (text(execution, 'status') !== 'PAUSED') throw error('EXECUTION_NOT_PAUSED', 'A execução não está pausada.', 409);
       const primary = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
       if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode retomar a OS.', 403);
+      await this.ensureShortagePauseCanResume(client, user.tenantId, executionId);
       await this.repository.resumeExecution(client, user.tenantId, executionId, user.id);
       const detail = await this.requiredExecutionDetail(client, executionId);
       await this.repository.writeAudit(
@@ -1891,6 +1895,166 @@ export class OperationsService {
         detail,
       );
       return detail;
+    });
+  }
+
+  async resumeExecutionForWorkOrder(user: AuthenticatedUser, workOrderId: string, executionId: string, audit: RequestAuditMetadata) {
+    return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
+      if (!user.roles.includes('PCM') || !user.capabilities.includes('maintenance.work-orders.manage')) throw error('FORBIDDEN', 'Permissão insuficiente para retomar a OS.', 403);
+      const execution = await this.repository.findExecution(client, executionId, true);
+      if (execution?.work_order_id !== workOrderId || !(await this.repository.userCanAccessActionPlant(client, text(execution, 'work_order_action_id'), user.id))) {
+        throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada no seu escopo.', 404);
+      }
+      if (text(execution, 'status') !== 'PAUSED') throw error('EXECUTION_NOT_PAUSED', 'A execução não está pausada.', 409);
+      await this.ensureShortagePauseCanResume(client, user.tenantId, executionId);
+      await this.repository.resumeExecution(client, user.tenantId, executionId, user.id);
+      const detail = await this.requiredExecutionDetail(client, executionId);
+      await this.repository.writeAudit(client,user.tenantId,user.id,audit,'EXECUTION_RESUMED_BY_PCM','EXECUTION',executionId,detail);
+      return detail;
+    });
+  }
+
+  private async ensureShortagePauseCanResume(client: PoolClient, tenantId: string, executionId: string): Promise<void> {
+    if (await this.repository.openGlobalPauseReason(client, tenantId, executionId) === 'AGUARDANDO_PECA' &&
+        await this.repository.countOpenBlockingPartShortages(client, tenantId, executionId) > 0) {
+      throw error('EXECUTION_HAS_OPEN_PART_SHORTAGES', 'Resolva ou cancele as pendências impeditivas antes de retomar a execução.', 409);
+    }
+  }
+
+  async listExecutionPartShortages(user: AuthenticatedUser, executionId: string) {
+    return this.database.withTransaction({ tenantId:user.tenantId,userId:user.id,readOnly:true },async client => {
+      const execution=await this.repository.findExecution(client,executionId);
+      if (!execution || !(await this.repository.userCanAccessActionPlant(client,text(execution,'work_order_action_id'),user.id))) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
+      const participant=await this.repository.findActionParticipant(client,text(execution,'work_order_action_id'),user.id);
+      if (!(user.roles.includes('PCM') && user.capabilities.includes('maintenance.work-orders.read')) && (!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status')))) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
+      return { pendencias_peca: await this.repository.listPartShortages(client,user.tenantId,{executionId}) };
+    });
+  }
+
+  async listWorkOrderPartShortages(user: AuthenticatedUser, workOrderId: string) {
+    return this.database.withTransaction({ tenantId:user.tenantId,userId:user.id,readOnly:true },async client => {
+      if (!user.roles.includes('PCM') || !user.capabilities.includes('maintenance.work-orders.read')) throw error('FORBIDDEN','Permissão insuficiente.',403);
+      const order=await this.repository.getWorkOrderDetail(client,workOrderId);
+      if (!order) throw error('WORK_ORDER_NOT_FOUND','Ordem de serviço não encontrada.',404);
+      const action=await this.repository.findActionByWorkOrder(client,workOrderId);
+      if (action && !(await this.repository.userCanAccessActionPlant(client,text(action,'id'),user.id))) throw error('WORK_ORDER_NOT_FOUND','Ordem de serviço não encontrada.',404);
+      return { pendencias_peca: await this.repository.listPartShortages(client,user.tenantId,{workOrderId}) };
+    });
+  }
+
+  async listPlantPartShortages(user: AuthenticatedUser) {
+    return this.database.withTransaction({tenantId:user.tenantId,userId:user.id,readOnly:true},async client=>{
+      if(!user.roles.includes('PCM') || !user.capabilities.includes('maintenance.work-orders.read')) throw error('FORBIDDEN','Permissão insuficiente.',403);
+      return { pendencias_peca:await this.repository.listPlantPartShortages(client,user.tenantId,user.id) };
+    });
+  }
+
+  async getPlantPartShortage(user: AuthenticatedUser, shortageId: string) {
+    return this.database.withTransaction({tenantId:user.tenantId,userId:user.id,readOnly:true},async client=>{
+      if(!user.roles.includes('PCM') || !user.capabilities.includes('maintenance.work-orders.read')) throw error('FORBIDDEN','Permissão insuficiente.',403);
+      const shortage=(await this.repository.listPlantPartShortages(client,user.tenantId,user.id,shortageId))[0];
+      if(!shortage) throw error('PART_SHORTAGE_NOT_FOUND','Pendência não encontrada no seu escopo de planta.',404);
+      return { pendencia_peca:shortage };
+    });
+  }
+
+  async createPartShortage(
+    user: AuthenticatedUser, executionId: string, input: PartShortageInput,
+    upload: EvidenceUploadInput | null, audit: RequestAuditMetadata,
+  ) {
+    if (!input.description.trim() || input.description.trim().length < 3 || input.description.length > 500 ||
+        !Number.isFinite(input.quantity) || input.quantity <= 0 || input.quantity > 1_000_000 ||
+        !input.unit.trim() || input.unit.trim().length > 40 ||
+        (input.partCode !== null && input.partCode.length > 120) ||
+        (input.observation !== null && input.observation.length > 2_000)) {
+      throw error('PART_SHORTAGE_INPUT_INVALID','Informe descrição, quantidade positiva e unidade válidas.',422);
+    }
+    if (upload && !upload.mediaType.toLowerCase().startsWith('image/')) throw error('PART_SHORTAGE_PHOTO_INVALID','A evidência opcional deve ser uma imagem.',422);
+    let stored: StoredObject | null=null;
+    if (upload) {
+      try { stored=await this.objectStorage.storeEvidence({tenantId:user.tenantId,originalName:upload.originalName,mediaType:upload.mediaType,stream:upload.stream}); }
+      catch(cause) {
+        if(cause instanceof ObjectStorageError) throw error(cause.code,cause.message,cause.code==='FILE_TOO_LARGE'?413:422);
+        throw cause;
+      }
+    }
+    try {
+      return await this.database.withTransaction({tenantId:user.tenantId,userId:user.id},async client => {
+        const execution=await this.repository.findExecution(client,executionId,true);
+        if(!execution) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
+        if(text(execution,'status')!=='IN_PROGRESS') throw error('EXECUTION_NOT_IN_PROGRESS','Registre falta de peça somente durante uma execução ativa.',409);
+        const actionId=text(execution,'work_order_action_id');
+        const participant=await this.repository.findActionParticipant(client,actionId,user.id);
+        if(!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status'))) throw error('EXECUTION_PARTICIPANT_REQUIRED','Somente participante aceito pode registrar falta de peça.',403);
+        if(!(await this.repository.userCanAccessActionPlant(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
+        await this.requireOpenParticipantSession(client,user.tenantId,executionId,user.id);
+        let evidenceId:string|null=null;
+        if(stored) {
+          await this.repository.insertStorageObject(client,user.tenantId,user.id,stored);
+          evidenceId=await this.repository.insertShortageEvidence(client,user.tenantId,execution,user.id,{
+            storageObjectId:stored.id,evidenceType:'PHOTO',observation:nullableText(upload?.observation ?? null),capturedAt:null,
+          });
+        }
+        const shortage=await this.repository.insertPartShortage(client,user.tenantId,execution,user.id,{
+          ...input,partCode:nullableText(input.partCode),description:input.description.trim(),unit:input.unit.trim(),observation:nullableText(input.observation),
+        },evidenceId);
+        await this.repository.notifyPlantPcmOfShortage(client,user.tenantId,shortage,execution);
+        const action=await this.repository.findAction(client,actionId);
+        if(action?.id) await this.repository.writeHistory(client,user.tenantId,action,executionId,user.id,audit.roleSnapshot,'PART_SHORTAGE_REPORTED','Falta de peça registrada',{
+          shortage_id:shortage.id,codigo_peca:input.partCode,descricao:input.description,quantidade:input.quantity,unidade:input.unit,impeditiva:input.blocking,evidence_id:evidenceId,
+        });
+        await this.repository.writeAudit(client,user.tenantId,user.id,audit,'PART_SHORTAGE_REPORTED','WORK_ORDER_PART_SHORTAGE',shortage.id,shortage);
+        return this.requiredExecutionDetail(client,executionId);
+      });
+    } catch(cause) {
+      if(stored) await this.objectStorage.remove(stored).catch(()=>undefined);
+      throw cause;
+    }
+  }
+
+  async transitionPartShortage(user: AuthenticatedUser, workOrderId: string, shortageId: string, status: 'RESOLVED'|'CANCELLED', justification: string, audit: RequestAuditMetadata) {
+    const note=justification.trim();
+    if(note.length<3 || note.length>2_000) throw error('PART_SHORTAGE_JUSTIFICATION_REQUIRED','Justificativa obrigatória de 3 a 2.000 caracteres.',422);
+    return this.database.withTransaction({tenantId:user.tenantId,userId:user.id},async client=>{
+      const shortage=await this.repository.findPartShortage(client,user.tenantId,workOrderId,shortageId);
+      if(!shortage) throw error('PART_SHORTAGE_NOT_FOUND','Pendência não encontrada.',404);
+      const execution=await this.repository.findExecution(client,text(shortage,'execution_id'),true);
+      if(execution?.work_order_id!==workOrderId || !(await this.repository.userCanAccessActionPlant(client,text(shortage,'action_id'),user.id))) throw error('PART_SHORTAGE_NOT_FOUND','Pendência não encontrada.',404);
+      if(!user.roles.includes('PCM') || !user.capabilities.includes('maintenance.work-orders.manage')) throw error('FORBIDDEN','Somente PCM autorizado pode tratar a pendência.',403);
+      const locked=await this.repository.findPartShortage(client,user.tenantId,workOrderId,shortageId,true);
+      if(!locked || text(locked,'status')!=='OPEN') throw error('PART_SHORTAGE_NOT_OPEN','A pendência já foi tratada.',409);
+      await this.repository.transitionPartShortage(client,user.tenantId,shortageId,user.id,status,note);
+      const action=await this.repository.findAction(client,text(shortage,'action_id'));
+      if(action?.id) await this.repository.writeHistory(client,user.tenantId,action,text(shortage,'execution_id'),user.id,audit.roleSnapshot,
+        status==='RESOLVED'?'PART_SHORTAGE_RESOLVED':'PART_SHORTAGE_CANCELLED',status==='RESOLVED'?'Pendência de peça resolvida':'Pendência de peça cancelada',{shortage_id:shortageId,justificativa:note});
+      await this.repository.writeAudit(client,user.tenantId,user.id,audit,status==='RESOLVED'?'PART_SHORTAGE_RESOLVED':'PART_SHORTAGE_CANCELLED','WORK_ORDER_PART_SHORTAGE',shortageId,{status,justificativa:note});
+      return { pendencias_peca:await this.repository.listPartShortages(client,user.tenantId,{workOrderId}) };
+    });
+  }
+
+  async createShiftHandoff(user: AuthenticatedUser, executionId: string, input: ShiftHandoffInput, audit: RequestAuditMetadata) {
+    const condition=input.equipmentCondition.trim(),pending=input.pendingWork.trim(),next=input.recommendedNextStep.trim();
+    if(condition.length<3 || condition.length>2_000 || pending.length<1 || pending.length>4_000 || next.length<3 || next.length>2_000) throw error('SHIFT_HANDOFF_INPUT_INVALID','Informe condição, trabalho pendente e próximo passo.',422);
+    return this.database.withTransaction({tenantId:user.tenantId,userId:user.id},async client=>{
+      const execution=await this.repository.findExecution(client,executionId,true);
+      if(!execution || text(execution,'status')!=='IN_PROGRESS') throw error('EXECUTION_NOT_IN_PROGRESS','A passagem de turno exige uma OS em andamento.',409);
+      const actionId=text(execution,'work_order_action_id');
+      const participant=await this.repository.findActionParticipant(client,actionId,user.id);
+      if(!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status'))) throw error('EXECUTION_PARTICIPANT_REQUIRED','Somente participante aceito pode encerrar o turno.',403);
+      if(!(await this.repository.userCanAccessActionPlant(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
+      const closed=await this.repository.closeParticipantWorkInterval(client,user.tenantId,executionId,user.id,'SHIFT_HANDOFF',null);
+      if(!closed) throw error('PARTICIPANT_SESSION_NOT_OPEN','Inicie sua sessão antes de encerrar o turno.',409);
+      const handoffId=await this.repository.insertShiftHandoff(client,user.tenantId,execution,user.id,{...input,equipmentCondition:condition,pendingWork:pending,recommendedNextStep:next});
+      const others=await this.repository.countOtherOpenParticipantIntervals(client,user.tenantId,executionId,user.id);
+      let pausedForShift=false;
+      if(others===0 && input.workPending) {
+        await this.repository.pauseExecution(client,user.tenantId,executionId,user.id,'CONTINUIDADE_PROXIMO_TURNO',next);
+        pausedForShift=true;
+      }
+      const action=await this.repository.findAction(client,actionId);
+      if(action?.id) await this.repository.writeHistory(client,user.tenantId,action,executionId,user.id,audit.roleSnapshot,'EXECUTION_SHIFT_HANDOFF_RECORDED','Passagem de turno registrada',{handoff_id:handoffId,condicao_equipamento:condition,trabalho_pendente:pending,proximo_passo:next,os_pausada:pausedForShift});
+      await this.repository.writeAudit(client,user.tenantId,user.id,audit,'EXECUTION_SHIFT_HANDOFF_RECORDED','EXECUTION_SHIFT_HANDOFF',handoffId,{execution_id:executionId,os_pausada:pausedForShift});
+      return this.requiredExecutionDetail(client,executionId);
     });
   }
 
@@ -2165,6 +2329,7 @@ export class OperationsService {
       async (client) => {
         const found = await this.repository.findEvidenceStorageObject(client, objectId);
         if (!found) throw error('EVIDENCE_FILE_NOT_FOUND', 'Evidência não encontrada.', 404);
+        if (!(await this.repository.userCanAccessActionPlant(client,text(found,'action_id'),user.id))) throw error('EVIDENCE_FILE_NOT_FOUND','Evidência não encontrada.',404);
         return found;
       },
     );
@@ -2214,7 +2379,8 @@ export class OperationsService {
         if (
           integer(blockers, 'pendentes') > 0 ||
           integer(blockers, 'evidencias_pendentes') > 0 ||
-          integer(blockers, 'nao_conformes_bloqueantes') > 0
+          integer(blockers, 'nao_conformes_bloqueantes') > 0 ||
+          integer(blockers, 'part_shortages_bloqueantes') > 0
         ) {
           throw error(
             'EXECUTION_HAS_BLOCKERS',
@@ -2224,6 +2390,7 @@ export class OperationsService {
               respostas_pendentes: integer(blockers, 'pendentes'),
               evidencias_pendentes: integer(blockers, 'evidencias_pendentes'),
               nao_conformes_bloqueantes: integer(blockers, 'nao_conformes_bloqueantes'),
+              pendencias_peca_impeditivas: integer(blockers, 'part_shortages_bloqueantes'),
             },
           );
         }
@@ -2506,13 +2673,15 @@ export class OperationsService {
     const pending = integer(blockers, 'pendentes');
     const missingEvidence = integer(blockers, 'evidencias_pendentes');
     const noncompliant = integer(blockers, 'nao_conformes_bloqueantes');
+    const partShortages = integer(blockers, 'part_shortages_bloqueantes');
     return {
       execucao_id: execution.id,
       pode_concluir:
         text(execution, 'status') === 'IN_PROGRESS' &&
         pending === 0 &&
         missingEvidence === 0 &&
-        noncompliant === 0,
+        noncompliant === 0 &&
+        partShortages === 0,
       total: items.length,
       respondidos: items.filter((item) => {
         if (!isRecord(item)) return false;
@@ -2522,6 +2691,7 @@ export class OperationsService {
       respostas_pendentes: pending,
       evidencias_pendentes: missingEvidence,
       nao_conformes_bloqueantes: noncompliant,
+      pendencias_peca_impeditivas: partShortages,
       pendencias: pendingItems,
     };
   }
