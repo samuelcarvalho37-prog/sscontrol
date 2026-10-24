@@ -2374,11 +2374,21 @@ async function executeNodeCall<T>(
       Record<string, unknown>
     >;
     if (!response.ok || !envelope.ok) {
+      const details = envelope.error?.details;
+      const detailsRecord = record(details);
+      const diagnostics = envelope.trace_id
+        ? {
+            ...detailsRecord,
+            ...(details === undefined || Object.keys(detailsRecord).length > 0 ? {} : { details }),
+            trace_id: envelope.trace_id,
+            http_status: response.status,
+          }
+        : (details ?? { status: response.status });
       throw new ApiRequestError(
         envelope.error?.message ??
           `A API respondeu com HTTP ${response.status}.`,
         envelope.error?.code ?? "HTTP_ERROR",
-        envelope.error?.details ?? { status: response.status },
+        diagnostics,
       );
     }
     const data = envelope.data ?? {};

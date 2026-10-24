@@ -111,6 +111,8 @@ export function App() {
   const [validationCount, setValidationCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(0)
   const [notificationOpen, setNotificationOpen] = useState(false)
+  const [technicianFocusOrderId, setTechnicianFocusOrderId] = useState('')
+  const [technicianNotice, setTechnicianNotice] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
@@ -228,6 +230,10 @@ export function App() {
     setWorkspaceReady(true)
   }, [])
 
+  const clearTechnicianFocusOrder = useCallback(() => {
+    setTechnicianFocusOrderId('')
+  }, [])
+
   function handleNavigate(nextSection: GestorSection) {
     if (nextSection === 'home') setDecisionFocus(null)
     setSection(nextSection)
@@ -252,6 +258,20 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
 
+  function showTechnicianNotificationNotice(message: string) {
+    setTechnicianFocusOrderId('')
+    setTechnicianNotice(message)
+    setSection('home')
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
+  function handleOpenTechnicianOrder(orderId: string) {
+    setTechnicianNotice('')
+    setTechnicianFocusOrderId(orderId)
+    setSection('home')
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
   function handleOpenNotification(notification: GestorNotification) {
     const entityType = String(notification.entidade_tipo ?? '').trim().toUpperCase()
     const entityId = String(notification.entidade_id ?? '').trim()
@@ -262,7 +282,22 @@ export function App() {
       entityType === 'OCORRENCIAS_OPERACIONAIS' ||
       entityType === 'OPERATIONAL_OCCURRENCE'
     ) {
+      if (isTechnician) {
+        showTechnicianNotificationNotice(
+          `A ocorrência “${notification.titulo}” ainda não está vinculada a uma OS executável na sua fila. O PCM precisa transformar a ocorrência em OS e liberá-la para manutenção.`,
+        )
+        return
+      }
       handleOpenAnalytics('', entityId)
+      return
+    }
+    if (
+      isTechnician &&
+      (entityType === 'ANALISES_TECNICAS' || entityType === 'ANALYSIS' || entityType === 'TECHNICAL_ANALYSIS' || String(notification.tipo ?? '').trim().toUpperCase() === 'ANALISE_TECNICA')
+    ) {
+      showTechnicianNotificationNotice(
+        `“${notification.titulo}” é uma análise técnica, não uma OS executável. Abra a OS correspondente em Ordens depois que o PCM a criar e liberar.`,
+      )
       return
     }
     if (entityType === 'ATIVOS') {
@@ -280,8 +315,13 @@ export function App() {
     if (
       entityType === 'WORK_ORDER' ||
       entityType === 'ORDEM_SERVICO' ||
+      entityType === 'ORDENS_SERVICO' ||
       entityType === 'MAINTENANCE_WORK_ORDER'
     ) {
+      if (isTechnician) {
+        handleOpenTechnicianOrder(entityId)
+        return
+      }
       handleOpenDecision('demands', { kind: 'workOrder', id: entityId })
       return
     }
@@ -455,7 +495,21 @@ export function App() {
             </section>
           ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
-          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
+          {section === 'home' && isTechnician ? (
+            <>
+              {technicianNotice ? (
+                <div className="feedback feedback--warning" role="status" aria-live="polite">
+                  <span>{technicianNotice}</span>
+                  <button type="button" onClick={() => setTechnicianNotice('')}>Fechar aviso</button>
+                </div>
+              ) : null}
+              <TechnicianDashboard
+                onSessionExpired={expireSession}
+                focusOrderId={technicianFocusOrderId}
+                onFocusOrderHandled={clearTechnicianFocusOrder}
+              />
+            </>
+          ) : null}
           {section === 'home' && canReadWork && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}

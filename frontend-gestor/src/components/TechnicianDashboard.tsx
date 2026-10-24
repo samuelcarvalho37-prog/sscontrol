@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import {
   completeOperatorAction,
   consumeOperatorMaterial,
@@ -12,6 +12,7 @@ import {
   uploadExecutionEvidence,
   validateOperatorActionCompletion,
 } from '../services/api/operatorActions'
+import { ApiRequestError } from '../services/api/client'
 import type { ConsumableMaterial, Execution, ExecutionCompletionBlocker, ExecutionItem, OperatorAction, OperatorActionDetail, StopMode, TechnicalCompletionInput } from '../types/operatorActions'
 
 const stopModeLabels: Record<StopMode, string> = {
@@ -94,10 +95,27 @@ function itemText(item: ExecutionItem) {
   return item.resposta_texto ?? item.resposta_opcao ?? (item.resposta_booleano === true ? 'SIM' : item.resposta_booleano === false ? 'NÃO' : '')
 }
 
+function requestFailure(cause: unknown, fallback: string) {
+  const message = cause instanceof Error ? cause.message : fallback
+  if (!(cause instanceof ApiRequestError) || !cause.details || typeof cause.details !== 'object') return message
+
+  const details = cause.details as Record<string, unknown>
+  const traceId = typeof details.trace_id === 'string' ? details.trace_id : ''
+  const status = typeof details.http_status === 'number' ? `HTTP ${details.http_status}` : ''
+  const reference = [status, traceId && `ref. ${traceId}`].filter(Boolean).join(' · ')
+  return reference ? `${message} (${reference})` : message
+}
+
 type ActionFilter = 'PENDING' | 'IN_PROGRESS' | 'CRITICAL' | 'OVERDUE' | null
 
-export function TechnicianDashboard({ onSessionExpired }: { onSessionExpired: () => void }) {
-  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} /></TechnicianDashboardBoundary>
+interface TechnicianDashboardProps {
+  onSessionExpired: () => void
+  focusOrderId: string
+  onFocusOrderHandled: () => void
+}
+
+export function TechnicianDashboard({ onSessionExpired, focusOrderId, onFocusOrderHandled }: TechnicianDashboardProps) {
+  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} focusOrderId={focusOrderId} onFocusOrderHandled={onFocusOrderHandled} /></TechnicianDashboardBoundary>
 }
 
 class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -117,7 +135,7 @@ class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { m
   }
 }
 
-function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: () => void }) {
+function TechnicianDashboardContent({ onSessionExpired, focusOrderId, onFocusOrderHandled }: TechnicianDashboardProps) {
   const [actions, setActions] = useState<OperatorAction[]>([])
   const [history, setHistory] = useState<OperatorAction[]>([])
   const [selected, setSelected] = useState<OperatorActionDetail | null>(null)
@@ -137,16 +155,26 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const [materialId, setMaterialId] = useState('')
   const [materialQuantity, setMaterialQuantity] = useState('1')
   const [materialObservation, setMaterialObservation] = useState('')
+  const handledFocusOrderId = useRef('')
 
   const reload = useCallback(async () => {
     setLoading(true); setError('')
-    try {
-      const [operatorActions, completedActions] = await Promise.all([listOperatorActions(), listOperatorActions(true)])
-      setActions(operatorActions)
-      setHistory(completedActions)
-    }
-    catch (cause) { const message = cause instanceof Error ? cause.message : 'Não foi possível carregar suas ações.'; if (/sessão|autentica|token/i.test(message)) onSessionExpired(); else setError(message) }
-    finally { setLoading(false) }
+    const [activeResult, historyResult] = await Promise.allSettled([
+      listOperatorActions(),
+      listOperatorActions(true),
+    ])
+
+    const failures: string[] = []
+    if (activeResult.status === 'fulfilled') setActions(activeResult.value)
+    else failures.push(`fila de execução: ${requestFailure(activeResult.reason, 'não foi possível carregar as OS.')}`)
+
+    if (historyResult.status === 'fulfilled') setHistory(historyResult.value)
+    else failures.push(`histórico: ${requestFailure(historyResult.reason, 'não foi possível carregar as execuções.')}`)
+
+    const failureMessage = failures.join(' · ')
+    if (failures.some(message => /sessão|autentica|token/i.test(message))) onSessionExpired()
+    else if (failureMessage) setError(`Falha ao carregar ${failureMessage}.`)
+    setLoading(false)
   }, [onSessionExpired])
 
   useEffect(() => { void reload() }, [reload])
@@ -183,12 +211,33 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const visibleActions = showAllActions || actionFilter ? prioritizedActions : prioritizedActions.slice(0, 8)
   const visibleHistory = showAllHistory ? history : history.slice(0, 5)
 
-  async function open(actionId: string) {
+  const open = useCallback(async (actionId: string) => {
     setBusy(true); setError(''); setBlockers([])
     try { const [data, availableMaterials] = await Promise.all([getOperatorAction(actionId), listOperatorMaterials(actionId)]); setSelected(data.acao); setExecution(data.execucao); setMaterials(availableMaterials); setMaterialId(availableMaterials[0]?.id ?? ''); setMode(data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP'); setCompletion(current => ({ ...current, modo_parada: data.execucao?.modo_parada ?? data.acao.modo_parada ?? 'NO_STOP' })) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível abrir a ação.') }
     finally { setBusy(false) }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!focusOrderId) {
+      handledFocusOrderId.current = ''
+      return
+    }
+    if (loading || handledFocusOrderId.current === focusOrderId) return
+
+    handledFocusOrderId.current = focusOrderId
+    const target = [...actions, ...history].find((action) =>
+      [action.id, action.ordem_id, action.ordem_codigo].some(
+        (value) => String(value ?? '').trim() === focusOrderId,
+      ),
+    )
+    onFocusOrderHandled()
+    if (target) {
+      void open(target.id)
+    } else {
+      setError('A OS desta notificação não está disponível na sua fila. Confirme no PCM se ela foi atribuída e liberada para execução.')
+    }
+  }, [actions, focusOrderId, history, loading, onFocusOrderHandled, open])
 
   async function start() {
     if (!selected) return

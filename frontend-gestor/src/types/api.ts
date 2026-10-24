@@ -8,6 +8,7 @@ export interface ApiEnvelope<T> {
   ok: boolean
   action: string
   elapsed_ms?: number
+  trace_id?: string
   data?: T
   error?: ApiError
 }

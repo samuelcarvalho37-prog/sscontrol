@@ -1094,7 +1094,9 @@ export function PcmDashboard({ onSessionExpired }: { onSessionExpired: () => voi
     setCreateOrderError('')
     setCreateOrderSuccess('')
     if (notification) {
-      const assetTag = notification.titulo.match(/—\s*([A-Za-z]+\d+)\b/u)?.[1] ?? ''
+      // Tags imported from customer inventories commonly contain separators
+      // (for example TOZ-EQ-088); accept the full tag instead of truncating it.
+      const assetTag = notification.titulo.match(/—\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?=\s|$)/u)?.[1] ?? ''
       const matchingAsset = assetTag
         ? assetCatalog.find(asset => recordText(asset.tag).toLocaleUpperCase('pt-BR') === assetTag.toLocaleUpperCase('pt-BR'))
         : null
