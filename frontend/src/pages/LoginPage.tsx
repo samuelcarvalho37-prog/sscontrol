@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import '../styles/login-refinement.css'
 import { APP_RELEASE_VERSION, isCompatibleRelease } from '../release'
 import { ApiRequestError } from '../services/api/client'
 import { getApiUrl } from '../services/api/config'
@@ -67,6 +68,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [startupState, setStartupState] = useState<StartupState>('checking')
   const [registration, setRegistration] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [motionPaused, setMotionPaused] = useState(false)
   const [recoveryRegistration, setRecoveryRegistration] = useState('')
   const [recoveryRequestId, setRecoveryRequestId] = useState('')
   const [firstAccessRegistration, setFirstAccessRegistration] = useState('')
@@ -367,7 +370,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
   if (view === 'startup') {
     return (
-      <main className="auth-shell auth-shell--startup">
+      <main className="auth-shell auth-shell--startup vorqix-login">
         <section className="auth-startup" aria-live="polite" aria-busy="true">
           <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div className="auth-startup__spinner" aria-hidden="true" />
@@ -391,22 +394,26 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-labelledby="auth-title">
+    <main className="auth-shell vorqix-login">
+      <section className="auth-card" data-view={view} aria-labelledby="auth-title">
         <header className="auth-brand">
-          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+          <span className="field-brand-reveal"><img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" fetchPriority="high" loading="eager" /></span>
           <div>
             <span className="auth-brand__eyebrow">Operação industrial</span>
-            <h1 id="auth-title">VORQIX</h1>
+            <span className="auth-brand__product">Portal de campo</span>
           </div>
         </header>
 
         {view === 'login' && (
           <>
-            <div className="auth-intro">
-              <span className="auth-intro__kicker">Acesso do operador</span>
-              <h2>Inicie sua sessão</h2>
-              <p>Acesse as rotinas, checklists e registros do seu turno.</p>
+            <div className="auth-intro auth-intro--ambient" data-paused={motionPaused}>
+              <span className="auth-intro__kicker">NO RITMO DA OPERAÇÃO</span>
+              <h1 id="auth-title">{'Pronto para\nmais um turno?'}</h1>
+              <p>Entre com sua matrícula para acessar as atividades e os registros da sua equipe.</p>
+              <div className="field-signature" data-paused={motionPaused}>
+                <div className="field-ambient" aria-hidden="true"><i /><span /></div>
+                <button className="field-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(current => !current)}>{motionPaused ? 'Retomar animação' : 'Pausar animação'}</button>
+              </div>
             </div>
 
             <form className="auth-form" onSubmit={submitLogin} noValidate>
@@ -425,14 +432,27 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
               <label className="auth-field">
                 <span>Senha</span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Digite sua senha"
-                  disabled={submitting}
-                />
+                <div className="auth-password-input">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Digite sua senha"
+                    disabled={submitting}
+                  />
+                  <button
+                    type="button"
+                    className="auth-password-toggle"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    aria-pressed={showPassword}
+                    title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    disabled={submitting}
+                  >
+                    <PasswordVisibilityIcon visible={showPassword} />
+                  </button>
+                </div>
               </label>
 
               {error && <p className="auth-feedback auth-feedback--error" role="alert">{error}</p>}
@@ -461,7 +481,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           <>
             <div className="auth-intro">
               <span className="auth-intro__kicker">Suporte de acesso</span>
-              <h2>Recuperar acesso</h2>
+              <h1 id="auth-title">Recuperar acesso</h1>
               <p>Informe sua matrícula para solicitar uma nova senha ao administrador.</p>
             </div>
 
@@ -499,7 +519,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           <section className="auth-state" aria-live="polite">
             <span className="auth-state__icon auth-state__icon--success" aria-hidden="true">✓</span>
             <span className="auth-intro__kicker">Recuperação de acesso</span>
-            <h2>Solicitação preparada</h2>
+            <h1 id="auth-title">Solicitação preparada</h1>
             <p>
               A solicitação foi registrada na API. O administrador fará a validação e a redefinição do acesso.
             </p>
@@ -537,7 +557,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           <>
             <div className="auth-intro">
               <span className="auth-intro__kicker">Primeiro acesso</span>
-              <h2>Crie sua nova senha</h2>
+              <h1 id="auth-title">Crie sua nova senha</h1>
               <p>A senha temporária deve ser substituída antes de acessar o aplicativo.</p>
             </div>
 
@@ -605,7 +625,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
               <div className="auth-password-rules">
                 <strong>Requisitos mínimos</strong>
-                <span>8 caracteres · letra maiúscula · letra minúscula · número</span>
+                <span>12 caracteres · letra maiúscula · letra minúscula · número</span>
               </div>
 
               {error && <p className="auth-feedback auth-feedback--error" role="alert">{error}</p>}
@@ -630,7 +650,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           <section className="auth-state" aria-live="polite">
             <span className="auth-state__icon auth-state__icon--error" aria-hidden="true">!</span>
             <span className="auth-intro__kicker">Acesso bloqueado</span>
-            <h2>Conta temporariamente bloqueada</h2>
+            <h1 id="auth-title">Conta temporariamente bloqueada</h1>
             <p>
               O acesso foi bloqueado após tentativas inválidas. Solicite a liberação ao administrador.
             </p>
@@ -647,7 +667,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
           <section className="auth-state" aria-live="polite">
             <span className="auth-state__icon" aria-hidden="true">↻</span>
             <span className="auth-intro__kicker">Falha de conexão</span>
-            <h2>Não foi possível validar o acesso</h2>
+            <h1 id="auth-title">Não foi possível validar o acesso</h1>
             <p>{connectionErrorMessage}</p>
             <div className="auth-state__actions">
               <button className="auth-primary-button" type="button" onClick={() => window.location.reload()}>

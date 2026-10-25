@@ -1,0 +1,248 @@
+.vorqix-login.auth-shell {
+  min-height: 100dvh;
+  padding: 40px 20px;
+  place-items: center;
+  color: #102b3a;
+  background:
+    linear-gradient(135deg, transparent 68%, #d9902408 68%, #d9902408 79%, transparent 79%),
+    radial-gradient(ellipse at 15% 0%, #f1e3c9 0%, transparent 56%),
+    #f7f5f0;
+}
+
+.vorqix-login .auth-card {
+  width: min(100%, 460px);
+  min-height: auto;
+  padding: 36px;
+  border: 1px solid #dbe4e7;
+  border-top: 3px solid #d99024;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px #102b3a0a;
+}
+
+.vorqix-login .auth-brand:has(.vorqix-logo) {
+  isolation: isolate;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 25px;
+  border-color: #e4eaed;
+}
+
+.vorqix-login .auth-brand .vorqix-logo {
+  width: 156px;
+  max-width: 48%;
+  height: auto;
+  border-radius: 0;
+  mix-blend-mode: multiply;
+}
+
+.vorqix-login .auth-brand > div {
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid #dbe4e7;
+}
+
+.vorqix-login .auth-brand__eyebrow {
+  margin-bottom: 5px;
+  color: #526773;
+  font-size: 0.64rem;
+  letter-spacing: 0.07em;
+  line-height: 1.5;
+}
+
+.vorqix-login .auth-brand__product {
+  color: #102b3a;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.vorqix-login .auth-intro {
+  padding: 30px 0 26px;
+}
+
+.vorqix-login .auth-intro__kicker {
+  margin-bottom: 10px;
+  color: #076d78;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+}
+
+.vorqix-login .auth-intro h1,
+.vorqix-login .auth-state h1 {
+  margin: 0;
+  color: #102b3a;
+  font-size: clamp(1.5rem, 5vw, 1.85rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.vorqix-login .auth-intro p,
+.vorqix-login .auth-state > p {
+  color: #526773;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.vorqix-login .field-signature { position: relative; margin-top: 16px; padding: 8px 12px; background: #f3f8f9; border: 1px solid #e0ecef; border-radius: 10px; }
+.vorqix-login .field-conveyor { display: block; width: 100%; height: auto; max-height: 82px; }
+.vorqix-login .field-parcels { animation: field-convey 3.5s linear infinite; }
+.vorqix-login .field-belt { animation: field-belt 1.65s linear infinite; }
+.vorqix-login .field-motion-toggle { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 44px; padding: 0; margin: 0; border: 0; border-radius: 10px; background: transparent; font-size: 0; cursor: pointer; }
+.vorqix-login .field-signature[data-paused='true'] * { animation-play-state: paused !important; }
+.vorqix-login .auth-card { animation: field-arrive .6s ease-out both; }
+@keyframes field-convey { to { transform: translateX(68px); } }
+@keyframes field-belt { to { stroke-dashoffset: -32; } }
+@keyframes field-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.vorqix-login .auth-form { gap: 18px; }
+.vorqix-login .auth-field { min-width: 0; gap: 8px; }
+.vorqix-login .auth-field > span { color: #243f4e; font-size: 0.82rem; font-weight: 650; }
+
+.vorqix-login .auth-field input {
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid #bccbd2;
+  border-radius: 8px;
+  background: #fcfdfd;
+  color: #102b3a;
+  font-size: 1rem;
+}
+
+.vorqix-login .auth-field input::placeholder { color: #657984; }
+.vorqix-login .auth-field input:focus {
+  border-color: #087f8c;
+  background: #fff;
+  box-shadow: 0 0 0 3px #087f8c1f;
+}
+
+.vorqix-login .auth-primary-button,
+.vorqix-login .auth-link-button {
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.vorqix-login .auth-primary-button {
+  margin-top: 4px;
+  border: 1px solid #102b3a;
+  background: #102b3a;
+  box-shadow: none;
+  color: #fff;
+}
+
+.vorqix-login .auth-primary-button:hover:not(:disabled) {
+  border-color: #17465a;
+  background: #17465a;
+}
+
+.vorqix-login .auth-link-button { color: #076d78; }
+.vorqix-login button:focus-visible {
+  outline: 3px solid #087f8c;
+  outline-offset: 3px;
+}
+
+.vorqix-login .auth-password-toggle { width: 44px; height: 44px; right: 4px; border-radius: 6px; }
+.vorqix-login .auth-password-input input { padding-right: 54px; }
+.vorqix-login .auth-footer {
+  margin-top: 20px;
+  padding-top: 20px;
+  color: #5d717c;
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
+.vorqix-login .auth-feedback,
+.vorqix-login .auth-state__note,
+.vorqix-login .auth-account-reference,
+.vorqix-login .auth-password-rules { border-radius: 8px; overflow-wrap: anywhere; }
+.vorqix-login .auth-password-rules span { color: #526773; line-height: 1.6; }
+.vorqix-login .auth-recovery-summary { max-width: 100%; overflow-wrap: anywhere; }
+.vorqix-login .auth-startup > .vorqix-logo { width: 172px; margin-bottom: 28px; mix-blend-mode: multiply; }
+.vorqix-login .auth-startup__spinner { border-top-color: #087f8c; }
+.vorqix-login .auth-startup__progress span { background: #087f8c; }
+.vorqix-login .auth-startup small { color: #526773; line-height: 1.6; }
+
+.vorqix-login .field-brand-reveal { position: relative; display: block; width: 156px; max-width: 48%; overflow: hidden; flex-shrink: 0; mix-blend-mode: darken; }
+.vorqix-login .auth-brand .field-brand-reveal .vorqix-logo { display: block; width: 100%; max-width: 100%; mix-blend-mode: normal; }
+.vorqix-login .field-brand-reveal::after { content: ''; position: absolute; inset: 0 auto 0 -70%; width: 55%; background: linear-gradient(110deg, transparent, #ffffff70, transparent); pointer-events: none; animation: field-brand-light 1.2s .65s ease-in-out both; }
+.vorqix-login .auth-intro--ambient { position: relative; isolation: isolate; overflow: hidden; margin: 0; padding: 30px 0; background: transparent; border-radius: 0; }
+.vorqix-login .auth-intro--ambient h1 { color: #102b3a; font-size: clamp(27px, 3vw, 36px); line-height: 1.18; white-space: pre-line; }
+.vorqix-login .auth-intro--ambient p { color: #53616a; max-width: 30ch; }
+.vorqix-login .auth-intro--ambient .auth-intro__kicker { color: #865212; }
+.vorqix-login .auth-intro--ambient > :not(.field-signature) { position: relative; z-index: 1; pointer-events: none; }
+.vorqix-login .auth-intro--ambient .field-signature { position: absolute; inset: 0; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; }
+.vorqix-login .field-ambient { position: absolute; inset: 0; overflow: hidden; }
+.vorqix-login .field-ambient i { position: absolute; inset: -70% -40%; background: radial-gradient(ellipse, #edc67e25, transparent 65%); animation: field-light 15s ease-in-out infinite alternate; }
+.vorqix-login .field-ambient span { position: absolute; inset: -30%; background: repeating-linear-gradient(170deg, transparent 0 54px, #bd8d3e0b 55px, transparent 56px 110px); animation: field-lines 20s ease-in-out infinite alternate; }
+.vorqix-login .auth-intro--ambient .field-motion-toggle { z-index: 2; }
+.vorqix-login .auth-intro--ambient .field-motion-toggle:focus-visible { outline-offset: -4px; outline-color: #a1e9e7; }
+@keyframes field-light { from { transform: translateX(-18%); } to { transform: translateX(18%); } }
+@keyframes field-lines { from { transform: translateY(-12px); } to { transform: translateY(24px); } }
+@keyframes field-brand-light { 0% { opacity: 0; transform: translateX(0); } 20%, 70% { opacity: .85; } 100% { opacity: 0; transform: translateX(340%); } }
+.vorqix-login .auth-card[data-view='login'] { width: min(880px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 52px; padding: 36px 44px 24px; border-top: 1px solid #dfd9cc; border-radius: 20px; box-shadow: 0 20px 64px #33240d0b; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand { grid-column: 1 / -1; margin-bottom: 32px; padding-bottom: 24px; }
+.vorqix-login .auth-card[data-view='login'] .field-brand-reveal { width: 184px; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand > div { border: 1px solid #e8d9bd; background: #faf5e9; border-radius: 8px; padding: 9px 12px; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { align-self: stretch; padding: 24px 16px 24px 0; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro__kicker::before { content: ''; display: block; width: 34px; height: 3px; margin-bottom: 22px; background: #d99024; border-radius: 2px; }
+.vorqix-login .auth-card[data-view='login'] .auth-form { padding-top: 12px; }
+.vorqix-login .auth-card[data-view='login'] .auth-footer { grid-column: 1 / -1; margin-top: 28px; text-align: left; }
+.vorqix-login .auth-primary-button { background: #975d0e; border-color: #975d0e; color: #fff; }
+.vorqix-login .auth-primary-button:hover:not(:disabled) { background: #955b0d; border-color: #955b0d; }
+.vorqix-login .auth-link-button { color: #77501b; }
+@media (max-width: 700px) {
+  .vorqix-login .auth-card[data-view='login'] { width: min(460px, 100%); grid-template-columns: minmax(0, 1fr); padding: 26px; }
+  .vorqix-login .auth-card[data-view='login'] .auth-brand { margin-bottom: 12px; gap: 12px; }
+  .vorqix-login .auth-card[data-view='login'] .field-brand-reveal { width: 156px; }
+  .vorqix-login .auth-card[data-view='login'] .auth-brand > div { padding: 7px 9px; }
+  .vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { padding: 18px 0; }
+  .vorqix-login .auth-card[data-view='login'] .auth-intro__kicker::before { margin-bottom: 14px; }
+  .vorqix-login .auth-card[data-view='login'] .auth-footer { margin-top: 14px; }
+}
+@media (max-width: 480px) {
+  .vorqix-login.auth-shell { padding: 24px 14px; }
+  .vorqix-login .auth-card { padding: 26px 22px; border-radius: 12px; }
+  .vorqix-login .auth-brand:has(.vorqix-logo) { gap: 12px; }
+  .vorqix-login .auth-brand > div { padding-left: 12px; }
+  .vorqix-login .auth-brand__eyebrow { font-size: 0.6rem; }
+  .vorqix-login .auth-brand__product { font-size: 0.72rem; }
+}
+
+.vorqix-login .auth-card[data-view='login'] { overflow: hidden; padding: 0; gap: 0; border: 1px solid #e6ddd0; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand { margin: 0; padding: 30px 36px; border: 0; background: #382d20; }
+.vorqix-login .auth-card[data-view='login'] .field-brand-reveal { width: 260px; max-width: 58%; mix-blend-mode: screen; }
+.vorqix-login .auth-card[data-view='login'] .field-brand-reveal .vorqix-logo { filter: grayscale(1) invert(1) contrast(1.35); }
+.vorqix-login .auth-card[data-view='login'] .field-brand-reveal::after { mix-blend-mode: color-dodge; background: linear-gradient(110deg, #000, #d2b58c, #000); }
+.vorqix-login .auth-card[data-view='login'] .auth-brand > div { background: transparent; border-color: #bd935b55; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand__eyebrow { color: #e5b97c; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand__product { color: #fff4e3; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { padding: 36px; background: linear-gradient(155deg, #382d20, #594124); }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient h1 { color: #fff8ed; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient p { color: #e1d2be; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro__kicker { color: #f0bf79; }
+.vorqix-login .auth-card[data-view='login'] .auth-form { padding: 32px; }
+.vorqix-login .auth-card[data-view='login'] .auth-footer { margin: 0; padding: 20px 32px; background: #fbf9f5; }
+.vorqix-login .field-ambient span, .vorqix-login .field-motion-toggle { display: none; }
+.vorqix-login .field-ambient i { inset: auto auto -50px -40px; width: 190px; height: 190px; border-radius: 50%; background: radial-gradient(circle, #e8b05e30 60%, transparent 71%); animation: none; transition: transform 400ms ease-out; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) { .vorqix-login .auth-intro--ambient:hover .field-ambient i { transform: translate(25px, -20px); } }
+@media (max-width: 700px) {
+  .vorqix-login .auth-card[data-view='login'] .auth-brand { flex-wrap: wrap; padding: 24px; gap: 18px; }
+  .vorqix-login .auth-card[data-view='login'] .field-brand-reveal { width: 230px; max-width: 100%; }
+  .vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { padding: 22px 24px; }
+  .vorqix-login .auth-card[data-view='login'] .auth-form { padding: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vorqix-login .field-brand-reveal, .vorqix-login .field-brand-reveal::after { animation: none; }
+  .vorqix-login .field-brand-reveal::after { opacity: 0; }
+  .vorqix-login .field-signature *, .vorqix-login .auth-card { animation: none !important; }
+  .vorqix-login .field-motion-toggle { display: none; }
+  .vorqix-login .auth-startup__spinner,
+  .vorqix-login .auth-startup__progress span { animation: none; }
+  .vorqix-login .auth-field input,
+  .vorqix-login .auth-password-toggle { transition: none; }
+}

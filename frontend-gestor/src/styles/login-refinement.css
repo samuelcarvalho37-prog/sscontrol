@@ -1,0 +1,188 @@
+.auth-shell.vorqix-login {
+  --login-ink: #102b3a;
+  --login-accent: #087f8c;
+  padding: clamp(16px, 4vw, 56px);
+  color: var(--login-ink);
+  background: radial-gradient(ellipse at 12% 10%, #dcebed 0, transparent 52%), #f3f6f7;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+}
+.vorqix-login .login-composition {
+  width: min(1040px, 100%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #dce5e9;
+  border-radius: 24px;
+  background: white;
+  box-shadow: 0 28px 80px #102b3a12, 0 2px 8px #102b3a04;
+  overflow: hidden;
+}
+.vorqix-login .login-context {
+  display: flex;
+  flex-direction: column;
+  padding: 40px;
+  background: linear-gradient(155deg, #f1f6f6 0%, #e5eff1 100%);
+  isolation: isolate;
+  position: relative;
+  min-width: 0;
+}
+.vorqix-login .login-context::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, #102b3a, #087f8c, transparent); }
+.vorqix-login .login-official-logo { width: 210px; max-width: 100%; height: auto; object-fit: contain; align-self: flex-start; mix-blend-mode: multiply; }
+.vorqix-login .auth-startup > .vorqix-logo { mix-blend-mode: multiply; }
+.vorqix-login .login-context__body { margin-block: auto; padding-block: 40px; }
+.vorqix-login .login-kicker, .vorqix-login .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .14em; color: #286675; }
+.vorqix-login .login-context h2 { margin: 18px 0; font-size: clamp(25px, 2.7vw, 36px); line-height: 1.22; letter-spacing: -.035em; font-weight: 600; white-space: pre-line; }
+.vorqix-login .login-context p { max-width: 32ch; margin: 0; color: #506873; font-size: 15px; line-height: 1.7; }
+.vorqix-login .login-context__footer { font-size: 11px; letter-spacing: .06em; color: #506873; border-top: 1px solid #ccdce1; padding-top: 20px; }
+.vorqix-login .login-signature { position: relative; margin-top: 28px; max-width: 320px; color: #526e7c; }
+.vorqix-login .login-signature svg { width: 100%; height: auto; display: block; overflow: visible; }
+.vorqix-login .login-signature > span { display: block; margin-top: 12px; font-size: 10px; letter-spacing: .08em; }
+.vorqix-login .command-motion { max-height: 155px; }
+.vorqix-login .command-orbit { transform-origin: 160px 85px; animation: command-orbit 10s linear infinite; }
+.vorqix-login .command-stream { stroke: #087f8c; stroke-width: 2; stroke-dasharray: 5 11; animation: command-stream 2s linear infinite; }
+.vorqix-login .command-core { animation: command-float 4s ease-in-out infinite; }
+.vorqix-login .login-motion-toggle { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 44px; padding: 0; margin: 0; background: transparent; border: 0; border-radius: 8px; font-size: 0; cursor: pointer; }
+.vorqix-login .login-signature[data-paused='true'] * { animation-play-state: paused !important; }
+.vorqix-login .team-flow { stroke: #087f8c; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 12 28; animation: team-flow 2s linear infinite; }
+.vorqix-login .team-ripple { stroke: #087f8c; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: team-ripple 2.8s ease-out infinite; }
+.vorqix-login .team-motion .signature-hub { animation: team-center 2.8s ease-in-out infinite; }
+@keyframes team-flow { to { stroke-dashoffset: -80; } }
+@keyframes team-ripple { from { transform: scale(.8); opacity: .7; } to { transform: scale(1.45); opacity: 0; } }
+@keyframes team-center { 0%, 100% { fill: #087f8c; } 50% { fill: #17546c; } }
+@keyframes command-orbit { to { transform: rotate(360deg); } }
+@keyframes command-stream { to { stroke-dashoffset: -32; } }
+@keyframes command-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.vorqix-login .signature-track { stroke: #78a6b3; stroke-width: 1.5; stroke-dasharray: 400; stroke-dashoffset: 0; animation: signature-connect 1.8s ease-out both; }
+.vorqix-login .signature-node { fill: #f4f9fa; stroke: #408497; stroke-width: 1.5; animation: signature-arrive 1.2s ease-out both; }
+.vorqix-login .signature-hub { fill: #087f8c; stroke: #087f8c; animation: signature-arrive 1.2s ease-out both; }
+.vorqix-login[data-portal] .signature-hub { fill: #173c55; stroke: #173c55; }
+.vorqix-login[data-portal] .login-context { background: radial-gradient(ellipse at 0 100%, #dbe8f2 0%, transparent 70%), #f0f5f8; }
+.vorqix-login .login-composition { animation: login-arrive .6s ease-out both; }
+.vorqix-login .auth-form input { transition: border-color .18s ease, box-shadow .18s ease; }
+.vorqix-login .auth-form input:focus { border-color: #087f8c; box-shadow: 0 0 0 3px #087f8c12; }
+.vorqix-login .primary-button { transition: background-color .18s ease, box-shadow .18s ease; }
+.vorqix-login .primary-button:hover:not(:disabled) { box-shadow: 0 5px 16px #102b3a18; }
+@keyframes signature-connect { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
+@keyframes signature-arrive { from { opacity: 0; } to { opacity: 1; } }
+@keyframes login-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.vorqix-login .auth-panel { width: 100%; min-width: 0; padding: 48px 40px 32px; border: 0; border-radius: 0; box-shadow: none; align-self: center; }
+.vorqix-login .auth-brand h1 { font-size: clamp(24px, 2.3vw, 30px); line-height: 1.2; letter-spacing: -.035em; font-weight: 650; margin: 12px 0 0; color: var(--login-ink); }
+.vorqix-login[data-portal='ADMIN'] .auth-brand .eyebrow { display: inline-block; padding: 7px 10px; background: #edf4f5; border: 1px solid #d9e7ea; border-radius: 6px; font-size: 10px; }
+.vorqix-login .auth-intro { margin: 16px 0 28px; font-size: 14px; color: #526673; line-height: 1.65; }
+.vorqix-login .auth-form { gap: 18px; }
+.vorqix-login .auth-form label { font-weight: 600; font-size: 13px; color: #223e4d; gap: 8px; }
+.vorqix-login .auth-form input { min-height: 48px; border: 1px solid #b9cbd3; border-radius: 8px; padding: 12px 14px; font: inherit; font-size: 16px; font-weight: 400; background: #fff; color: #102b3a; }
+.vorqix-login input::placeholder { color: #657b86; }
+.vorqix-login .login-password { position: relative; display: block; }
+.vorqix-login .login-field { display: grid; gap: 8px; }
+.vorqix-login .login-password input { padding-right: 82px; }
+.vorqix-login .login-password__toggle { position: absolute; right: 4px; top: 2px; min-height: 44px; padding: 0 10px; background: transparent; color: #245969; border: 0; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.vorqix-login .primary-button { min-height: 48px; background: #102b3a; border: 1px solid #102b3a; color: white; border-radius: 8px; box-shadow: none; font-weight: 600; font-size: 14px; }
+.vorqix-login .primary-button:hover:not(:disabled) { background: #19465b; }
+.vorqix-login .secondary-button { min-height: 44px; border-radius: 8px; }
+.vorqix-login .auth-link-button { min-height: 44px; color: #246073; font-size: 13px; font-weight: 600; background: transparent; }
+.vorqix-login :is(button, input):focus-visible { outline: 3px solid #087f8c; outline-offset: 3px; }
+.vorqix-login button:disabled { opacity: .6; cursor: not-allowed; }
+.vorqix-login .auth-footer { margin-top: 28px; font-size: 11px; color: #526673; flex-wrap: wrap; gap: 8px; }
+.vorqix-login .auth-footer button { min-height: 44px; font-size: 11px; font-weight: 600; color: #245969; padding: 0; }
+.vorqix-login .feedback { font-size: 13px; border-radius: 8px; line-height: 1.6; overflow-wrap: anywhere; }
+.vorqix-login .auth-actions { flex-wrap: wrap; }
+.vorqix-login .auth-actions button { flex: 1 1 120px; }
+.vorqix-login .auth-startup { padding: 28px 16px; }
+.vorqix-login .auth-footer .login-connection-toggle { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #617580; cursor: pointer; }
+.vorqix-login .auth-footer .login-connection-toggle { margin-left: auto; }
+.vorqix-login .login-connection-versions { color: #617580; font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
+.connection-panel.connection-panel--compact { background: #f7f9fa; border: 1px solid #e1e7eb; border-radius: 12px; padding: 18px; box-shadow: none; }
+.connection-panel .connection-panel__heading h2 { margin: 0; font-size: 16px; }
+.connection-address { margin-top: 14px; min-width: 0; }
+.connection-address > span { color: #526773; font-size: 12px; }
+.connection-address > p { margin: 6px 0 10px; color: #183747; font-size: 14px; overflow-wrap: anywhere; }
+.connection-address > small { display: block; color: #526773; font-size: 12px; line-height: 1.5; }
+.vorqix-login .auth-footer .login-connection-toggle:hover { background: #edf3f6; color: #123b50; }
+.vorqix-login .auth-footer .login-connection-toggle:focus-visible { outline: 2px solid #087f8c; outline-offset: 2px; }
+.vorqix-login .auth-startup h1 { font-size: 22px; letter-spacing: .1em; }
+.vorqix-login .auth-startup__progress span { background: #087f8c; }
+.vorqix-login[data-portal] .login-context { --portal-depth: #102b46; background: linear-gradient(165deg, #eaf2f8 0, #d5e4ee 100px, var(--portal-depth) 235px); overflow: hidden; }
+.vorqix-login[data-portal] .login-context::before { display: none; }
+.vorqix-login .admin-brand-reveal { position: relative; z-index: 1; width: 210px; max-width: 100%; align-self: flex-start; flex-shrink: 0; margin-bottom: 48px; overflow: hidden; animation: admin-brand-enter .8s cubic-bezier(.2,.7,.2,1) both; }
+.vorqix-login[data-portal] .admin-brand-reveal { mix-blend-mode: darken; }
+.vorqix-login[data-portal] .admin-brand-reveal .login-official-logo { display: block; width: 100%; margin: 0; mix-blend-mode: normal; }
+.vorqix-login .admin-brand-reveal::after { content: ''; position: absolute; inset: -10% auto -10% -70%; width: 55%; pointer-events: none; background: linear-gradient(110deg, transparent, #ffffff70 48%, transparent); opacity: 0; transform: translateX(0); animation: admin-brand-light 1.2s .65s ease-in-out both; }
+@keyframes admin-brand-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes admin-brand-light { 0% { opacity: 0; transform: translateX(0); } 20%, 70% { opacity: .85; } 100% { opacity: 0; transform: translateX(340%); } }
+.vorqix-login[data-portal] .login-context__body { position: relative; z-index: 1; padding-block: 28px 60px; }
+.vorqix-login[data-portal] .login-context h2 { color: #f4f9fc; font-size: clamp(27px, 2.6vw, 36px); }
+.vorqix-login[data-portal] .login-kicker { color: #8ed7dc; }
+.vorqix-login[data-portal] .login-context p { color: #c3d4df; }
+.vorqix-login[data-portal] .login-context__footer { position: relative; z-index: 1; color: #adc3d1; border-color: #ffffff26; }
+.vorqix-login[data-portal] .login-signature { position: static; margin-top: 30px; }
+.vorqix-login[data-portal] .login-signature > span { color: #a4bfce; font-size: 11px; line-height: 1.6; letter-spacing: .03em; }
+.vorqix-login[data-portal] .login-signature > span:not(.admin-ambient-caption) { display: none; }
+.vorqix-login[data-portal] .login-motion-toggle { inset: 0; }
+.vorqix-login[data-portal] .login-motion-toggle:focus-visible { outline-color: #8ed7dc; }
+.vorqix-login .admin-ambient { position: absolute; inset: 160px 0 0; overflow: hidden; pointer-events: none; }
+.vorqix-login .admin-light { position: absolute; width: 110%; height: 85%; border-radius: 50%; opacity: .65; }
+.vorqix-login .admin-light--one { inset: 10% auto auto -40%; background: radial-gradient(ellipse, #087f8c99, transparent 65%); animation: admin-light-drift 16s ease-in-out infinite alternate; }
+.vorqix-login .admin-light--two { inset: 40% -45% auto auto; background: radial-gradient(ellipse, #3a6ea580, transparent 65%); animation: admin-light-drift 20s ease-in-out -8s infinite alternate-reverse; }
+.vorqix-login .admin-planes { position: absolute; inset: -25%; background: repeating-linear-gradient(125deg, transparent 0 119px, #a6d4ed13 120px, transparent 121px 240px), linear-gradient(125deg, transparent 45%, #ffffff05 45% 65%, transparent 65%); animation: admin-plane-drift 24s ease-in-out infinite alternate; }
+.vorqix-login .admin-ambient[data-paused='true'] * { animation-play-state: paused !important; }
+@keyframes admin-light-drift { from { transform: translate(-8%, -8%) scale(.9); } to { transform: translate(26%, 12%) scale(1.2); } }
+@keyframes admin-plane-drift { from { transform: translateX(-10px); } to { transform: translateX(40px); } }
+.vorqix-login[data-portal='ADMIN'] .login-context { background: linear-gradient(160deg, #173951, #102b46 55%, #10283e); }
+.vorqix-login[data-portal='ADMIN'] .admin-brand-reveal { width: 290px; mix-blend-mode: screen; }
+.vorqix-login[data-portal='ADMIN'] .admin-brand-reveal .login-official-logo { filter: grayscale(1) invert(1) contrast(1.35); }
+.vorqix-login[data-portal='ADMIN'] .admin-brand-reveal::after { mix-blend-mode: color-dodge; background: linear-gradient(110deg, #000 0%, #243e50 30%, #a8c7db 50%, #243e50 70%, #000 100%); }
+.vorqix-login[data-portal='ADMIN'] .admin-planes { display: none; }
+.vorqix-login[data-portal='ADMIN'] .admin-ambient { inset: 150px 0 0; }
+.vorqix-login[data-portal='ADMIN'] .admin-light { height: auto; aspect-ratio: 1; filter: blur(1px); }
+.vorqix-login[data-portal='ADMIN'] .admin-light--one { width: 46%; inset: 5% auto auto -12%; opacity: .45; background: radial-gradient(circle, #388d9b 0, #246476bb 62%, #24647640 68%, transparent 71%); }
+.vorqix-login[data-portal='ADMIN'] .admin-light--two { width: 40%; inset: 42% -10% auto auto; opacity: .4; background: radial-gradient(circle, #618ac1 0, #345e93bb 62%, #345e9340 68%, transparent 71%); }
+.vorqix-login[data-portal='ADMIN'] .admin-light--three { width: 28%; inset: 65% auto auto 25%; opacity: .28; background: radial-gradient(circle, #428a9a 0, #205b73bb 62%, #205b7340 68%, transparent 71%); }
+.vorqix-login[data-portal='ADMIN'] .admin-light { animation: none; transform: translate3d(var(--orb-x, 0px), var(--orb-y, 0px), 0); transition: transform 280ms ease-out; }
+@media (prefers-reduced-motion: reduce), (hover: none) {
+  .vorqix-login[data-portal='ADMIN'] .admin-light { transform: none; }
+}
+.vorqix-login:not([data-portal='ADMIN'])[data-portal] .login-context { --portal-depth: #105451; background: linear-gradient(165deg, #e9f4ef 0, #cce5dc 100px, var(--portal-depth) 235px); }
+.vorqix-login:not([data-portal='ADMIN']) .admin-light--one { background: radial-gradient(ellipse, #339f9b80, transparent 65%); animation-duration: 19s; }
+.vorqix-login:not([data-portal='ADMIN']) .admin-planes { background: repeating-linear-gradient(155deg, transparent 0 119px, #b5eee519 120px, transparent 121px 240px), linear-gradient(155deg, transparent 45%, #ffffff06 45% 65%, transparent 65%); }
+@media (max-width: 760px) {
+  .vorqix-login:not([data-portal='ADMIN'])[data-portal] .login-context { background: linear-gradient(155deg, #e9f4ef 0, #cce5dc 80px, var(--portal-depth) 200px); }
+  .vorqix-login[data-portal] .login-context { min-height: 176px; background: linear-gradient(155deg, #eaf2f8 0, #d5e4ee 80px, var(--portal-depth) 200px); }
+  .vorqix-login[data-portal='ADMIN'] .login-context { background: linear-gradient(160deg, #173951, #102b46); }
+  .vorqix-login .admin-brand-reveal { width: 176px; margin-bottom: 0; }
+  .vorqix-login[data-portal='ADMIN'] .admin-brand-reveal { width: 230px; }
+  .vorqix-login[data-portal] .admin-ambient { inset: 108px 0 0; }
+  .vorqix-login[data-portal='ADMIN'] .admin-light { max-width: 180px; opacity: .2; animation-duration: 36s; }
+  .vorqix-login[data-portal] .login-context__body { padding: 0; position: static; }
+  .vorqix-login[data-portal] .login-signature { margin: 0; }
+  .vorqix-login[data-portal] .login-signature > span { display: none; }
+  .vorqix-login[data-portal] .login-motion-toggle { top: 108px; height: 68px; }
+  .auth-shell.vorqix-login { padding: 20px 16px; }
+  .vorqix-login .login-composition { max-width: 480px; grid-template-columns: minmax(0, 1fr); border-radius: 18px; }
+  .vorqix-login .login-context { padding: 24px 28px; background: white; border-bottom: 1px solid #e5ecef; }
+  .vorqix-login .login-official-logo { width: 176px; }
+  .vorqix-login .login-context__body { padding: 12px 0 0; margin: 0; }
+  .vorqix-login .login-context__body > :not(.login-signature), .vorqix-login .login-context__footer { display: none; }
+  .vorqix-login .login-signature { margin: 0; max-width: 155px; }
+  .vorqix-login .login-signature svg { height: 40px; }
+  .vorqix-login .login-signature svg.command-motion { height: 64px; }
+  .vorqix-login .login-signature > span { display: none; }
+  .vorqix-login .auth-panel { padding: 28px; }
+}
+@media (max-width: 380px) {
+  .auth-shell.vorqix-login { padding: 12px; }
+  .vorqix-login .auth-panel, .vorqix-login .login-context { padding: 22px; }
+}
+.vorqix-login:not([data-portal='ADMIN'])[data-portal] .login-context { background: linear-gradient(155deg, #163e46, #104a49 60%, #103b40); }
+.vorqix-login:not([data-portal='ADMIN']) .admin-brand-reveal { width: 290px; mix-blend-mode: screen; }
+.vorqix-login:not([data-portal='ADMIN']) .admin-brand-reveal .login-official-logo { filter: grayscale(1) invert(1) contrast(1.35); }
+.vorqix-login:not([data-portal='ADMIN']) .admin-brand-reveal::after { mix-blend-mode: color-dodge; background: linear-gradient(110deg, #000, #a8c7db, #000); }
+.vorqix-login:not([data-portal='ADMIN']) .admin-planes, .vorqix-login:not([data-portal='ADMIN']) .login-motion-toggle { display: none; }
+.vorqix-login:not([data-portal='ADMIN']) .admin-light { height: auto; aspect-ratio: 1; filter: blur(1px); animation: none; transform: translate3d(var(--orb-x, 0px), var(--orb-y, 0px), 0); transition: transform 280ms ease-out; }
+.vorqix-login:not([data-portal='ADMIN']) .admin-light--one { width: 46%; inset: 12% auto auto -12%; opacity: .3; background: radial-gradient(circle, #5bb5ad, #2b8a8299 62%, transparent 71%); }
+.vorqix-login:not([data-portal='ADMIN']) .admin-light--two { width: 38%; inset: 58% -8% auto auto; opacity: .3; background: radial-gradient(circle, #7dc1ba, #438b9399 62%, transparent 71%); }
+@media (max-width: 760px) { .vorqix-login:not([data-portal='ADMIN']) .admin-brand-reveal { width: 230px; } }
+@media (prefers-reduced-motion: reduce), (hover: none) { .vorqix-login:not([data-portal='ADMIN']) .admin-light { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .vorqix-login .login-motion-toggle { display: none; }
+  .vorqix-login *, .vorqix-login *::before, .vorqix-login *::after { animation: none !important; transition: none !important; }
+}

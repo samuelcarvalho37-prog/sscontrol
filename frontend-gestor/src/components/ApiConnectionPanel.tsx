@@ -92,22 +92,20 @@ export function ApiConnectionPanel({ compact = false, onSaved }: ApiConnectionPa
     <section className={compact ? 'connection-panel connection-panel--compact' : 'connection-panel'}>
       <div className="connection-panel__heading">
         <div>
-          <span className="eyebrow">CONEXÃO SEGURA</span>
-          <h2>API do VORQIX</h2>
+          <h2>Conexão</h2>
         </div>
-        <span className={getApiUrl() ? 'status-chip status-chip--success' : 'status-chip'}>
-          {getApiUrl() ? 'Informada' : 'Pendente'}
-        </span>
       </div>
 
-      <p>
-        Informe a URL base da API Node.js. O ambiente publicado pode controlar
-        este endereço automaticamente.
-      </p>
-
+      {managedByEnvironment ? (
+        <div className="connection-address">
+          <span>Servidor</span>
+          <p>{value}</p>
+          <small>Definido pelo ambiente. Não é necessário configurar.</small>
+        </div>
+      ) : (
       <form className="connection-form" onSubmit={submit}>
         <label>
-          URL base da API
+          Endereço do servidor
           <input
             type="url"
             value={value}
@@ -122,12 +120,7 @@ export function ApiConnectionPanel({ compact = false, onSaved }: ApiConnectionPa
           {testing ? 'Validando…' : 'Salvar e testar'}
         </button>
       </form>
-
-      {managedByEnvironment ? (
-        <p className="connection-feedback connection-feedback--info">
-          URL controlada pela configuração do ambiente de publicação.
-        </p>
-      ) : null}
+      )}
       {success ? (
         <p className="connection-feedback connection-feedback--success" role="status">
           {success}

@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type PointerEvent } from 'react'
+import '../styles/login-refinement.css'
 import { ApiConnectionPanel } from '../components/ApiConnectionPanel'
 import {
   API_COMPATIBLE_RELEASE,
@@ -31,6 +32,31 @@ export interface LoginPageProps {
 type LoginView = 'startup' | 'login' | 'first-access' | 'recovery' | 'connection-error'
 type StartupState = 'checking' | 'online' | 'offline' | 'local'
 
+function moveLoginOrbs(event: PointerEvent<HTMLElement>) {
+  if (event.pointerType !== 'mouse' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const panel = event.currentTarget
+  const bounds = panel.getBoundingClientRect()
+  const ambient = panel.querySelector<HTMLElement>('.admin-ambient')
+  if (!ambient) return
+  panel.querySelectorAll<HTMLElement>('.admin-light').forEach(orb => {
+    const centerX = bounds.left + ambient.offsetLeft + orb.offsetLeft + orb.offsetWidth / 2
+    const centerY = bounds.top + ambient.offsetTop + orb.offsetTop + orb.offsetHeight / 2
+    const dx = event.clientX - centerX
+    const dy = event.clientY - centerY
+    const radius = orb.offsetWidth / 2 + 220
+    const influence = Math.max(0, 1 - Math.hypot(dx, dy) / radius)
+    orb.style.setProperty('--orb-x', `${Math.max(-64, Math.min(64, dx * influence * .8))}px`)
+    orb.style.setProperty('--orb-y', `${Math.max(-64, Math.min(64, dy * influence * .8))}px`)
+  })
+}
+
+function resetLoginOrbs(event: PointerEvent<HTMLElement>) {
+  event.currentTarget.querySelectorAll<HTMLElement>('.admin-light').forEach(orb => {
+    orb.style.removeProperty('--orb-x')
+    orb.style.removeProperty('--orb-y')
+  })
+}
+
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
@@ -56,6 +82,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   )
   const [registration, setRegistration] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [motionPaused, setMotionPaused] = useState(false)
   const [firstAccessRegistration, setFirstAccessRegistration] = useState('')
   const [changeToken, setChangeToken] = useState('')
   const [firstAccessCurrentPassword, setFirstAccessCurrentPassword] = useState('')
@@ -330,7 +358,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
   if (view === 'startup') {
     return (
-      <main className="auth-shell auth-shell--startup">
+      <main className="auth-shell auth-shell--startup vorqix-login">
         <section className="auth-startup" aria-live="polite" aria-busy="true">
           <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div className="auth-startup__spinner" aria-hidden="true" />
@@ -354,13 +382,34 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   }
 
   return (
-    <main className="auth-shell">
+    <main className="auth-shell vorqix-login" data-portal={portal.profile}>
+      <div className="login-composition">
+      <aside className="login-context" aria-label="Sobre este ambiente" onPointerMove={moveLoginOrbs} onPointerLeave={resetLoginOrbs}>
+        <div className="admin-ambient" data-paused={motionPaused} aria-hidden="true"><i className="admin-light admin-light--one" /><i className="admin-light admin-light--two" />{portal.profile === 'ADMIN' && <i className="admin-light admin-light--three" />}<div className="admin-planes" /></div>
+        <div className="admin-brand-reveal">
+          <img className="login-official-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+        </div>
+        <div className="login-context__body">
+          <span className="login-kicker">{portal.profile === 'ADMIN' ? 'ESTRUTURA & GOVERNANÇA' : 'PESSOAS & PROCESSOS'}</span>
+          <h2>{portal.profile === 'ADMIN' ? 'Tudo começa\ncom uma boa estrutura.' : 'Cada decisão conecta\no próximo passo.'}</h2>
+          <p>{portal.profile === 'ADMIN' ? 'A base que organiza sua empresa e dá direção ao trabalho de cada equipe.' : 'Um ponto de encontro entre planejamento, conhecimento técnico e ação.'}</p>
+          <div className="login-signature" data-paused={motionPaused}>
+            {portal.profile === 'ADMIN' ? (
+              <span className="admin-ambient-caption">Estrutura para crescer. Controle para evoluir.</span>
+            ) : (
+              <span className="admin-ambient-caption">Visão do conjunto. Precisão em cada decisão.</span>
+            )}
+            <span>{portal.profile === 'ADMIN' ? 'Estrutura · Acessos · Configuração' : 'Planejamento · Equipes · Manutenção'}</span>
+            {portal.profile !== 'ADMIN' && <button className="login-motion-toggle" type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused(current => !current)}>{motionPaused ? 'Retomar animação' : 'Pausar animação'}</button>}
+          </div>
+        </div>
+        <span className="login-context__footer">VORQIX / Unidade industrial</span>
+      </aside>
       <section className="auth-panel" aria-labelledby="auth-title">
         <div className="auth-brand">
-          <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
           <div>
             <span className="eyebrow">{portal.eyebrow}</span>
-            <h1 id="auth-title">{portal.title}</h1>
+            <h1 id="auth-title">{view === 'recovery' ? 'Recupere seu acesso' : view === 'first-access' ? 'Defina sua senha' : view === 'connection-error' ? 'Vamos reconectar' : portal.profile === 'ADMIN' ? 'Seu espaço de administração' : 'Conecte-se à sua equipe'}</h1>
           </div>
         </div>
 
@@ -403,23 +452,30 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
                 value={registration}
                 onChange={(event) => setRegistration(event.target.value)}
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="Sua matrícula"
                 disabled={submitting}
               />
             </label>
 
-            <label>
-              Senha
+            <div className="login-field">
+              <label htmlFor="login-password">Senha</label>
+              <span className="login-password">
               <input
-                type="password"
+                id="login-password"
+                type={passwordVisible ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete="current-password"
                 disabled={submitting}
               />
-            </label>
+              <button type="button" className="login-password__toggle" aria-label={passwordVisible ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={passwordVisible} disabled={submitting} onClick={() => setPasswordVisible(current => !current)}>{passwordVisible ? 'Ocultar' : 'Mostrar'}</button>
+              </span>
+            </div>
 
             {message ? <p className="feedback feedback--success">{message}</p> : null}
-            {error ? <p className="feedback feedback--error">{error}</p> : null}
+            {error ? <p className="feedback feedback--error" role="alert">{error}</p> : null}
 
             <button className="primary-button" type="submit" disabled={submitting}>
               {submitting ? 'Entrando…' : 'Entrar'}
@@ -470,7 +526,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
             </label>
 
             <p className="password-rule">
-              Mínimo de 8 caracteres, com maiúscula, minúscula e número.
+              Mínimo de 12 caracteres, com maiúscula, minúscula e número.
             </p>
 
             {error ? <p className="feedback feedback--error">{error}</p> : null}
@@ -546,16 +602,24 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
         ) : null}
 
         <footer className="auth-footer">
-          <span>Aplicativo {APP_RELEASE_VERSION} · API compatível {API_COMPATIBLE_RELEASE}</span>
           <button
             type="button"
+            className="login-connection-toggle"
+            aria-label={showConnection ? 'Ocultar configuração de conexão' : 'Configurar conexão'}
+            title={showConnection ? 'Ocultar configuração de conexão' : 'Configurar conexão'}
+            aria-expanded={showConnection}
             onClick={() => setShowConnection((current) => !current)}
           >
-            {showConnection ? 'Ocultar configuração' : 'Configurar conexão'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 7h8m4 0h4M4 17h3m4 0h9" />
+              <circle cx="14" cy="7" r="2" /><circle cx="9" cy="17" r="2" />
+            </svg>
           </button>
         </footer>
 
         {showConnection ? (
+          <div>
+          <p className="login-connection-versions">Aplicativo {APP_RELEASE_VERSION} · API compatível {API_COMPATIBLE_RELEASE}</p>
           <ApiConnectionPanel
             compact
             onSaved={() => {
@@ -564,8 +628,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
               if (view === 'connection-error') setView('startup')
             }}
           />
+          </div>
         ) : null}
       </section>
+      </div>
     </main>
   )
 }

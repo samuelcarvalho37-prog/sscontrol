@@ -31,7 +31,7 @@ export function getPortalPresentation(): PortalPresentation {
       profile: 'ADMIN',
       eyebrow: 'VORQIX · ADMINISTRAÇÃO',
       title: 'Acesso do Administrador',
-      intro: 'Configuração, governança, cadastros e controle integral do ambiente industrial.',
+      intro: 'Entre para gerenciar a estrutura, os acessos e as configurações da empresa.',
       exclusiveProfileLabel: 'Administrador',
     }
   }
@@ -41,16 +41,16 @@ export function getPortalPresentation(): PortalPresentation {
       profile: 'GESTOR',
       eyebrow: 'VORQIX · GESTÃO',
       title: 'Acesso do Gestor',
-      intro: 'Supervisão técnica, decisões, indicadores e liberação do trabalho operacional.',
+      intro: 'Entre para acompanhar a manutenção e as decisões da sua equipe.',
       exclusiveProfileLabel: 'Gestor',
     }
   }
 
   return {
     profile: 'SHARED',
-    eyebrow: 'VORQIX',
+    eyebrow: 'VORQIX · AMBIENTE DE TRABALHO',
     title: 'Acesso de Gestão',
-    intro: 'Supervisão técnica e administração do ambiente industrial.',
+    intro: 'Use sua matrícula. As ferramentas disponíveis seguem as permissões da sua conta.',
     exclusiveProfileLabel: 'Gestor ou Administrador',
   }
 }
