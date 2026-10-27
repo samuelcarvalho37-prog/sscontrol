@@ -12,6 +12,7 @@ import { catalogPlugin } from './modules/catalog/catalog.plugin.js';
 import { governancePlugin } from './modules/governance/governance.plugin.js';
 import { monitoringPlugin } from './modules/monitoring/monitoring.plugin.js';
 import { operationsPlugin } from './modules/operations/operations.plugin.js';
+import { platformPlugin } from './modules/platform/platform.plugin.js';
 import { planningPlugin } from './modules/planning/planning.plugin.js';
 import { systemRoutes } from './modules/system/system.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
@@ -104,6 +105,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(planningPlugin);
   await app.register(operationsPlugin);
   await app.register(monitoringPlugin);
+  await app.register(platformPlugin);
 
   if (ownsDatabase) {
     app.addHook('onClose', async () => {

@@ -19,6 +19,7 @@
     "migration:run": "tsx src/infrastructure/migration/migration.cli.ts --mode FULL",
     "migration:delta": "tsx src/infrastructure/migration/migration.cli.ts --mode DELTA",
     "maintenance:open": "tsx src/modules/auth/maintenance-window.cli.ts",
+    "platform:operator:create": "tsx src/modules/platform/platform-operator.cli.ts",
     "seed:homologation": "tsx src/infrastructure/demo/seed.cli.ts",
     "start": "node --enable-source-maps dist/server.js",
     "test": "node scripts/run-tests.mjs",

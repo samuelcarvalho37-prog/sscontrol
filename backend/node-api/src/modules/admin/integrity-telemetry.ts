@@ -109,7 +109,7 @@ export function recordCapabilityResponse(
   let entry = telemetry.get(key);
   if (!entry) {
     if (telemetry.size >= MAX_TRACKED_CAPABILITIES) {
-      const oldestKey = telemetry.keys().next().value as string | undefined;
+      const oldestKey = telemetry.keys().next().value;
       if (oldestKey) telemetry.delete(oldestKey);
     }
     entry = { tenantId, capability, samples: [] };
@@ -167,6 +167,17 @@ export function readCapabilityTelemetry(tenantId: string, now = Date.now()): rea
     const rank = (state: CapabilityTelemetry['state']) => state === 'CRITICAL' ? 0 : state === 'WARNING' ? 1 : state === 'INSUFFICIENT_DATA' ? 2 : 3;
     return rank(first.state) - rank(second.state) || first.module.localeCompare(second.module);
   });
+}
+
+export function readAllCapabilityTelemetry(now = Date.now()): readonly {
+  readonly tenantId: string;
+  readonly modules: readonly ModuleTelemetry[];
+}[] {
+  const tenantIds = new Set([...telemetry.values()].map((entry) => entry.tenantId));
+  return [...tenantIds].map((tenantId) => ({
+    tenantId,
+    modules: readCapabilityTelemetry(tenantId, now),
+  }));
 }
 
 export function clearCapabilityTelemetryForTests(): void {
