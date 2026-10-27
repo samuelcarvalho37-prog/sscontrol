@@ -236,6 +236,27 @@
   .vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { padding: 22px 24px; }
   .vorqix-login .auth-card[data-view='login'] .auth-form { padding: 24px; }
 }
+.vorqix-login.auth-shell { background: radial-gradient(ellipse at 15% 0%, #e1eaf2, transparent 56%), #f3f6f8; }
+.vorqix-login .auth-card { border-top-color: #102b46; }
+.vorqix-login .auth-card[data-view='login'] { border-color: #dbe4ed; box-shadow: 0 20px 64px #102b460b; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand { background: #102b46; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand > div { border-color: #8caac255; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand__eyebrow,
+.vorqix-login .auth-card[data-view='login'] .auth-intro__kicker { color: #bfd4e5; }
+.vorqix-login .auth-card[data-view='login'] .auth-brand__product,
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient h1 { color: #f4f8fc; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient { background: linear-gradient(155deg, #102b46, #173951); }
+.vorqix-login .auth-card[data-view='login'] .auth-intro--ambient p { color: #c3d4df; }
+.vorqix-login .auth-card[data-view='login'] .auth-intro__kicker::before { background: #7293b8; }
+.vorqix-login .auth-card[data-view='login'] .field-brand-reveal::after { background: linear-gradient(110deg, #000, #a8c7db, #000); }
+.vorqix-login .auth-card[data-view='login'] .auth-footer { background: #f7f9fb; }
+.vorqix-login .field-ambient i { background: radial-gradient(circle, #618ac130 60%, transparent 71%); }
+.vorqix-login .auth-primary-button { background: #102b46; border-color: #102b46; }
+.vorqix-login .auth-primary-button:hover:not(:disabled) { background: #1c405f; border-color: #1c405f; }
+.vorqix-login .auth-link-button, .vorqix-login .auth-intro--ambient .auth-intro__kicker { color: #244968; }
+.vorqix-login button:focus-visible { outline-color: #315b80; }
+.vorqix-login .auth-startup__spinner { border-top-color: #315b80; }
+.vorqix-login .auth-startup__progress span { background: #315b80; }
 @media (prefers-reduced-motion: reduce) {
   .vorqix-login .field-brand-reveal, .vorqix-login .field-brand-reveal::after { animation: none; }
   .vorqix-login .field-brand-reveal::after { opacity: 0; }

@@ -182,6 +182,11 @@
 .vorqix-login:not([data-portal='ADMIN']) .admin-light--two { width: 38%; inset: 58% -8% auto auto; opacity: .3; background: radial-gradient(circle, #7dc1ba, #438b9399 62%, transparent 71%); }
 @media (max-width: 760px) { .vorqix-login:not([data-portal='ADMIN']) .admin-brand-reveal { width: 230px; } }
 @media (prefers-reduced-motion: reduce), (hover: none) { .vorqix-login:not([data-portal='ADMIN']) .admin-light { transform: none; } }
+.vorqix-login[data-portal] .login-context { background: linear-gradient(160deg, #173951, #102b46 55%, #10283e); }
+.vorqix-login[data-portal] .login-kicker { color: #bfd4e5; }
+.vorqix-login[data-portal] .admin-light--one { background: radial-gradient(circle, #527ca5, #345e9399 62%, transparent 71%); }
+.vorqix-login[data-portal] .admin-light--two { background: radial-gradient(circle, #7293b8, #345e9399 62%, transparent 71%); }
+.vorqix-login[data-portal] .admin-light--three { background: radial-gradient(circle, #527ca5, #345e9399 62%, transparent 71%); }
 @media (prefers-reduced-motion: reduce) {
   .vorqix-login .login-motion-toggle { display: none; }
   .vorqix-login *, .vorqix-login *::before, .vorqix-login *::after { animation: none !important; transition: none !important; }
