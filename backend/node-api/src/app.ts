@@ -7,6 +7,7 @@ import { createDatabase, type Database } from './infrastructure/database/databas
 import { LocalObjectStorage, type ObjectStorage } from './infrastructure/storage/object-storage.js';
 import { authPlugin } from './modules/auth/auth.plugin.js';
 import { adminPlugin } from './modules/admin/admin.plugin.js';
+import { recordCapabilityResponse } from './modules/admin/integrity-telemetry.js';
 import { catalogPlugin } from './modules/catalog/catalog.plugin.js';
 import { governancePlugin } from './modules/governance/governance.plugin.js';
 import { monitoringPlugin } from './modules/monitoring/monitoring.plugin.js';
@@ -78,8 +79,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('objectStorage', objectStorage);
   app.decorateRequest('startedAt', 0n);
   app.decorateRequest('auth', null);
+  app.decorateRequest('requestedCapability', null);
   app.addHook('onRequest', (request, _reply, done) => {
     request.startedAt = process.hrtime.bigint();
+    done();
+  });
+  app.addHook('onResponse', (request, reply, done) => {
+    const tenantId = request.auth?.user.tenantId;
+    const capability = request.requestedCapability;
+    if (tenantId && capability) {
+      const elapsedMs = Number(process.hrtime.bigint() - request.startedAt) / 1_000_000;
+      recordCapabilityResponse(tenantId, capability, elapsedMs, reply.statusCode);
+    }
     done();
   });
 

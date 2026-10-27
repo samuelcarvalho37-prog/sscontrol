@@ -58,6 +58,7 @@ export const authPlugin = fastifyPlugin(
 
     app.decorate('authorize', async (request, capability) => {
       await app.authenticate(request);
+      request.requestedCapability = capability;
 
       const user = request.auth?.user;
       const adminOperationDenied =

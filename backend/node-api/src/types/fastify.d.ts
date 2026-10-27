@@ -15,5 +15,6 @@ declare module 'fastify' {
   interface FastifyRequest {
     startedAt: bigint;
     auth: AuthContext | null;
+    requestedCapability: string | null;
   }
 }

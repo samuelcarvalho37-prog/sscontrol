@@ -5,6 +5,7 @@ import type { Database } from '../../infrastructure/database/database.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import { PasswordService } from '../auth/password.service.js';
 import { AdminRepository } from './admin.repository.js';
+import { readCapabilityTelemetry } from './integrity-telemetry.js';
 import type {
   AdminAuditMetadata,
   AdminProfile,
@@ -1453,7 +1454,38 @@ export class AdminService {
     );
   }
 
-  monitoring(user: AuthenticatedUser) {
+  async monitoring(user: AuthenticatedUser) {
+    const observedAt = new Date().toISOString();
+    const telemetry = readCapabilityTelemetry(user.tenantId);
+    let databaseHealth: { latencyMs: number } | null = null;
+    try {
+      databaseHealth = await this.database.healthcheck();
+    } catch {
+      return {
+        health: {
+          ok: false,
+          app: 'fab-control-api',
+          version: this.environment.release.api,
+          spreadsheetId: 'primary-storage',
+          serverTime: observedAt,
+          environment: this.environment.release.environment,
+          schemaVersion: this.environment.release.schema,
+          databaseReady: false,
+          databaseLatencyMs: null,
+        },
+        diagnostico: { dry_run: true, total_issues: 0, by_code: {}, issues: [] },
+        cache: { provider: 'none', source_of_truth: 'primary-storage', stale: false },
+        auditoria: { eventos_24h: 0, ultimo_evento: null },
+        telemetria: {
+          windowMinutes: 15,
+          observedAt,
+          source: 'process-memory',
+          persistence: 'process-lifetime',
+          modules: telemetry,
+        },
+      };
+    }
+
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
@@ -1473,13 +1505,15 @@ export class AdminService {
         const latest = latestRows[0];
         return {
           health: {
-            ok: true,
+            ok: databaseHealth !== null,
             app: 'fab-control-api',
             version: this.environment.release.api,
-            spreadsheetId: 'postgresql',
+            spreadsheetId: 'primary-storage',
             serverTime: new Date().toISOString(),
             environment: this.environment.release.environment,
             schemaVersion: this.environment.release.schema,
+            databaseReady: databaseHealth !== null,
+            databaseLatencyMs: databaseHealth?.latencyMs ?? null,
           },
           diagnostico: {
             dry_run: true,
@@ -1489,7 +1523,7 @@ export class AdminService {
           },
           cache: {
             provider: 'none',
-            source_of_truth: 'postgresql',
+            source_of_truth: 'primary-storage',
             stale: false,
           },
           auditoria: {
@@ -1507,6 +1541,13 @@ export class AdminService {
                   criado_em: new Date(scalarText(latest.data_hora)).toISOString(),
                 }
               : null,
+          },
+          telemetria: {
+            windowMinutes: 15,
+            observedAt,
+            source: 'process-memory',
+            persistence: 'process-lifetime',
+            modules: telemetry,
           },
           tabelas_declaradas: Number(summary.declared_tables),
           verificado_em: new Date().toISOString(),
