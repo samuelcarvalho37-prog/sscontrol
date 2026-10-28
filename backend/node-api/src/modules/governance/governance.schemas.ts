@@ -143,11 +143,24 @@ export const backupListQuerySchema = Type.Object(
   { additionalProperties: false },
 );
 
+const backupScopeSchema = Type.Union([
+  Type.Literal('OPERACIONAL'),
+  Type.Literal('IMPORTACOES'),
+  Type.Literal('ACESSOS'),
+  Type.Literal('CONFIGURACOES'),
+]);
+
 export const backupCreateBodySchema = Type.Object(
   {
     motivo: Type.String({ minLength: 8, maxLength: 1_000 }),
     confirmacao: Type.Literal('CRIAR BACKUP'),
+    escopos: Type.Optional(Type.Array(backupScopeSchema, { minItems: 1, uniqueItems: true })),
   },
+  { additionalProperties: false },
+);
+
+export const backupRestorePrepareBodySchema = Type.Object(
+  { escopos: Type.Optional(Type.Array(backupScopeSchema, { minItems: 1, uniqueItems: true })) },
   { additionalProperties: false },
 );
 

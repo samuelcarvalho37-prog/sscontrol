@@ -1,7 +1,7 @@
 import type { PoolClient, QueryResultRow } from 'pg';
 
 import type { StoredBackupObject } from '../../infrastructure/storage/object-storage.js';
-import { backupTables } from './backup-catalog.js';
+import { backupTablesForScopes } from './backup-catalog.js';
 import type { GovernanceAuditMetadata } from './governance.types.js';
 
 export interface BackupRow extends QueryResultRow {
@@ -11,10 +11,15 @@ export interface BackupRow extends QueryResultRow {
 
 export type BackupTableData = Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>;
 
+function timestampText(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === 'string' ? value : '';
+}
+
 export class BackupRepository {
-  async exportTenant(client: PoolClient): Promise<BackupTableData> {
+  async exportTenant(client: PoolClient, scopes: readonly string[]): Promise<BackupTableData> {
     const result: Record<string, readonly Readonly<Record<string, unknown>>[]> = {};
-    for (const descriptor of backupTables) {
+    for (const descriptor of backupTablesForScopes(scopes)) {
       const query = await client.query<{ row: Readonly<Record<string, unknown>> } & QueryResultRow>(
         `SELECT to_jsonb(source.*) AS row FROM ${descriptor.name} source
          WHERE source.tenant_id=current_setting('app.tenant_id')::uuid`,
@@ -24,18 +29,38 @@ export class BackupRepository {
     return result;
   }
 
-  async restoreTenant(client: PoolClient, tables: BackupTableData): Promise<void> {
+  async restoreTenant(
+    client: PoolClient,
+    tables: BackupTableData,
+    scopes: readonly string[],
+  ): Promise<void> {
+    const selectedTables = backupTablesForScopes(scopes);
     await client.query(
       `SELECT pg_advisory_xact_lock(hashtextextended(current_setting('app.tenant_id'), 12082026))`,
     );
-    for (const descriptor of [...backupTables].reverse()) {
+    for (const descriptor of [...selectedTables].reverse()) {
+      if (descriptor.name === 'platform.configuration_versions') {
+        await this.clearConfigurationVersions(client);
+        continue;
+      }
       await client.query(
         `DELETE FROM ${descriptor.name} WHERE tenant_id=current_setting('app.tenant_id')::uuid`,
       );
     }
-    for (const descriptor of backupTables) {
+    for (const descriptor of selectedTables) {
       const rows = tables[descriptor.name] ?? [];
       if (rows.length === 0) continue;
+      if (descriptor.name === 'platform.configuration_versions') {
+        const orderedRows = [...rows].sort((left, right) =>
+          timestampText(left.created_at).localeCompare(timestampText(right.created_at)),
+        );
+        await client.query(
+          `INSERT INTO ${descriptor.name}
+           SELECT restored.* FROM jsonb_populate_recordset(NULL::${descriptor.name}, $1::jsonb) restored`,
+          [JSON.stringify(orderedRows)],
+        );
+        continue;
+      }
       await client.query(
         `INSERT INTO ${descriptor.name}
          SELECT restored.* FROM jsonb_populate_recordset(NULL::${descriptor.name}, $1::jsonb) restored`,
@@ -44,9 +69,35 @@ export class BackupRepository {
     }
   }
 
+  async clearConfigurationVersions(client: PoolClient): Promise<void> {
+    for (;;) {
+      const result = await client.query(
+        `DELETE FROM platform.configuration_versions candidate
+         WHERE candidate.tenant_id=current_setting('app.tenant_id')::uuid
+           AND NOT EXISTS (
+             SELECT 1 FROM platform.configuration_versions child
+             WHERE child.tenant_id=candidate.tenant_id
+               AND child.base_version_id=candidate.id
+           )`,
+      );
+      if ((result.rowCount ?? 0) > 0) continue;
+
+      const remaining = await client.query(
+        `SELECT 1 FROM platform.configuration_versions
+         WHERE tenant_id=current_setting('app.tenant_id')::uuid LIMIT 1`,
+      );
+      if (remaining.rowCount) {
+        throw new Error('Não foi possível ordenar as versões de configuração para restauração.');
+      }
+      break;
+    }
+  }
+
   async list(client: PoolClient, limit: number): Promise<readonly BackupRow[]> {
     const result = await client.query<BackupRow>(
       `SELECT backup.*,storage.original_name,storage.byte_size,storage.provider,storage.bucket,
+              to_char(date_trunc('month',backup.requested_at AT TIME ZONE 'UTC'),'YYYY-MM') AS backup_month,
+              count(*) OVER (PARTITION BY date_trunc('month',backup.requested_at AT TIME ZONE 'UTC')) AS monthly_backup_count,
               storage.object_key,storage.created_at AS storage_created_at
        FROM governance.backup_snapshots backup
        LEFT JOIN platform.storage_objects storage ON storage.id=backup.storage_object_id

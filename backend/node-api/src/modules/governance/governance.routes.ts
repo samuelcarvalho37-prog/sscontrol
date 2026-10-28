@@ -18,6 +18,7 @@ import {
   backupListQuerySchema,
   backupParamsSchema,
   backupRestoreBodySchema,
+  backupRestorePrepareBodySchema,
 } from './governance.schemas.js';
 
 const secured = {
@@ -105,7 +106,7 @@ export function createGovernanceRoutes(
     });
     app.post('/v1/admin/backups/:backupId/prepare', {
       preHandler: (request) => app.authorize(request, 'admin.governance.manage'),
-      schema: { ...secured, params: backupParamsSchema },
+      schema: { ...secured, params: backupParamsSchema, body: backupRestorePrepareBodySchema },
       handler: backups.prepare,
     });
     app.post('/v1/admin/backups/:backupId/restore', {

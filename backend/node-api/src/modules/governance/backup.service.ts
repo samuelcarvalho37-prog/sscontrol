@@ -10,7 +10,17 @@ import type {
   StoredObjectReference,
 } from '../../infrastructure/storage/object-storage.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
-import { BACKUP_FORMAT, backupTables, protectedBackupDomains } from './backup-catalog.js';
+import {
+  BACKUP_FORMAT,
+  LEGACY_BACKUP_FORMAT,
+  backupScopes,
+  backupTables,
+  backupTablesForScopes,
+  defaultBackupScopes,
+  normalizeBackupScopes,
+  protectedBackupDomains,
+  type BackupScopeId,
+} from './backup-catalog.js';
 import {
   BackupRepository,
   type BackupRow,
@@ -23,6 +33,7 @@ interface BackupPayload {
   readonly tenant_id: string;
   readonly created_at: string;
   readonly schema_version: string;
+  readonly scopes: readonly BackupScopeId[];
   readonly tables: BackupTableData;
 }
 
@@ -31,6 +42,7 @@ interface RestoreClaims {
   readonly tenant_id: string;
   readonly user_id: string;
   readonly challenge: string;
+  readonly scopes?: readonly BackupScopeId[];
   readonly expires_at: string;
   readonly nonce: string;
 }
@@ -70,6 +82,21 @@ function countCells(tables: BackupTableData): number {
   );
 }
 
+function requestedScopes(scopes: readonly string[] | undefined): readonly BackupScopeId[] {
+  try {
+    return normalizeBackupScopes(scopes);
+  } catch {
+    throw error('BACKUP_SCOPE_INVALID', 'Selecione escopos de cópia válidos.', 400);
+  }
+}
+
+function manifestScopes(value: unknown): readonly BackupScopeId[] {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string')) {
+    throw error('BACKUP_MANIFEST_INVALID', 'Os escopos declarados no backup são inválidos.', 422);
+  }
+  return requestedScopes(value as string[]);
+}
+
 export class BackupService {
   private readonly repository = new BackupRepository();
 
@@ -89,8 +116,14 @@ export class BackupService {
       backups: rows.map((row) => this.mapBackup(row)),
       pasta_id: 'armazenamento-privado',
       restauracao_disponivel: true,
-      escopo_restauracao: 'OPERACIONAL_SEGURO',
+      escopo_restauracao: 'SELECIONAVEL',
       abas_protegidas: protectedBackupDomains,
+      escopos_disponiveis: backupScopes.map(({ id, label, description }) => ({ id, nome: label, descricao: description })),
+      pontos_por_mes: rows.reduce<Record<string, number>>((counts, row) => {
+        const month = optionalText(row.backup_month) || dateText(row.requested_at).slice(0, 7);
+        counts[month] = Number(row.monthly_backup_count ?? counts[month] ?? 0);
+        return counts;
+      }, {}),
     };
   }
 
@@ -100,6 +133,7 @@ export class BackupService {
     confirmation: string,
     audit: GovernanceAuditMetadata,
     backupType = 'MANUAL',
+    scopesInput: readonly string[] = defaultBackupScopes,
   ) {
     if (confirmation !== 'CRIAR BACKUP') {
       throw error('BACKUP_CONFIRMATION_INVALID', 'Confirme a criação do backup.', 400);
@@ -107,6 +141,7 @@ export class BackupService {
     if (reason.trim().length < 8) {
       throw error('BACKUP_REASON_REQUIRED', 'Informe um motivo com ao menos 8 caracteres.', 400);
     }
+    const scopes = requestedScopes(scopesInput);
     const id = randomUUID();
     const tables = await this.database.withTransaction<BackupTableData>(
       { tenantId: user.tenantId, userId: user.id, isolationLevel: 'repeatable read' },
@@ -119,7 +154,7 @@ export class BackupService {
           reason.trim(),
           backupType,
         );
-        return this.repository.exportTenant(client);
+        return this.repository.exportTenant(client, scopes);
       },
     );
     const createdAt = new Date().toISOString();
@@ -128,6 +163,7 @@ export class BackupService {
       tenant_id: user.tenantId,
       created_at: createdAt,
       schema_version: this.environment.release.schema,
+      scopes,
       tables,
     };
     const content = gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'), { level: 9 });
@@ -140,9 +176,10 @@ export class BackupService {
       });
       const manifest = {
         formato: BACKUP_FORMAT,
+        escopos: scopes,
         schema_version: payload.schema_version,
         tabelas: Object.fromEntries(
-          backupTables.map((table) => [table.name, tables[table.name]?.length ?? 0]),
+          backupTablesForScopes(scopes).map((table) => [table.name, tables[table.name]?.length ?? 0]),
         ),
         total_registros: Object.values(tables).reduce((sum, rows) => sum + rows.length, 0),
         total_celulas: countCells(tables),
@@ -181,9 +218,15 @@ export class BackupService {
     return { created: true, backup: this.mapBackup(row), restauracao_disponivel: true };
   }
 
-  async prepare(user: AuthenticatedUser, backupId: string) {
+  async prepare(user: AuthenticatedUser, backupId: string, requestedRestoreScopes?: readonly string[]) {
     const backup = await this.find(user, backupId);
     const payload = await this.readPayload(user, backup);
+    const scopes = requestedRestoreScopes
+      ? requestedScopes(requestedRestoreScopes)
+      : payload.scopes;
+    if (scopes.some((scope) => !payload.scopes.includes(scope))) {
+      throw error('BACKUP_SCOPE_NOT_INCLUDED', 'A cópia não contém todos os escopos selecionados.', 400);
+    }
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     const challenge = `RESTAURAR-${optionalText(backup.checksum_sha256).slice(0, 8).toUpperCase()}`;
     const claims: RestoreClaims = {
@@ -191,11 +234,13 @@ export class BackupService {
       tenant_id: user.tenantId,
       user_id: user.id,
       challenge,
+      scopes,
       expires_at: expiresAt,
       nonce: randomBytes(18).toString('base64url'),
     };
     const token = this.sign(claims);
     const present = new Set(Object.keys(payload.tables));
+    const selectedTables = backupTablesForScopes(scopes);
     return {
       prepared: true,
       token,
@@ -206,10 +251,12 @@ export class BackupService {
         nome: optionalText(backup.original_name),
         criado_em: dateText(backup.requested_at),
       },
-      escopo: 'OPERACIONAL_SEGURO',
-      abas_restauradas: backupTables.map((table) => table.name),
+      escopo: 'SELECIONAVEL',
+      escopos_disponiveis: payload.scopes.map((scope) => backupScopes.find((item) => item.id === scope)).filter(Boolean),
+      escopos_restaurados: scopes,
+      abas_restauradas: selectedTables.map((table) => table.name),
       abas_protegidas: protectedBackupDomains,
-      abas_ausentes: backupTables.map((table) => table.name).filter((name) => !present.has(name)),
+      abas_ausentes: selectedTables.map((table) => table.name).filter((name) => !present.has(name)),
       total_celulas: countCells(payload.tables),
       expira_em: expiresAt,
     };
@@ -265,17 +312,22 @@ export class BackupService {
 
     const target = await this.find(user, input.backupId);
     const payload = await this.readPayload(user, target);
+    const scopes = claims.scopes ?? payload.scopes;
+    if (scopes.some((scope) => !payload.scopes.includes(scope))) {
+      throw error('BACKUP_SCOPE_NOT_INCLUDED', 'O desafio não corresponde aos escopos desta cópia.', 403);
+    }
     const safety = await this.create(
       user,
       `Segurança anterior à restauração: ${input.reason.trim()}`,
       'CRIAR BACKUP',
       audit,
       'PRE_RESTORE_SAFETY',
+      scopes,
     );
     await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, isolationLevel: 'serializable' },
       async (client) => {
-        await this.repository.restoreTenant(client, payload.tables);
+        await this.repository.restoreTenant(client, payload.tables, scopes);
         await this.repository.writeAudit(
           client,
           user.tenantId,
@@ -283,7 +335,7 @@ export class BackupService {
           audit,
           'ADMIN_BACKUP_RESTORED',
           input.backupId,
-          { motivo: input.reason.trim(), backup_seguranca_id: safety.backup.id },
+          { motivo: input.reason.trim(), backup_seguranca_id: safety.backup.id, escopos: scopes },
         );
       },
     );
@@ -291,8 +343,9 @@ export class BackupService {
       restored: true,
       backup_id: input.backupId,
       backup_nome: optionalText(target.original_name),
-      escopo: 'OPERACIONAL_SEGURO',
-      abas_restauradas: backupTables.map((table) => table.name),
+      escopo: 'SELECIONAVEL',
+      escopos_restaurados: scopes,
+      abas_restauradas: backupTablesForScopes(scopes).map((table) => table.name),
       abas_protegidas: protectedBackupDomains,
       backup_seguranca: safety.backup,
       motivo: input.reason.trim(),
@@ -344,7 +397,7 @@ export class BackupService {
     }
     const object = jsonObject(parsed);
     if (
-      object.format !== BACKUP_FORMAT ||
+      (object.format !== BACKUP_FORMAT && object.format !== LEGACY_BACKUP_FORMAT) ||
       object.tenant_id !== user.tenantId ||
       object.schema_version !== this.environment.release.schema ||
       !object.tables ||
@@ -353,8 +406,18 @@ export class BackupService {
     ) {
       throw error('BACKUP_MANIFEST_INVALID', 'O manifesto não pertence a esta empresa.', 422);
     }
+    const scopes = object.format === LEGACY_BACKUP_FORMAT
+      ? defaultBackupScopes
+      : manifestScopes(object.scopes);
+    const selectedTables = object.format === LEGACY_BACKUP_FORMAT
+      ? backupTables
+      : backupTablesForScopes(scopes);
     const tables = object.tables as BackupTableData;
-    for (const descriptor of backupTables) {
+    const expectedNames = new Set(selectedTables.map((descriptor) => descriptor.name));
+    if (Object.keys(tables).some((name) => !expectedNames.has(name))) {
+      throw error('BACKUP_TABLE_UNEXPECTED', 'O backup contém tabelas fora dos escopos declarados.', 422);
+    }
+    for (const descriptor of selectedTables) {
       const rows = tables[descriptor.name];
       if (!Array.isArray(rows)) {
         throw error('BACKUP_TABLE_MISSING', `A tabela ${descriptor.name} está ausente.`, 422);
@@ -370,6 +433,7 @@ export class BackupService {
       tenant_id: user.tenantId,
       created_at: optionalText(object.created_at),
       schema_version: optionalText(object.schema_version),
+      scopes,
       tables,
     };
   }
@@ -417,6 +481,7 @@ export class BackupService {
       url: `/v1/admin/backups/${row.id}/file`,
       pasta_id: 'armazenamento-privado',
       checksum_sha256: optionalText(row.checksum_sha256),
+      escopos: manifestScopes(manifest.escopos),
       total_registros: Number(manifest.total_registros ?? 0),
     };
   }

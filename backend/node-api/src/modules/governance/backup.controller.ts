@@ -17,6 +17,11 @@ interface ListQuery {
 interface CreateBody {
   readonly motivo: string;
   readonly confirmacao: string;
+  readonly escopos?: readonly string[];
+}
+
+interface PrepareBody {
+  readonly escopos?: readonly string[];
 }
 
 interface RestoreBody {
@@ -72,14 +77,16 @@ export class BackupController {
         request.body.motivo,
         request.body.confirmacao,
         audit(request),
+        'MANUAL',
+        request.body.escopos,
       ),
     );
 
-  prepare = async (request: FastifyRequest<{ Params: Params }>) =>
+  prepare = async (request: FastifyRequest<{ Params: Params; Body: PrepareBody }>) =>
     successEnvelope(
       request,
       'admin.backups.prepare',
-      await this.service.prepare(user(request), request.params.backupId),
+      await this.service.prepare(user(request), request.params.backupId, request.body.escopos),
     );
 
   restore = async (request: FastifyRequest<{ Params: Params; Body: RestoreBody }>) =>
