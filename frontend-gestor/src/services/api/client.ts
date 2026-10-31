@@ -11,6 +11,7 @@ export const API_TIMEOUT_MS = {
   SAVE: 45_000,
   CRITICAL_WRITE: 60_000,
   EVIDENCE_UPLOAD: 90_000,
+  BULK_IMPORT: 180_000,
 } as const;
 
 export interface ApiCallOptions {
@@ -1228,6 +1229,13 @@ export function nodeActionRequest(
       };
     case "operator-actions.assume":
       return { method: "POST", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/assume`, token };
+    case "operator-actions.transfer":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/transfer`,
+        body: { usuario_id: payload.usuario_id, justificativa: payload.justificativa },
+        token,
+      };
     case "operator-actions.participants":
       return { method: "GET", path: `/v1/maintenance/operator-actions/${encodeURIComponent(String(payload.acao_id))}/participants`, token };
     case "operator-actions.collaborators.invite":
@@ -1845,6 +1853,32 @@ export function nodeActionRequest(
         token,
       };
     }
+    case "admin.usuarios.importar": {
+      const users = Array.isArray(payload.usuarios) ? payload.usuarios.map(record) : [];
+      return {
+        method: "POST",
+        path: "/v1/admin/users/import",
+        body: {
+          arquivo_nome: payload.arquivo_nome,
+          aba_nome: payload.aba_nome,
+          cabecalhos: Array.isArray(payload.cabecalhos) ? payload.cabecalhos : [],
+          usuarios: users.map((user) => ({
+            linha_numero: user.linha_numero,
+            nome: user.nome,
+            email: user.email,
+            matricula: user.matricula,
+            perfil: user.perfil,
+            status: user.status,
+            senha_temporaria: user.senha_temporaria,
+            area_codigo: user.area_codigo,
+            area_nome: user.area_nome,
+            cargo_codigo: user.cargo_codigo,
+            cargo_nome: user.cargo_nome,
+          })),
+        },
+        token,
+      };
+    }
     case "admin.usuarios.desbloquear":
       return {
         method: "POST",
@@ -1926,6 +1960,20 @@ export function nodeActionRequest(
     }
     case "admin.permissoes.obter":
       return { method: "GET", path: "/v1/admin/permissions", token };
+    case "admin.permissoes.perfis.padrao":
+      return {
+        method: "POST",
+        path: "/v1/admin/permissions/profiles/defaults",
+        body: {},
+        token,
+      };
+    case "admin.permissoes.perfil.criar":
+      return {
+        method: "POST",
+        path: "/v1/admin/permissions/profiles",
+        body: { nome: payload.nome },
+        token,
+      };
     case "admin.permissoes.salvar":
       return {
         method: "PATCH",
@@ -2072,6 +2120,13 @@ export function nodeActionRequest(
         body: { motivo: payload.motivo },
         token,
       };
+    case "admin.importacao.descartar":
+      return {
+        method: "POST",
+        path: `/v1/admin/imports/${encodeURIComponent(String(payload.lote_id))}/dismiss`,
+        body: {},
+        token,
+      };
     case "admin.backups.listar":
       return {
         method: "GET",
@@ -2082,14 +2137,18 @@ export function nodeActionRequest(
       return {
         method: "POST",
         path: "/v1/admin/backups",
-        body: { motivo: payload.motivo, confirmacao: payload.confirmacao },
+        body: {
+          motivo: payload.motivo,
+          confirmacao: payload.confirmacao,
+          ...(Array.isArray(payload.escopos) ? { escopos: payload.escopos } : {}),
+        },
         token,
       };
     case "admin.backups.preparar_restauracao":
       return {
         method: "POST",
         path: `/v1/admin/backups/${encodeURIComponent(String(payload.backup_id))}/prepare`,
-        body: {},
+        body: { ...(Array.isArray(payload.escopos) ? { escopos: payload.escopos } : {}) },
         token,
       };
     case "admin.backups.confirmar_restauracao":
@@ -2157,8 +2216,9 @@ export function nodeActionRequest(
           busca: payload.busca,
           grupo_acao: payload.grupo_acao,
           entidade: payload.entidade,
-          responsavel_id: payload.responsavel_id,
+          responsavel_id: payload.responsavel_id ?? payload.usuario_id,
           limite: payload.limite,
+          deslocamento: payload.deslocamento,
         }),
         token,
       };

@@ -52,7 +52,8 @@ function nullableText(value: unknown): string | null {
 
 function requiredText(value: unknown, field: string): string {
   const normalized = normalizedText(value);
-  if (!normalized) throw error('IMPORT_REQUIRED_VALUE', `Preencha o campo ${field}.`, 422);
+  if (!normalized)
+    throw error('IMPORT_REQUIRED_VALUE', `Preencha o campo ${field}.`, 422, { campo: field });
   return normalized;
 }
 
@@ -61,7 +62,9 @@ function numberValue(value: unknown, field: string, fallback: number | null): nu
   if (!normalized) return fallback;
   const result = Number(normalized);
   if (!Number.isFinite(result) || result < 0) {
-    throw error('IMPORT_NUMBER_INVALID', `${field} deve ser um número maior ou igual a zero.`, 422);
+    throw error('IMPORT_NUMBER_INVALID', `${field} deve ser um número maior ou igual a zero.`, 422, {
+      campo: field,
+    });
   }
   return result;
 }
@@ -217,11 +220,37 @@ function canonicalRow(
   return result;
 }
 
-function rowError(cause: unknown): { readonly codigo: string; readonly mensagem: string } {
-  if (cause instanceof AppError) return { codigo: cause.code, mensagem: cause.message };
+function rowError(
+  cause: unknown,
+  model: ImportModel,
+): { readonly codigo: string; readonly mensagem: string; readonly campo?: string } {
+  const message = cause instanceof Error ? cause.message : 'A linha não atende ao modelo.';
+  const details = cause instanceof AppError && typeof cause.details === 'object' && cause.details !== null
+    ? cause.details as Record<string, unknown>
+    : {};
+  const explicitField = typeof details.campo === 'string' ? details.campo : undefined;
+  const normalizedMessage = normalizedHeader(message);
+  const matchingField = model.fields.find((field) =>
+    [field.key, field.label, ...field.aliases]
+      .map(normalizedHeader)
+      .some((candidate) => candidate.length >= 3 && normalizedMessage.includes(candidate)),
+  );
+  const referenceField: Partial<Record<ImportEntity, string>> = {
+    setores: 'planta_id',
+    linhas: 'setor_id',
+    ativos: 'linha_id',
+    componentes: 'ativo_id',
+  };
+  const field = explicitField ?? matchingField?.key ??
+    (cause instanceof AppError && cause.code === 'IMPORT_REFERENCE_INVALID'
+      ? referenceField[model.entity]
+      : undefined);
+  if (cause instanceof AppError)
+    return { codigo: cause.code, mensagem: message, ...(field ? { campo: field } : {}) };
   return {
     codigo: 'IMPORT_ROW_INVALID',
-    mensagem: cause instanceof Error ? cause.message : 'A linha não atende ao modelo.',
+    mensagem: message,
+    ...(field ? { campo: field } : {}),
   };
 }
 
@@ -238,6 +267,21 @@ function publicStatus(status: string): string {
     ROLLED_BACK_RECORD: 'REVERTIDO',
   };
   return statuses[status] ?? status;
+}
+
+function contentFingerprint(type: string, rows: readonly StagedImportRow[]): string {
+  const canonicalRows = rows
+    .filter((row) => row.status === 'VALID' && row.normalizedData !== null)
+    .map((row) => {
+      const content = { ...(row.normalizedData ?? {}) };
+      delete content.id;
+      delete content.qr_payload;
+      return content;
+    })
+    .sort((left, right) => stableSerialize(left).localeCompare(stableSerialize(right), 'en'));
+  return createHash('sha256')
+    .update(`VORQIX-IMPORT-CONTENT-V1:${type}:${stableSerialize(canonicalRows)}`, 'utf8')
+    .digest('hex');
 }
 
 export class ImportService {
@@ -327,6 +371,7 @@ export class ImportService {
     await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
+        await this.repository.lockTenant(client, user.tenantId);
         const rows: StagedImportRow[] = [];
         const entityIds = new Set<string>();
         const materialPrices = new Map<string, number>();
@@ -403,7 +448,7 @@ export class ImportService {
               status: 'INVALID',
               rawData,
               normalizedData: null,
-              errors: [rowError(cause)],
+              errors: [rowError(cause, model)],
               beforeData: null,
             });
           }
@@ -411,6 +456,20 @@ export class ImportService {
         const hash = createHash('sha256')
           .update(`FAB-IMPORT-PG-V1:${batchId}:${stableSerialize(rows)}`, 'utf8')
           .digest('hex');
+        const fingerprint = contentFingerprint(model.type, rows);
+        const duplicate = await this.repository.findConfirmedFingerprint(
+          client,
+          model.type,
+          fingerprint,
+        );
+        if (duplicate) {
+          throw error(
+            'IMPORT_DUPLICATE_BATCH',
+            `Este conteúdo já foi importado como “${text(duplicate, 'source_file_name')}” em ${iso(duplicate.created_at)}. Revise os dados antes de enviar novamente.`,
+            409,
+            { lote_existente: duplicate.id },
+          );
+        }
         await this.repository.createBatch(
           client,
           user.tenantId,
@@ -419,6 +478,7 @@ export class ImportService {
           input,
           model.entity,
           hash,
+          fingerprint,
           ignoredHeaders,
           rows,
         );
@@ -462,6 +522,23 @@ export class ImportService {
         }
         if (text(batch, 'validation_hash_sha256') !== validationHash) {
           throw error('IMPORT_VALIDATION_CHANGED', 'A assinatura da pré-análise não confere.', 409);
+        }
+        const fingerprint = optionalDatabaseText(batch.content_fingerprint_sha256);
+        const duplicate = fingerprint
+          ? await this.repository.findConfirmedFingerprint(
+              client,
+              text(batch, 'import_type'),
+              fingerprint,
+              batchId,
+            )
+          : null;
+        if (duplicate) {
+          throw error(
+            'IMPORT_DUPLICATE_BATCH',
+            `Este conteúdo já foi importado como “${text(duplicate, 'source_file_name')}”.`,
+            409,
+            { lote_existente: duplicate.id },
+          );
         }
         const records = await this.repository.listRecords(client, batchId);
         let created = 0;
@@ -597,6 +674,38 @@ export class ImportService {
       },
     );
     return this.batchDetail(user, batchId);
+  }
+
+  async dismiss(user: AuthenticatedUser, batchId: string, audit: ImportAuditContext) {
+    await this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        await this.repository.lockTenant(client, user.tenantId);
+        const batch = await this.repository.findBatch(client, batchId, true);
+        if (!batch) throw error('IMPORT_BATCH_NOT_FOUND', 'Lote não encontrado.', 404);
+        if (!['CONFIRMED', 'REJECTED', 'FAILED', 'ROLLED_BACK'].includes(text(batch, 'status'))) {
+          throw error(
+            'IMPORT_DISMISS_NOT_ALLOWED',
+            'Somente lotes encerrados podem ser removidos do histórico.',
+            409,
+          );
+        }
+        if (batch.dismissed_at) {
+          throw error('IMPORT_BATCH_ALREADY_DISMISSED', 'Este lote já foi removido do histórico.', 409);
+        }
+        await this.repository.dismissBatch(client, batchId, user.id);
+        await this.repository.writeAudit(
+          client,
+          user.tenantId,
+          user.id,
+          audit,
+          'ADMIN_IMPORT_BATCH_DISMISSED',
+          batchId,
+          { historico_removido: true, dados_operacionais_preservados: true },
+        );
+      },
+    );
+    return { id: batchId, removido_do_historico: true, dados_operacionais_preservados: true };
   }
 
   private async normalizeEntity(
@@ -799,6 +908,7 @@ export class ImportService {
         status: publicStatus(
           text(record, 'status') === 'ROLLED_BACK' ? 'ROLLED_BACK_RECORD' : text(record, 'status'),
         ),
+        origem: json(record, 'raw_data') ?? {},
         normalizado: json(record, 'normalized_data') ?? {},
         erros: Array.isArray(record.errors) ? record.errors : [],
       })),

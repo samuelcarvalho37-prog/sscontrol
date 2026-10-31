@@ -366,7 +366,7 @@ async function seed(pool: Pool): Promise<SeededIdentities> {
       [
         tenantId,
         ids.operatorRole,
-        ['maintenance.executions.read', 'maintenance.executions.perform'],
+        ['maintenance.executions.read', 'maintenance.executions.perform', 'workflow.notifications.read'],
       ],
     );
     await client.query(
@@ -1267,6 +1267,11 @@ test(
     assert.equal(releasedByPcm.statusCode, 200, releasedByPcm.body);
     assert.equal(releasedByPcm.json().data.status, 'RELEASED');
     assert.equal(releasedByPcm.json().data.acoes.length, 1);
+    const releaseInbox = await app.inject({
+      method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(identities.operator),
+    });
+    assert.equal(releaseInbox.statusCode, 200, releaseInbox.body);
+    assert.ok(releaseInbox.json<{ data: { itens: readonly { tipo: string }[] } }>().data.itens.some(item => item.tipo === 'WORK_ORDER_AVAILABLE'));
 
     const workOrderList = await app.inject({
       method: 'GET',
@@ -1315,13 +1320,15 @@ test(
     const otherPlantQueue = await app.inject({ method: 'GET', url: '/v1/maintenance/operator-actions', headers: bearer(identities.otherPlantTechnician) });
     assert.equal(otherPlantQueue.statusCode, 200, otherPlantQueue.body);
     const otherPlantQueueData = otherPlantQueue.json<{ data: { itens: readonly { id: string }[] } }>();
-    assert.equal(otherPlantQueueData.data.itens.some(item => item.id === raceActionId), false);
+    assert.equal(otherPlantQueueData.data.itens.some(item => item.id === raceActionId), true);
     const otherPlantLegacyActions = await app.inject({ method: 'GET', url: '/v1/maintenance/actions', headers: bearer(identities.otherPlantTechnician) });
     assert.equal(otherPlantLegacyActions.statusCode, 200, otherPlantLegacyActions.body);
     const otherPlantLegacyActionData = otherPlantLegacyActions.json<{ data: { acoes: readonly { id: string }[] } }>();
     assert.equal(otherPlantLegacyActionData.data.acoes.some(item => item.id === raceActionId), false);
     const otherPlantLegacyDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/actions/${raceActionId}`, headers: bearer(identities.otherPlantTechnician) });
-    assert.equal(otherPlantLegacyDetail.statusCode, 404, otherPlantLegacyDetail.body);
+    assert.equal(otherPlantLegacyDetail.statusCode, 200, otherPlantLegacyDetail.body);
+    const sharedQueueDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/operator-actions/${raceActionId}`, headers: bearer(identities.otherPlantTechnician) });
+    assert.equal(sharedQueueDetail.statusCode, 200, sharedQueueDetail.body);
     const concurrentClaims = await Promise.all([ids.operator, ids.support].map((userId) => app.inject({
       method: 'POST', url: `/v1/maintenance/operator-actions/${raceActionId}/assume`,
       headers: bearer(userId === ids.operator ? identities.operator : identities.support),
@@ -1332,6 +1339,23 @@ test(
       const winner = await client.query<{ user_id: string }>(`SELECT user_id FROM maintenance.work_order_action_participants WHERE tenant_id=$1 AND action_id=$2 AND participant_role='PRIMARY' AND invitation_status='PRIMARY'`, [tenantId, raceActionId]);
       assert.equal(winner.rows[0]?.user_id, winningUserId);
     });
+    const winningIdentity = winningUserId === ids.operator ? identities.operator : identities.support;
+    const nextTechnicianId = winningUserId === ids.operator ? ids.support : ids.operator;
+    const nextTechnicianIdentity = nextTechnicianId === ids.operator ? identities.operator : identities.support;
+    const raceStart = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${raceActionId}/start`, headers: bearer(winningIdentity), payload: { modo_parada: 'STOPPED' } });
+    assert.equal(raceStart.statusCode, 200, raceStart.body);
+    const raceExecutionId = raceStart.json<{ data: { execucao: { id: string } } }>().data.execucao.id;
+    const racePause = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${raceExecutionId}/pause`, headers: bearer(winningIdentity), payload: { motivo_codigo: 'AGUARDANDO_PRODUCAO' } });
+    assert.equal(racePause.statusCode, 200, racePause.body);
+    const transfer = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${raceActionId}/transfer`, headers: bearer(winningIdentity), payload: { usuario_id: nextTechnicianId, justificativa: 'Prioridade operacional redirecionada para outro técnico.' } });
+    assert.equal(transfer.statusCode, 200, transfer.body);
+    const transferredDetail = await app.inject({ method: 'GET', url: `/v1/maintenance/operator-actions/${raceActionId}`, headers: bearer(nextTechnicianIdentity) });
+    assert.equal(transferredDetail.statusCode, 200, transferredDetail.body);
+    assert.equal(transferredDetail.json<{ data: { execucao: { operador_id: string; status: string } } }>().data.execucao.operador_id, nextTechnicianId);
+    assert.equal(transferredDetail.json<{ data: { execucao: { operador_id: string; status: string } } }>().data.execucao.status, 'PAUSED');
+    const transferInbox = await app.inject({ method: 'GET', url: '/v1/notifications?somente_nao_lidas=true', headers: bearer(nextTechnicianIdentity) });
+    assert.equal(transferInbox.statusCode, 200, transferInbox.body);
+    assert.ok(transferInbox.json<{ data: { itens: readonly { tipo: string }[] } }>().data.itens.some(item => item.tipo === 'WORK_ORDER_TRANSFERRED'));
     const oldAssignmentAttempt = await app.inject({ method: 'PUT', url: `/v1/maintenance/actions/${raceActionId}/assignment`, headers: bearer(identities.admin), payload: { responsavel_id: ids.operator, tecnicos_apoio_ids: [] } });
     assert.notEqual(oldAssignmentAttempt.statusCode, 200);
     const legacyAssignment = await app.inject({ method: 'PUT', url: `/v1/maintenance/actions/${actionId}/assignment`, headers: bearer(identities.admin), payload: { responsavel_id: ids.operator, tecnicos_apoio_ids: [] } });
@@ -1427,7 +1451,7 @@ test(
     const declinedSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.supportDecline) });
     assert.equal(declinedSession.statusCode, 403, declinedSession.body);
     const otherPlantInvite = await app.inject({ method: 'POST', url: `/v1/maintenance/operator-actions/${actionId}/collaborators`, headers: bearer(identities.operator), payload: { usuario_id: ids.otherPlantTechnician } });
-    assert.equal(otherPlantInvite.statusCode, 422, otherPlantInvite.body);
+    assert.equal(otherPlantInvite.statusCode, 200, otherPlantInvite.body);
     const supportSession = await app.inject({ method: 'POST', url: `/v1/maintenance/executions/${executionId}/sessions/start`, headers: bearer(identities.support) });
     assert.equal(supportSession.statusCode, 200, supportSession.body);
     const collaboratorCompletion = await app.inject({

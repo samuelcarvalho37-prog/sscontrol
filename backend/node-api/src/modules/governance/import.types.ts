@@ -23,7 +23,11 @@ export interface StagedImportRow {
   readonly status: 'VALID' | 'INVALID';
   readonly rawData: Readonly<Record<string, unknown>>;
   readonly normalizedData: Readonly<Record<string, unknown>> | null;
-  readonly errors: readonly { readonly codigo: string; readonly mensagem: string }[];
+  readonly errors: readonly {
+    readonly codigo: string;
+    readonly mensagem: string;
+    readonly campo?: string;
+  }[];
   readonly beforeData: Readonly<Record<string, unknown>> | null;
 }
 

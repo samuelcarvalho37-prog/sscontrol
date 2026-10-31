@@ -29,6 +29,27 @@ export interface SaveUserInput {
   readonly scopeIds: readonly string[];
 }
 
+export interface BulkUserImportRowInput {
+  readonly rowNumber: number;
+  readonly name: string;
+  readonly email: string;
+  readonly employeeNumber: string;
+  readonly profile: AdminProfile;
+  readonly status: AdminStatus;
+  readonly temporaryPassword: string;
+  readonly areaCode: string;
+  readonly areaName: string;
+  readonly roleCode: string;
+  readonly roleName: string;
+}
+
+export interface BulkUserImportInput {
+  readonly fileName: string;
+  readonly sheetName: string;
+  readonly headers: readonly string[];
+  readonly rows: readonly BulkUserImportRowInput[];
+}
+
 export interface SaveTechnicalAreaInput {
   readonly id: string | null;
   readonly code: string;
@@ -54,6 +75,7 @@ export interface AuditListQuery {
   readonly entityType: string | null;
   readonly responsibleId: string | null;
   readonly limit: number;
+  readonly offset: number;
 }
 
 export type AdminRow = Record<string, unknown>;

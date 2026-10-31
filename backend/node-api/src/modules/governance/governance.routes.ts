@@ -94,6 +94,11 @@ export function createGovernanceRoutes(
       schema: { ...secured, params: importBatchParamsSchema, body: importRollbackBodySchema },
       handler: imports.rollback,
     });
+    app.post('/v1/admin/imports/:batchId/dismiss', {
+      preHandler: (request) => app.authorize(request, 'admin.governance.manage'),
+      schema: { ...secured, params: importBatchParamsSchema },
+      handler: imports.dismiss,
+    });
     app.get('/v1/admin/backups', {
       preHandler: (request) => app.authorize(request, 'admin.governance.read'),
       schema: { ...secured, querystring: backupListQuerySchema },

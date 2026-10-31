@@ -82,6 +82,8 @@ export interface AdminDocumentDetailData {
 export interface AdminAuditEvent {
   id: string
   usuario_id: string
+  responsavel: string
+  responsavel_tipo: 'USER' | 'PLATFORM' | string
   perfil: string
   acao: string
   entidade: string
@@ -89,11 +91,16 @@ export interface AdminAuditEvent {
   antes_json?: string
   depois_json?: string
   user_agent?: string
+  trace_id?: string
+  origem?: string
+  ip_address?: string
+  campos_ocultos?: string[]
   criado_em: string
 }
 
 export interface AdminAuditListData {
   total: number
+  deslocamento?: number
   eventos: AdminAuditEvent[]
 }
 
@@ -104,6 +111,9 @@ export interface AdminMonitoringState {
     version: string
     spreadsheetId: string
     serverTime: string
+    environment?: string
+    databaseReady?: boolean
+    databaseLatencyMs?: number | null
     [key: string]: unknown
   }
   diagnostico: {
@@ -119,6 +129,40 @@ export interface AdminMonitoringState {
   }
   tabelas_declaradas: number
   verificado_em: string
+  telemetria?: {
+    windowMinutes: number
+    observedAt: string
+    source: 'process-memory'
+    persistence: 'process-lifetime'
+    modules: Array<{
+      module: string
+      calls: number
+      serverErrors: number
+      deniedRequests: number
+      p95Ms: number
+      averageMs: number
+      state: 'INSUFFICIENT_DATA' | 'HEALTHY' | 'WARNING' | 'CRITICAL'
+      capabilities: Array<{
+        capability: string
+        calls: number
+        p95Ms: number
+        averageMs: number
+        serverErrors: number
+        deniedRequests: number
+        errorRatio: number
+        state: 'INSUFFICIENT_DATA' | 'HEALTHY' | 'WARNING' | 'CRITICAL'
+        observedAt: string | null
+      }>
+    }>
+  }
+}
+
+export type AdminBackupScopeId = 'OPERACIONAL' | 'IMPORTACOES' | 'ACESSOS' | 'CONFIGURACOES'
+
+export interface AdminBackupScope {
+  id: AdminBackupScopeId
+  nome: string
+  descricao: string
 }
 
 export interface AdminBackup {
@@ -129,6 +173,7 @@ export interface AdminBackup {
   atualizado_em?: string
   url: string
   pasta_id?: string
+  escopos?: AdminBackupScopeId[]
 }
 
 export interface AdminBackupListData {
@@ -136,14 +181,17 @@ export interface AdminBackupListData {
   backups: AdminBackup[]
   pasta_id: string
   restauracao_disponivel: boolean
-  escopo_restauracao: 'OPERACIONAL_SEGURO'
+  escopo_restauracao: 'OPERACIONAL_SEGURO' | 'SELECIONAVEL'
   abas_protegidas: string[]
+  escopos_disponiveis: AdminBackupScope[]
+  pontos_por_mes: Record<string, number>
 }
 
 export interface AdminBackupCreateData {
   created: boolean
   backup: AdminBackup
   restauracao_disponivel: boolean
+  escopos: AdminBackupScopeId[]
 }
 
 export interface AdminBackupRestorePreparation {
@@ -152,7 +200,9 @@ export interface AdminBackupRestorePreparation {
   desafio: string
   confirmacao_final: string
   backup: Pick<AdminBackup, 'id' | 'nome' | 'criado_em'>
-  escopo: 'OPERACIONAL_SEGURO'
+  escopo: 'OPERACIONAL_SEGURO' | 'SELECIONAVEL'
+  escopos_disponiveis: AdminBackupScope[]
+  escopos_restaurados: AdminBackupScopeId[]
   abas_restauradas: string[]
   abas_protegidas: string[]
   abas_ausentes: string[]
@@ -164,7 +214,8 @@ export interface AdminBackupRestoreResult {
   restored: boolean
   backup_id: string
   backup_nome: string
-  escopo: 'OPERACIONAL_SEGURO'
+  escopo: 'OPERACIONAL_SEGURO' | 'SELECIONAVEL'
+  escopos_restaurados: AdminBackupScopeId[]
   abas_restauradas: string[]
   abas_protegidas: string[]
   backup_seguranca: AdminBackup

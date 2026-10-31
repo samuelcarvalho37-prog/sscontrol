@@ -1116,6 +1116,11 @@ export class OperationsService {
           );
         }
         const actionId = await this.repository.releaseWorkOrder(client, workOrder);
+        const notifiedTechnicians = await this.repository.notifyTechniciansOfReleasedAction(
+          client,
+          user.tenantId,
+          actionId,
+        );
         await this.repository.linkOccurrenceReleaseAction(client, workOrderId, actionId);
         const detail = await this.requiredWorkOrderDetail(client, workOrderId);
         await this.repository.writeAudit(
@@ -1126,7 +1131,7 @@ export class OperationsService {
           'WORK_ORDER_RELEASED',
           'WORK_ORDER',
           workOrderId,
-          { acao_id: actionId, ordem: detail },
+          { acao_id: actionId, ordem: detail, tecnicos_notificados: notifiedTechnicians },
         );
         return detail;
       },
@@ -1136,10 +1141,22 @@ export class OperationsService {
   async listOperatorActions(user: AuthenticatedUser, limit: number, history = false) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
-      async (client) => ({
-        itens: await this.repository.listOperatorActions(client, user.id, limit, history),
-        limite: limit,
-      }),
+      async (client) => {
+        const technicianQueue = user.roles.includes('TECNICO');
+        if (technicianQueue && !(await this.repository.canJoinTenantTechnicianQueue(client, user.id))) {
+          throw error('TECHNICIAN_PROFILE_NOT_CONFIGURED', 'O perfil técnico está sem uma área técnica ativa.', 403);
+        }
+        return {
+          itens: await this.repository.listOperatorActions(
+            client,
+            user.id,
+            limit,
+            history,
+            technicianQueue && !history,
+          ),
+          limite: limit,
+        };
+      },
     );
   }
 
@@ -1220,7 +1237,7 @@ export class OperationsService {
         const action = await this.repository.getOperatorActionDetail(client, actionId);
         if (!action) throw error('MAINTENANCE_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
         if (!user.capabilities.includes('maintenance.work-orders.review') &&
-            !(await this.repository.userCanAccessActionPlant(client, actionId, user.id))) {
+            !(await this.canAccessOperationalAction(client, actionId, user))) {
           throw error('MAINTENANCE_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
         }
         const executionId = typeof action.execucao_id === 'string' ? action.execucao_id : null;
@@ -1243,7 +1260,7 @@ export class OperationsService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const action = await this.repository.getOperatorActionDetail(client, actionId);
-        if (!action || !(await this.operatorCanSeeAction(client, action, user.id))) {
+        if (!action || !(await this.operatorCanSeeAction(client, action, user))) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
         const executionId = typeof action.execucao_id === 'string' ? action.execucao_id : null;
@@ -1252,7 +1269,11 @@ export class OperationsService {
           : null;
         const participation = await this.repository.findActionParticipant(client, actionId, user.id);
         const technicians = participation
-          ? await this.repository.listActiveTechnicians(client, actionId, user.id)
+          ? await this.repository.listActiveTechnicians(
+              client,
+              user.roles.includes('TECNICO') ? undefined : actionId,
+              user.id,
+            )
           : [];
         return { acao: { ...action, papel_na_equipe: participation?.participant_role === 'PRIMARY' ? 'PRINCIPAL' : participation?.participant_role === 'COLLABORATOR' ? 'COLABORADOR' : null, participacao_status: participation?.invitation_status ?? null }, execucao: execution, participantes: await this.repository.listActionParticipants(client, actionId, user.id), tecnicos_elegiveis: technicians };
       },
@@ -1273,7 +1294,7 @@ export class OperationsService {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
         const actionStatus = text(action, 'status');
-        if (!(await this.repository.userCanAccessActionPlant(client, actionId, user.id))) {
+        if (!(await this.canAccessOperationalAction(client, actionId, user))) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
         const primary = await this.repository.findActionParticipant(client, actionId, user.id);
@@ -1381,7 +1402,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const { execution } = await this.ownedActionExecution(client, actionId, user.id, true);
+        const { execution } = await this.ownedActionExecution(client, actionId, user, true);
         const primary = await this.repository.findActionParticipant(client, actionId, user.id);
         if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode concluir a OS.', 403);
         if (text(execution, 'status') !== 'IN_PROGRESS') {
@@ -1474,7 +1495,7 @@ export class OperationsService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const action = await this.repository.getOperatorActionDetail(client, actionId);
-        if (!action || !(await this.operatorCanSeeAction(client, action, user.id))) {
+        if (!action || !(await this.operatorCanSeeAction(client, action, user))) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
         return { materiais: await this.repository.listConsumableMaterials(client) };
@@ -1491,7 +1512,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const { action, execution } = await this.ownedActionExecution(client, actionId, user.id, true);
+        const { action, execution } = await this.ownedActionExecution(client, actionId, user, true);
         if (text(execution, 'status') !== 'IN_PROGRESS') {
           throw error('EXECUTION_NOT_IN_PROGRESS', 'Inicie a execução antes de registrar a saída de material.', 409);
         }
@@ -1543,7 +1564,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
-        const { execution } = await this.ownedActionExecution(client, actionId, user.id, false);
+        const { execution } = await this.ownedActionExecution(client, actionId, user, false);
         const blockers = await this.repository.blockingExecutionItems(client, execution.id);
         const detail = await this.requiredExecutionDetail(client, execution.id);
         return this.completionState(execution, blockers, detail);
@@ -1560,7 +1581,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const { execution } = await this.ownedActionExecution(client, actionId, user.id, true);
+        const { execution } = await this.ownedActionExecution(client, actionId, user, true);
         const primary = await this.repository.findActionParticipant(client, actionId, user.id);
         if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode concluir a OS.', 403);
         if (text(execution, 'status') !== 'IN_PROGRESS') {
@@ -1738,8 +1759,8 @@ export class OperationsService {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         if (text(action, 'status') !== 'READY')
           throw error('OPERATOR_ACTION_NOT_READY', 'A ação não está disponível para assumir.', 409);
-        if (!(await this.repository.userCanAccessActionPlant(client, actionId, user.id)) ||
-            !(await this.repository.activeTechnicianExists(client, user.id, actionId))) {
+        if (!(await this.canAccessOperationalAction(client, actionId, user)) ||
+            !(await this.repository.canJoinTenantTechnicianQueue(client, user.id))) {
           throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
         }
         const existing = await this.repository.findPrimaryParticipant(client, actionId);
@@ -1772,6 +1793,63 @@ export class OperationsService {
     );
   }
 
+  async transferPausedAction(
+    user: AuthenticatedUser,
+    actionId: string,
+    nextTechnicianId: string,
+    reason: string,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        if (!user.roles.includes('TECNICO') ||
+            !(await this.repository.canJoinTenantTechnicianQueue(client, user.id))) {
+          throw error('TECHNICIAN_TRANSFER_FORBIDDEN', 'Somente o técnico responsável pode transferir a OS.', 403);
+        }
+        const action = await this.repository.findAction(client, actionId, true);
+        const execution = await this.repository.findExecutionByAction(client, actionId, true);
+        const primary = await this.repository.findPrimaryParticipant(client, actionId);
+        if (!action || text(action, 'status') !== 'BLOCKED' || !execution ||
+            text(execution, 'status') !== 'PAUSED' || execution.operator_id !== user.id ||
+            primary?.user_id !== user.id) {
+          throw error('EXECUTION_TRANSFER_NOT_AVAILABLE', 'Pause a execução e confirme que você é o responsável antes de transferir.', 409);
+        }
+        if (nextTechnicianId === user.id ||
+            !(await this.repository.canJoinTenantTechnicianQueue(client, nextTechnicianId))) {
+          throw error('COLLABORATOR_NOT_ELIGIBLE', 'Selecione outro técnico ativo da mesma empresa.', 422);
+        }
+        const normalizedReason = reason.trim();
+        if (normalizedReason.length < 3) {
+          throw error('EXECUTION_TRANSFER_REASON_REQUIRED', 'Informe o motivo da transferência.', 422);
+        }
+        await this.repository.transferPausedAction(
+          client,
+          user.tenantId,
+          actionId,
+          execution.id,
+          user.id,
+          nextTechnicianId,
+          normalizedReason,
+        );
+        const detail = await this.repository.getOperatorActionDetail(client, actionId);
+        if (!detail) throw error('OPERATOR_ACTION_NOT_FOUND', 'A OS transferida não foi encontrada.', 404);
+        await this.repository.writeAudit(
+          client,
+          user.tenantId,
+          user.id,
+          audit,
+          'EXECUTION_TRANSFERRED_TO_TECHNICIAN',
+          'WORK_ORDER_ACTION',
+          actionId,
+          { execution_id: execution.id, tecnico_anterior_id: user.id,
+            novo_tecnico_id: nextTechnicianId, justificativa: normalizedReason },
+        );
+        return detail;
+      },
+    );
+  }
+
   async getExecution(user: AuthenticatedUser, executionId: string) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
@@ -1785,7 +1863,7 @@ export class OperationsService {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         if (!user.capabilities.includes('maintenance.work-orders.review') &&
-            !(await this.repository.userCanAccessActionPlant(client, text(detail, 'work_order_action_id'), user.id))) {
+            !(await this.repository.userCanAccessActionOrTechnicianQueue(client, text(detail, 'work_order_action_id'), user.id))) {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         return detail;
@@ -1807,7 +1885,7 @@ export class OperationsService {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         if (!user.capabilities.includes('maintenance.work-orders.review') &&
-            !(await this.repository.userCanAccessActionPlant(client, text(execution, 'work_order_action_id'), user.id))) {
+            !(await this.repository.userCanAccessActionOrTechnicianQueue(client, text(execution, 'work_order_action_id'), user.id))) {
           throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
         }
         const blockers = await this.repository.blockingExecutionItems(client, executionId);
@@ -1826,7 +1904,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const execution = await this.ownedExecution(client, executionId, user.id);
+        const execution = await this.ownedExecution(client, executionId, user);
         const primary = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
         if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode iniciar a execução.', 403);
         if (text(execution, 'status') !== 'OPEN')
@@ -1854,7 +1932,7 @@ export class OperationsService {
 
   async pauseExecution(user: AuthenticatedUser, executionId: string, reasonCode: string, reasonDetail: string | null, audit: RequestAuditMetadata) {
     return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
-      const execution = await this.ownedExecution(client, executionId, user.id);
+      const execution = await this.ownedExecution(client, executionId, user);
       const primary = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
       if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode pausar a OS globalmente.', 403);
       if (text(execution, 'status') !== 'IN_PROGRESS') throw error('EXECUTION_NOT_IN_PROGRESS', 'Somente uma execução em andamento pode ser pausada.', 409);
@@ -1877,7 +1955,7 @@ export class OperationsService {
 
   async resumeExecution(user: AuthenticatedUser, executionId: string, audit: RequestAuditMetadata) {
     return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
-      const execution = await this.ownedExecution(client, executionId, user.id);
+      const execution = await this.ownedExecution(client, executionId, user);
       if (text(execution, 'status') !== 'PAUSED') throw error('EXECUTION_NOT_PAUSED', 'A execução não está pausada.', 409);
       const primary = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
       if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode retomar a OS.', 403);
@@ -1924,7 +2002,7 @@ export class OperationsService {
   async listExecutionPartShortages(user: AuthenticatedUser, executionId: string) {
     return this.database.withTransaction({ tenantId:user.tenantId,userId:user.id,readOnly:true },async client => {
       const execution=await this.repository.findExecution(client,executionId);
-      if (!execution || !(await this.repository.userCanAccessActionPlant(client,text(execution,'work_order_action_id'),user.id))) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
+      if (!execution || !(await this.repository.userCanAccessActionOrTechnicianQueue(client,text(execution,'work_order_action_id'),user.id))) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
       const participant=await this.repository.findActionParticipant(client,text(execution,'work_order_action_id'),user.id);
       if (!(user.roles.includes('PCM') && user.capabilities.includes('maintenance.work-orders.read')) && (!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status')))) throw error('EXECUTION_NOT_FOUND','Execução não encontrada.',404);
       return { pendencias_peca: await this.repository.listPartShortages(client,user.tenantId,{executionId}) };
@@ -1937,7 +2015,7 @@ export class OperationsService {
       const order=await this.repository.getWorkOrderDetail(client,workOrderId);
       if (!order) throw error('WORK_ORDER_NOT_FOUND','Ordem de serviço não encontrada.',404);
       const action=await this.repository.findActionByWorkOrder(client,workOrderId);
-      if (action && !(await this.repository.userCanAccessActionPlant(client,text(action,'id'),user.id))) throw error('WORK_ORDER_NOT_FOUND','Ordem de serviço não encontrada.',404);
+      if (action && !(await this.repository.userCanAccessActionOrTechnicianQueue(client,text(action,'id'),user.id))) throw error('WORK_ORDER_NOT_FOUND','Ordem de serviço não encontrada.',404);
       return { pendencias_peca: await this.repository.listPartShortages(client,user.tenantId,{workOrderId}) };
     });
   }
@@ -1986,7 +2064,7 @@ export class OperationsService {
         const actionId=text(execution,'work_order_action_id');
         const participant=await this.repository.findActionParticipant(client,actionId,user.id);
         if(!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status'))) throw error('EXECUTION_PARTICIPANT_REQUIRED','Somente participante aceito pode registrar falta de peça.',403);
-        if(!(await this.repository.userCanAccessActionPlant(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
+        if(!(await this.repository.userCanAccessActionOrTechnicianQueue(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
         await this.requireOpenParticipantSession(client,user.tenantId,executionId,user.id);
         let evidenceId:string|null=null;
         if(stored) {
@@ -2041,7 +2119,7 @@ export class OperationsService {
       const actionId=text(execution,'work_order_action_id');
       const participant=await this.repository.findActionParticipant(client,actionId,user.id);
       if(!participant || !['PRIMARY','ACCEPTED'].includes(text(participant,'invitation_status'))) throw error('EXECUTION_PARTICIPANT_REQUIRED','Somente participante aceito pode encerrar o turno.',403);
-      if(!(await this.repository.userCanAccessActionPlant(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
+      if(!(await this.repository.userCanAccessActionOrTechnicianQueue(client,actionId,user.id))) throw error('EXECUTION_NOT_FOUND','Execução fora do seu escopo de planta.',404);
       const closed=await this.repository.closeParticipantWorkInterval(client,user.tenantId,executionId,user.id,'SHIFT_HANDOFF',null);
       if(!closed) throw error('PARTICIPANT_SESSION_NOT_OPEN','Inicie sua sessão antes de encerrar o turno.',409);
       const handoffId=await this.repository.insertShiftHandoff(client,user.tenantId,execution,user.id,{...input,equipmentCondition:condition,pendingWork:pending,recommendedNextStep:next});
@@ -2061,7 +2139,7 @@ export class OperationsService {
   async listActionParticipants(user: AuthenticatedUser, actionId: string) {
     return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id, readOnly: true }, async (client) => {
       const action = await this.repository.getOperatorActionDetail(client, actionId);
-      if (!action || !(await this.operatorCanSeeAction(client, action, user.id))) throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
+      if (!action || !(await this.operatorCanSeeAction(client, action, user))) throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
       return { participantes: await this.repository.listActionParticipants(client, actionId, user.id) };
     });
   }
@@ -2069,11 +2147,11 @@ export class OperationsService {
   async inviteCollaborator(user: AuthenticatedUser, actionId: string, invitedUserId: string, audit: RequestAuditMetadata) {
     return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async (client) => {
       const action = await this.repository.findAction(client, actionId, true);
-      if (!action || !(await this.repository.userCanAccessActionPlant(client, actionId, user.id))) throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
+      if (!action || !(await this.repository.userCanAccessActionOrTechnicianQueue(client, actionId, user.id))) throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação não encontrada.', 404);
       if (!['READY', 'IN_PROGRESS', 'BLOCKED'].includes(text(action, 'status'))) throw error('OPERATOR_ACTION_NOT_INVITABLE', 'Não é possível convidar participantes para uma OS encerrada.', 409);
       const primary = await this.repository.findPrimaryParticipant(client, actionId);
       if (primary?.user_id !== user.id) throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode convidar colaboradores.', 403);
-      if (!(await this.repository.activeTechnicianExists(client, invitedUserId, actionId))) throw error('COLLABORATOR_NOT_ELIGIBLE', 'Técnico não elegível para esta planta.', 422);
+      if (!(await this.repository.canJoinTenantTechnicianQueue(client, invitedUserId))) throw error('COLLABORATOR_NOT_ELIGIBLE', 'Técnico não elegível para esta empresa.', 422);
       if (invitedUserId === user.id || await this.repository.findActionParticipant(client, actionId, invitedUserId)) throw error('COLLABORATOR_ALREADY_PARTICIPATING', 'Técnico já possui participação ativa ou convite.', 409);
       const participantId = await this.repository.createCollaboratorInvite(client, user.tenantId, actionId, invitedUserId, user.id);
       await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'EXECUTION_COLLABORATOR_INVITED', 'WORK_ORDER_ACTION', actionId, { participant_id: participantId, invited_user_id: invitedUserId });
@@ -2086,7 +2164,7 @@ export class OperationsService {
       const action = await this.repository.findAction(client, actionId, true);
       const invite = await this.repository.findParticipantById(client, actionId, participantId, user.id);
       if (!action || invite?.invitation_status !== 'INVITED') throw error('COLLABORATOR_INVITE_NOT_FOUND', 'Convite não encontrado.', 404);
-      if (!(await this.repository.userCanAccessActionPlant(client, actionId, user.id))) throw error('COLLABORATOR_NOT_ELIGIBLE', 'Convite fora do seu escopo de planta.', 403);
+      if (!(await this.repository.userCanAccessActionOrTechnicianQueue(client, actionId, user.id))) throw error('COLLABORATOR_NOT_ELIGIBLE', 'Convite fora do seu escopo de planta.', 403);
       await this.repository.respondToCollaboratorInvite(client, participantId, user.id, decision === 'ACCEPT');
       await this.repository.writeAudit(client, user.tenantId, user.id, audit, decision === 'ACCEPT' ? 'EXECUTION_COLLABORATOR_ACCEPTED' : 'EXECUTION_COLLABORATOR_DECLINED', 'WORK_ORDER_ACTION', actionId, { participant_id: participantId });
       return { participant_id: participantId, invitation_status: decision === 'ACCEPT' ? 'ACCEPTED' : 'DECLINED' };
@@ -2128,7 +2206,7 @@ export class OperationsService {
       const actionId = text(execution, 'work_order_action_id');
       const participant = await this.repository.findActionParticipant(client, actionId, user.id);
       if (!participant || !['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status'))) throw error('EXECUTION_PARTICIPANT_REQUIRED', 'Somente participante aceito pode registrar tempo.', 403);
-      if (!(await this.repository.userCanAccessActionPlant(client, actionId, user.id))) throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
+      if (!(await this.repository.userCanAccessActionOrTechnicianQueue(client, actionId, user.id))) throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
       return action(client, execution);
     });
   }
@@ -2149,7 +2227,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const execution = await this.ownedExecution(client, executionId, user.id);
+        const execution = await this.ownedExecution(client, executionId, user);
         if (text(execution, 'status') !== 'IN_PROGRESS')
           throw error(
             'EXECUTION_NOT_IN_PROGRESS',
@@ -2207,7 +2285,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const execution = await this.ownedExecution(client, executionId, user.id);
+        const execution = await this.ownedExecution(client, executionId, user);
         if (text(execution, 'status') !== 'IN_PROGRESS')
           throw error(
             'EXECUTION_NOT_IN_PROGRESS',
@@ -2276,7 +2354,7 @@ export class OperationsService {
       const detail = await this.database.withTransaction(
         { tenantId: user.tenantId, userId: user.id },
         async (client) => {
-          const execution = await this.ownedExecution(client, executionId, user.id);
+          const execution = await this.ownedExecution(client, executionId, user);
           if (text(execution, 'status') !== 'IN_PROGRESS') {
             throw error(
               'EXECUTION_NOT_IN_PROGRESS',
@@ -2329,7 +2407,7 @@ export class OperationsService {
       async (client) => {
         const found = await this.repository.findEvidenceStorageObject(client, objectId);
         if (!found) throw error('EVIDENCE_FILE_NOT_FOUND', 'Evidência não encontrada.', 404);
-        if (!(await this.repository.userCanAccessActionPlant(client,text(found,'action_id'),user.id))) throw error('EVIDENCE_FILE_NOT_FOUND','Evidência não encontrada.',404);
+        if (!(await this.repository.userCanAccessActionOrTechnicianQueue(client,text(found,'action_id'),user.id))) throw error('EVIDENCE_FILE_NOT_FOUND','Evidência não encontrada.',404);
         return found;
       },
     );
@@ -2365,7 +2443,7 @@ export class OperationsService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
-        const execution = await this.ownedExecution(client, executionId, user.id);
+        const execution = await this.ownedExecution(client, executionId, user);
         const primary = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
         if (primary?.participant_role !== 'PRIMARY') throw error('EXECUTION_PRIMARY_REQUIRED', 'Somente o técnico principal pode concluir a OS.', 403);
         if (text(execution, 'status') !== 'IN_PROGRESS')
@@ -2612,52 +2690,63 @@ export class OperationsService {
   private async ownedExecution(
     client: PoolClient,
     executionId: string,
-    userId: string,
+    user: AuthenticatedUser,
   ): Promise<OperationsRow> {
     const execution = await this.repository.findExecution(client, executionId, true);
     if (!execution) throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
-    const participant = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), userId);
-    if (execution.operator_id !== userId && (!participant || !['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status'))))
+    const participant = await this.repository.findActionParticipant(client, text(execution, 'work_order_action_id'), user.id);
+    if (execution.operator_id !== user.id && (!participant || !['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status'))))
       throw error(
         'EXECUTION_OWNERSHIP_REQUIRED',
         'Somente um participante aceito pode alterar esta execução.',
         403,
       );
-    if (!(await this.repository.userCanAccessActionPlant(client, text(execution, 'work_order_action_id'), userId))) {
+    if (!(await this.canAccessOperationalAction(client, text(execution, 'work_order_action_id'), user))) {
       throw error('EXECUTION_NOT_FOUND', 'Execução não encontrada.', 404);
     }
     return execution;
   }
 
-  private async operatorCanSeeAction(client: PoolClient, action: OperationsRow, userId: string): Promise<boolean> {
+  private async operatorCanSeeAction(client: PoolClient, action: OperationsRow, user: AuthenticatedUser): Promise<boolean> {
     const status = typeof action.status === 'string' ? action.status : '';
-    if (!(await this.repository.userCanAccessActionPlant(client, text(action, 'id'), userId))) return false;
-    const participant = await this.repository.findActionParticipant(client, text(action, 'id'), userId);
+    if (!(await this.canAccessOperationalAction(client, text(action, 'id'), user))) return false;
+    const participant = await this.repository.findActionParticipant(client, text(action, 'id'), user.id);
     if (status === 'READY' && action.responsavel_id === null && !participant) return true;
     if (status === 'COMPLETED') {
-      return action.responsavel_id === userId ||
+      return action.responsavel_id === user.id ||
         Boolean(participant && ['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status')));
     }
     if (!['READY', 'IN_PROGRESS', 'BLOCKED'].includes(status)) return false;
     if (participant && ['PRIMARY', 'ACCEPTED', 'INVITED'].includes(text(participant, 'invitation_status'))) return true;
     const responsibleId = typeof action.responsavel_id === 'string' ? action.responsavel_id : null;
-    return responsibleId === userId;
+    return responsibleId === user.id;
+  }
+
+  private async canAccessOperationalAction(
+    client: PoolClient,
+    actionId: string,
+    user: AuthenticatedUser,
+  ): Promise<boolean> {
+    if (user.roles.includes('TECNICO')) {
+      return this.repository.canJoinTenantTechnicianQueue(client, user.id);
+    }
+    return this.repository.userCanAccessActionPlant(client, actionId, user.id);
   }
 
   private async ownedActionExecution(
     client: PoolClient,
     actionId: string,
-    userId: string,
+    user: AuthenticatedUser,
     lock: boolean,
   ): Promise<{ readonly action: OperationsRow; readonly execution: OperationsRow }> {
     const action = await this.repository.findAction(client, actionId, lock);
     if (!action) throw error('OPERATOR_ACTION_NOT_FOUND', 'Ação operacional não encontrada.', 404);
     const execution = await this.repository.findExecutionByAction(client, actionId, lock);
-    const participant = execution ? await this.repository.findActionParticipant(client, actionId, userId) : null;
-    if (!execution || (execution.operator_id !== userId && (!participant || !['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status'))))) {
+    const participant = execution ? await this.repository.findActionParticipant(client, actionId, user.id) : null;
+    if (!execution || (execution.operator_id !== user.id && (!participant || !['PRIMARY', 'ACCEPTED'].includes(text(participant, 'invitation_status'))))) {
       throw error('EXECUTION_NOT_FOUND', 'Execução do Operador não encontrada.', 404);
     }
-    if (!(await this.repository.userCanAccessActionPlant(client, actionId, userId))) {
+    if (!(await this.canAccessOperationalAction(client, actionId, user))) {
       throw error('EXECUTION_NOT_FOUND', 'Execução do Operador não encontrada.', 404);
     }
     return { action, execution };

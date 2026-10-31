@@ -21,7 +21,9 @@ export interface AdminUser {
   criado_em?: string
   atualizado_em?: string
   area_id?: string
+  area_nome?: string
   cargo_id?: string
+  cargo_nome?: string
   especialidades_json?: string
   escopo_ids_json?: string
 }

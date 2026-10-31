@@ -125,4 +125,11 @@ export class ImportController {
         audit(request),
       ),
     );
+
+  dismiss = async (request: FastifyRequest<{ Params: BatchParams }>) =>
+    successEnvelope(
+      request,
+      'admin.imports.dismiss',
+      await this.service.dismiss(user(request), request.params.batchId, audit(request)),
+    );
 }

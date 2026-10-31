@@ -6,6 +6,17 @@ export function allowsPortal(
   capabilities?: readonly string[],
 ): boolean {
   if (mode === 'SHARED') return true
+  const legacy = profile.trim().toUpperCase()
+
+  // Técnicos usam o portal Gestor para acessar a Central do Técnico.
+  if (
+    mode === 'GESTOR' &&
+    legacy === 'TECNICO' &&
+    capabilities?.includes('maintenance.executions.perform')
+  ) {
+    return true
+  }
+
   if (capabilities !== undefined) {
     return mode === 'ADMIN'
       ? capabilities.includes('admin.identity.read')
@@ -13,6 +24,5 @@ export function allowsPortal(
         capabilities.includes('maintenance.work-orders.review') ||
         capabilities.includes('analytics.technical.read')
   }
-  const legacy = profile.trim().toUpperCase()
-  return mode === 'ADMIN' ? legacy === 'ADMIN' : ['GESTOR', 'GESTOR_TECNICO'].includes(legacy)
+  return mode === 'ADMIN' ? legacy === 'ADMIN' : ['GESTOR', 'GESTOR_TECNICO', 'TECNICO'].includes(legacy)
 }

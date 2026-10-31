@@ -24,6 +24,7 @@ export interface AdminImportCatalog {
 export interface AdminImportError {
   codigo: string
   mensagem: string
+  campo?: string
 }
 
 export interface AdminImportRecord {
@@ -34,6 +35,7 @@ export interface AdminImportRecord {
   operacao: 'CRIAR' | 'ATUALIZAR' | string
   status: 'VALIDADO' | 'INVALIDO' | 'APLICADO' | 'REVERTIDO' | string
   normalizado: Record<string, unknown>
+  origem?: Record<string, unknown>
   erros: AdminImportError[]
 }
 
@@ -64,6 +66,14 @@ export interface AdminImportBatch {
   rollback_por: string
   rollback_em: string
   registros: AdminImportRecord[]
+}
+
+export interface AdminImportRetryRequest {
+  batchId: string
+  type: string
+  fileName: string
+  sheetName?: string
+  intent: 'correct' | 'update'
 }
 
 export type AdminImportRow = Record<string, string | number | boolean | null> & {

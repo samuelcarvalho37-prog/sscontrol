@@ -14,6 +14,8 @@ import {
 } from "./notificationPolicy";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { usesNodeApi } from "../services/api/config";
+import { getAdminMonitoring } from "../services/api/governance";
+import type { AdminMonitoringState } from "../types/governance";
 import {
   AlertIcon,
   BellIcon,
@@ -293,6 +295,8 @@ export function NotificationCenter({
   const [markingAll, setMarkingAll] = useState(false);
   const [openingId, setOpeningId] = useState("");
   const [error, setError] = useState("");
+  const [systemState, setSystemState] = useState<AdminMonitoringState | null>(null);
+  const [systemError, setSystemError] = useState("");
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false) => {
@@ -338,6 +342,39 @@ export function NotificationCenter({
     void load(controller.signal);
     return () => controller.abort();
   }, [load, open]);
+
+  useEffect(() => {
+    if (!open || audience !== "admin") return;
+    const controller = new AbortController();
+    void getAdminMonitoring(controller.signal)
+      .then((state) => {
+        setSystemState(state);
+        setSystemError("");
+      })
+      .catch((cause) => {
+        if (controller.signal.aborted) return;
+        if (isGestorAuthenticationError(cause)) {
+          onSessionExpired();
+          return;
+        }
+        setSystemError(cause instanceof Error ? cause.message : "Monitoramento indisponível.");
+      });
+    return () => controller.abort();
+  }, [audience, onSessionExpired, open]);
+
+  useAutoRefresh(async () => {
+    if (!open || audience !== "admin") return;
+    try {
+      setSystemState(await getAdminMonitoring());
+      setSystemError("");
+    } catch (cause) {
+      if (isGestorAuthenticationError(cause)) {
+        onSessionExpired();
+        return;
+      }
+      setSystemError(cause instanceof Error ? cause.message : "Monitoramento indisponível.");
+    }
+  }, { enabled: open && audience === "admin", intervalMs: 20_000 });
 
   useAutoRefresh(() => load(undefined, true), {
     enabled: open,
@@ -482,7 +519,7 @@ export function NotificationCenter({
 
   const audienceDescription =
     audience === "admin"
-      ? "Análises, decisões e eventos que exigem governança."
+      ? "Diagnóstico do sistema, alterações registradas e notificações operacionais."
       : "Prioridades técnicas e ocorrências do seu escopo.";
 
   return (
@@ -500,8 +537,8 @@ export function NotificationCenter({
       >
         <header className="manager-notification-header">
           <div>
-            <span className="eyebrow">ALERTAS E DECISÕES</span>
-            <h2 id="manager-notification-title">Central operacional</h2>
+            <span className="eyebrow">{audience === "admin" ? "CENTRAL DE ALERTAS" : "ALERTAS E DECISÕES"}</span>
+            <h2 id="manager-notification-title">{audience === "admin" ? "Alertas e atividade do sistema" : "Central operacional"}</h2>
             <p>{audienceDescription}</p>
           </div>
           <div>
@@ -556,6 +593,30 @@ export function NotificationCenter({
             <strong>{profileNotifications.length}</strong>
           </button>
         </section>
+
+        {audience === "admin" ? (
+          <section className="manager-system-alerts" aria-label="Integridade e última alteração registrada">
+            <header><strong>Integridade do sistema</strong><span className={systemState && !systemState.diagnostico.total_issues ? "is-ok" : "is-warning"}>{systemError ? "Indisponível" : systemState ? systemState.diagnostico.total_issues ? `${systemState.diagnostico.total_issues} ocorrência(s)` : "Operacional" : "Verificando"}</span></header>
+            {systemError ? <p role="status">{systemError}</p> : null}
+            {systemState?.diagnostico.issues.slice(0, 4).map((issue, index) => (
+              <article className="is-issue" key={`${String(issue.code ?? "issue")}-${String(issue.entity_id ?? index)}`}>
+                <strong>Ocorrência de integridade</strong>
+                <span>{String(issue.message ?? issue.entity ?? "Registro com inconsistência")}</span>
+                <small>{String(issue.entity ?? "")}</small>
+              </article>
+            ))}
+            {systemState?.auditoria.ultimo_evento ? (
+              <article>
+                <strong>Última alteração registrada</strong>
+                <span>{systemState.auditoria.ultimo_evento.acao.replaceAll("_", " ")} · {systemState.auditoria.ultimo_evento.entidade}</span>
+                <small>{systemState.auditoria.ultimo_evento.perfil} · {formatDate(systemState.auditoria.ultimo_evento.criado_em)}</small>
+              </article>
+            ) : null}
+            <p className="manager-system-alerts__scope">A trilha mostra alterações gravadas pela auditoria; não representa todos os acessos ou mudanças externas.</p>
+          </section>
+        ) : null}
+
+        {audience === "admin" ? <h3 className="manager-notification-feed-title">Notificações operacionais</h3> : null}
 
         <section
           className="manager-notification-tools"

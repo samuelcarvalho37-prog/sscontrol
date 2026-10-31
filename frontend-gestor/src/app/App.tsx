@@ -9,6 +9,7 @@ import {
   type GestorSection,
 } from '../components/AppNavigation'
 import { AdminWorkspace } from '../components/AdminWorkspace'
+import { PlatformConsole } from '../components/PlatformConsole'
 import { BellIcon } from '../components/Icons'
 import { NotificationCenter } from '../components/NotificationCenter'
 import { notificationNavigation, validationDemandFromSearch } from '../components/notificationPolicy'
@@ -49,7 +50,7 @@ import type {
 } from '../types/gestor'
 
 const PROFILE_TAB_TITLES: Record<string, string> = {
-  ADMIN: 'Administração',
+  ADMIN: 'TI',
   SISTEMA: 'Administração',
   GESTOR: 'PCM',
   PCM: 'PCM',
@@ -98,7 +99,7 @@ function profileTabTitle(profile?: string) {
   return PROFILE_TAB_TITLES[normalizedProfile] ?? 'Gestão Industrial'
 }
 
-export function App() {
+function TenantApp() {
   const [session, setSession] = useState<GestorSession | null>(readGestorSession)
   const [maintenanceEntry, setMaintenanceEntry] = useState(
     () => new URLSearchParams(window.location.search).get('maintenance') === '1',
@@ -116,6 +117,7 @@ export function App() {
   const [adminModule, setAdminModule] = useState<AdminModule>('overview')
   const [validationCount, setValidationCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(0)
+  const [technicianActionFocusId, setTechnicianActionFocusId] = useState('')
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
@@ -276,6 +278,12 @@ export function App() {
       throw new Error('Esta notificação não possui um registro de destino válido.')
     }
     const destination = notificationNavigation(notification, normalizedProfile)
+    if (destination?.kind === 'work-order-action') {
+      setTechnicianActionFocusId(destination.id)
+      setSection('home')
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      return
+    }
     if (destination?.kind === 'technical-demand') {
       preserveValidationDemandInUrl(destination.id)
       handleOpenDecision('demands', { kind: 'demand', id: destination.id })
@@ -407,7 +415,13 @@ export function App() {
             <span>
               {technicalContext?.pode_validar
                 ? `Validação técnica · ${technicalContext.identidade.area_nome || 'Qualidade e segurança'}`
-                : `${technicalContext?.identidade.cargo_nome || 'Acompanhamento técnico'} · ${technicalContext?.identidade.area_nome || 'Área técnica'}`}
+                : (() => {
+                    const role = technicalContext?.identidade.cargo_nome || 'Acompanhamento técnico'
+                    const area = technicalContext?.identidade.area_nome || 'Área técnica'
+                    return role.toLocaleLowerCase('pt-BR').includes(area.toLocaleLowerCase('pt-BR'))
+                      ? role
+                      : `${role} · ${area}`
+                  })()}
             </span>
           </div>
         </div>
@@ -420,7 +434,7 @@ export function App() {
 
           <div className="user-badge">
             <strong>{session.user.nome}</strong>
-            <span>{session.user.perfil}</span>
+            {!['PCM', 'GESTOR'].includes(normalizedProfile) ? <span>{session.user.perfil}</span> : null}
           </div>
 
           <button
@@ -487,7 +501,7 @@ export function App() {
             </section>
           ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
-          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
+          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} focusActionId={technicianActionFocusId} onActionFocusHandled={() => setTechnicianActionFocusId('')} /> : null}
           {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
@@ -500,10 +514,10 @@ export function App() {
           ) : null}
           {section === 'validations' && canReadAnalytics ? (
             <>
-            {usesNodeApi() && <div className="pcm-view-switch">
-              <button type="button" onClick={() => setDetailedAnalytics(false)} aria-pressed={!detailedAnalytics}>Dashboard do PCM</button>
-              <button type="button" onClick={() => setDetailedAnalytics(true)} aria-pressed={detailedAnalytics}>Histórico e análise detalhada</button>
-            </div>}
+            {usesNodeApi() && canViewPcmDashboard ? <nav className="pcm-view-switch" aria-label="Área do PCM">
+              <button type="button" aria-current={!detailedAnalytics ? 'page' : undefined} aria-pressed={!detailedAnalytics} onClick={() => setDetailedAnalytics(false)}>Painel</button>
+              <button type="button" aria-current={detailedAnalytics ? 'page' : undefined} aria-pressed={detailedAnalytics} onClick={() => setDetailedAnalytics(true)}>Histórico e análise</button>
+            </nav> : null}
             {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
@@ -567,4 +581,10 @@ export function App() {
       </div>
     </div>
   )
+}
+
+export function App() {
+  const isPlatformRoute = window.location.pathname === '/plataforma'
+    || window.location.pathname.startsWith('/plataforma/')
+  return isPlatformRoute ? <PlatformConsole /> : <TenantApp />
 }

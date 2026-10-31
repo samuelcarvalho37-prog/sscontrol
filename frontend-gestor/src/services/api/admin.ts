@@ -10,6 +10,7 @@ import type {
   PlatformMotorPlan,
   AdminPasswordResetResult,
   AdminPermissionMatrix,
+  AdminPermissionProfile,
   AdminPermissionSaveResult,
   AdminSessionRevokeResult,
   AdminUser,
@@ -89,6 +90,7 @@ async function readAdminData<T>(
 async function writeAdminData<T>(
   action: string,
   payload: Record<string, unknown>,
+  timeoutMs: number = API_TIMEOUT_MS.CRITICAL_WRITE,
 ): Promise<T> {
   const response = await callApi<T>(
     action,
@@ -98,7 +100,7 @@ async function writeAdminData<T>(
       ...payload,
     },
     undefined,
-    { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE },
+    { timeoutMs },
   )
   if (!response.data) {
     throw new ApiRequestError(
@@ -108,6 +110,46 @@ async function writeAdminData<T>(
     )
   }
   return response.data
+}
+
+export interface AdminBulkUserImportRow {
+  rowNumber: number
+  name: string
+  email: string
+  registration: string
+  profile: string
+  status: 'ATIVO' | 'INATIVO'
+  temporaryPassword: string
+  areaCode: string
+  areaName: string
+  roleCode: string
+  roleName: string
+}
+
+export function importAdminUsers(input: {
+  fileName: string
+  sheetName: string
+  headers: string[]
+  rows: AdminBulkUserImportRow[]
+}): Promise<{ imported: boolean; lote_id: string; total: number; areas_criadas: number; cargos_criados: number }> {
+  return writeAdminData('admin.usuarios.importar', {
+    arquivo_nome: input.fileName,
+    aba_nome: input.sheetName,
+    cabecalhos: input.headers,
+    usuarios: input.rows.map((row) => ({
+      linha_numero: row.rowNumber,
+      nome: row.name,
+      email: row.email,
+      matricula: row.registration,
+      perfil: row.profile,
+      status: row.status,
+      senha_temporaria: row.temporaryPassword,
+      area_codigo: row.areaCode,
+      area_nome: row.areaName,
+      cargo_codigo: row.roleCode,
+      cargo_nome: row.roleName,
+    })),
+  }, API_TIMEOUT_MS.BULK_IMPORT)
 }
 
 export async function listAdminUsers(
@@ -233,6 +275,17 @@ export function saveAdminPermissionProfile(
     'admin.permissoes.salvar',
     { perfil: profile, permissoes: permissions },
   )
+}
+
+export function createAdminPermissionProfile(name: string): Promise<{
+  saved: boolean
+  perfil: AdminPermissionProfile
+}> {
+  return writeAdminData('admin.permissoes.perfil.criar', { nome: name })
+}
+
+export function provisionDefaultAdminPermissionProfiles(): Promise<AdminPermissionMatrix> {
+  return writeAdminData('admin.permissoes.perfis.padrao', {})
 }
 
 export function getAdminCompanyProfile(

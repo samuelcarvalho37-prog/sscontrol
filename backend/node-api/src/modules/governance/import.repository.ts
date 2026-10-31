@@ -35,7 +35,8 @@ function table(entity: ImportEntity): string {
 export class ImportRepository {
   async listBatches(client: PoolClient, limit: number): Promise<readonly ImportRow[]> {
     const result = await client.query<ImportRow>(
-      `SELECT * FROM governance.import_batches ORDER BY created_at DESC, id LIMIT $1`,
+      `SELECT * FROM governance.import_batches WHERE dismissed_at IS NULL
+       ORDER BY created_at DESC, id LIMIT $1`,
       [limit],
     );
     return result.rows;
@@ -47,6 +48,32 @@ export class ImportRepository {
       [batchId],
     );
     return result.rows[0] ?? null;
+  }
+
+  async findConfirmedFingerprint(
+    client: PoolClient,
+    importType: string,
+    fingerprint: string,
+    excludeBatchId?: string,
+  ): Promise<ImportRow | null> {
+    const result = await client.query<ImportRow>(
+      `SELECT id,source_file_name,created_at FROM governance.import_batches
+       WHERE import_type=$1 AND content_fingerprint_sha256=$2 AND status='CONFIRMED'
+         AND ($3::uuid IS NULL OR id<>$3)
+       ORDER BY confirmed_at DESC LIMIT 1`,
+      [importType, fingerprint, excludeBatchId ?? null],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async dismissBatch(client: PoolClient, batchId: string, userId: string): Promise<void> {
+    const result = await client.query(
+      `UPDATE governance.import_batches
+       SET dismissed_at=clock_timestamp(),dismissed_by=$2,updated_at=clock_timestamp()
+       WHERE id=$1 AND status IN ('CONFIRMED','REJECTED','FAILED','ROLLED_BACK') AND dismissed_at IS NULL`,
+      [batchId, userId],
+    );
+    if (result.rowCount !== 1) throw new Error('Lote não pôde ser removido do histórico.');
   }
 
   async listRecords(client: PoolClient, batchId: string): Promise<readonly ImportRow[]> {
@@ -66,6 +93,7 @@ export class ImportRepository {
     input: ValidateImportInput,
     entity: ImportEntity,
     validationHash: string,
+    contentFingerprint: string,
     ignoredHeaders: readonly string[],
     rows: readonly StagedImportRow[],
   ): Promise<void> {
@@ -75,8 +103,8 @@ export class ImportRepository {
       `INSERT INTO governance.import_batches (
          id,tenant_id,import_type,entity_type,source_file_name,source_sheet_name,status,
          total_rows,valid_rows,invalid_rows,validation_hash_sha256,headers,ignored_headers,
-         result,created_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         result,created_by,content_fingerprint_sha256
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
         batchId,
         tenantId,
@@ -93,6 +121,7 @@ export class ImportRepository {
         JSON.stringify(ignoredHeaders),
         JSON.stringify({ validated_at: new Date().toISOString() }),
         userId,
+        contentFingerprint,
       ],
     );
     for (const row of rows) {

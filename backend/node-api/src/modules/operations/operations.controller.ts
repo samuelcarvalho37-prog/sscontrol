@@ -140,6 +140,7 @@ interface ShiftHandoffBody {
   readonly ha_trabalho_pendente: boolean;
 }
 interface InviteCollaboratorBody { readonly usuario_id: string; }
+interface TransferActionBody { readonly usuario_id: string; readonly justificativa: string; }
 interface ConsumeMaterialBody {
   readonly material_id: string;
   readonly quantidade: number;
@@ -617,6 +618,19 @@ export class OperationsController {
       await this.service.assumeAction(
         user(request),
         id(request.params, 'actionId'),
+        audit(request),
+      ),
+    );
+
+  transferOperatorAction = async (request: FastifyRequest<{ Params: Params; Body: TransferActionBody }>) =>
+    successEnvelope(
+      request,
+      'maintenance.operator-actions.transfer',
+      await this.service.transferPausedAction(
+        user(request),
+        id(request.params, 'actionId'),
+        request.body.usuario_id,
+        request.body.justificativa,
         audit(request),
       ),
     );

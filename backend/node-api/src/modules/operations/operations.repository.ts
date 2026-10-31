@@ -152,6 +152,19 @@ export class OperationsRepository {
     return result.rows[0]?.exists ?? false;
   }
 
+  async canJoinTenantTechnicianQueue(client: PoolClient, userId: string): Promise<boolean> {
+    return this.activeTechnicianExists(client, userId);
+  }
+
+  async userCanAccessActionOrTechnicianQueue(
+    client: PoolClient,
+    actionId: string,
+    userId: string,
+  ): Promise<boolean> {
+    return (await this.activeTechnicianExists(client, userId)) ||
+      this.userCanAccessActionPlant(client, actionId, userId);
+  }
+
   async userCanAccessActionPlant(client: PoolClient, actionId: string, userId: string): Promise<boolean> {
     const result = await client.query<{ allowed: boolean }>(
       `SELECT EXISTS (
@@ -1578,7 +1591,7 @@ export class OperationsRepository {
           maintenance_stop_mode=EXCLUDED.maintenance_stop_mode,
           technical_analysis=EXCLUDED.technical_analysis,
           maintenance_plan_version_id=EXCLUDED.maintenance_plan_version_id,
-          started_at=NULL, completed_at=NULL, updated_at=clock_timestamp()
+          generated_at=clock_timestamp(), started_at=NULL, completed_at=NULL, updated_at=clock_timestamp()
         RETURNING id
       `,
       [
@@ -1598,11 +1611,153 @@ export class OperationsRepository {
     return required(result.rows, 'A ação liberada não foi retornada.').id;
   }
 
+  async notifyTechniciansOfReleasedAction(client: PoolClient, tenantId: string, actionId: string): Promise<number> {
+    const result = await client.query<{ recipients: number }>(
+      `WITH action_context AS (
+         SELECT action.id, action.title, action.priority, work_order.operational_code,
+                action.generated_at, work_order.id AS work_order_id
+         FROM maintenance.work_order_actions action
+         JOIN maintenance.work_orders work_order
+           ON work_order.tenant_id=action.tenant_id AND work_order.id=action.work_order_id
+         WHERE action.tenant_id=$1 AND action.id=$2 AND action.status='READY'
+           AND action.responsible_id IS NULL
+       ), notification AS (
+         INSERT INTO workflow.notifications
+           (tenant_id,notification_type,title,message,entity_type,entity_id,priority,
+            action_route,action_payload,audience,deduplication_key)
+         SELECT $1,'WORK_ORDER_AVAILABLE','Nova ordem disponível na fila',
+                'A OS ' || COALESCE(context.operational_code, context.id::text) ||
+                ' está liberada para ser assumida pela equipe técnica.',
+                'WORK_ORDER_ACTION',context.id,context.priority,'/technician',
+                jsonb_build_object('entityType','WORK_ORDER_ACTION','entityId',context.id::text,
+                                   'workOrderId',context.work_order_id::text),
+                jsonb_build_object('roleCodes',jsonb_build_array('TECNICO')),
+                'work-order-available:' || context.id::text || ':' ||
+                  to_char(context.generated_at AT TIME ZONE 'UTC','YYYYMMDDHH24MISSMS')
+         FROM action_context context
+         ON CONFLICT (tenant_id,deduplication_key)
+           WHERE deduplication_key IS NOT NULL AND status='ACTIVE'
+         DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,priority=EXCLUDED.priority,
+                       action_route=EXCLUDED.action_route,action_payload=EXCLUDED.action_payload,
+                       audience=EXCLUDED.audience
+         RETURNING id
+       ), recipients AS (
+         INSERT INTO workflow.notification_recipients
+           (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+         SELECT DISTINCT $1,notification.id,user_account.id,'DELIVERED',clock_timestamp(),clock_timestamp(),1
+         FROM notification
+         JOIN iam.users user_account ON user_account.tenant_id=$1
+           AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
+         JOIN iam.user_roles user_role ON user_role.tenant_id=user_account.tenant_id
+           AND user_role.user_id=user_account.id
+           AND user_role.valid_from<=clock_timestamp()
+           AND (user_role.valid_until IS NULL OR user_role.valid_until>clock_timestamp())
+         JOIN iam.roles role ON role.tenant_id=user_role.tenant_id AND role.id=user_role.role_id
+           AND role.code='TECNICO' AND role.status='ACTIVE' AND role.deleted_at IS NULL
+         JOIN iam.user_technical_assignments assignment
+           ON assignment.tenant_id=user_account.tenant_id AND assignment.user_id=user_account.id
+           AND assignment.status='ACTIVE' AND assignment.valid_from<=clock_timestamp()
+           AND (assignment.valid_until IS NULL OR assignment.valid_until>clock_timestamp())
+         JOIN iam.technical_areas area ON area.tenant_id=assignment.tenant_id
+           AND area.id=assignment.technical_area_id AND area.status='ACTIVE' AND area.deleted_at IS NULL
+         ON CONFLICT (tenant_id,notification_id,user_id) DO UPDATE
+           SET delivery_status='DELIVERED',
+               delivered_at=COALESCE(workflow.notification_recipients.delivered_at,clock_timestamp()),
+               last_notified_at=clock_timestamp(),
+               delivery_attempts=workflow.notification_recipients.delivery_attempts+1,
+               read_at=NULL,dismissed_at=NULL
+         RETURNING user_id
+       )
+       SELECT count(*)::integer AS recipients FROM recipients`,
+      [tenantId, actionId],
+    );
+    return result.rows[0]?.recipients ?? 0;
+  }
+
+  async transferPausedAction(
+    client: PoolClient,
+    tenantId: string,
+    actionId: string,
+    executionId: string,
+    currentTechnicianId: string,
+    nextTechnicianId: string,
+    reason: string,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.work_order_action_participants
+       SET invitation_status='REMOVED',left_at=clock_timestamp(),updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND action_id=$2 AND user_id=$3
+         AND participant_role='PRIMARY' AND invitation_status='PRIMARY'`,
+      [tenantId, actionId, currentTechnicianId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_order_action_participants
+       SET invitation_status='REMOVED',left_at=clock_timestamp(),updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND action_id=$2 AND user_id=$3
+         AND invitation_status IN ('INVITED','ACCEPTED')`,
+      [tenantId, actionId, nextTechnicianId],
+    );
+    await client.query(
+      `UPDATE maintenance.executions
+       SET operator_id=$3,observation=concat_ws(E'\\n',observation,'Transferida para outro técnico: ' || $4),
+           updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND id=$2 AND status='PAUSED' AND work_order_action_id=$5`,
+      [tenantId, executionId, nextTechnicianId, reason, actionId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_order_actions
+       SET responsible_id=$3,updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND id=$2 AND status='BLOCKED'`,
+      [tenantId, actionId, nextTechnicianId],
+    );
+    await client.query(
+      `UPDATE maintenance.work_orders work_order SET responsible_id=$3,updated_at=clock_timestamp()
+       FROM maintenance.work_order_actions action
+       WHERE action.tenant_id=$1 AND action.id=$2 AND work_order.tenant_id=action.tenant_id
+         AND work_order.id=action.work_order_id`,
+      [tenantId, actionId, nextTechnicianId],
+    );
+    await client.query(
+      `INSERT INTO maintenance.work_order_action_participants
+       (tenant_id,action_id,execution_id,user_id,participant_role,invitation_status,joined_at)
+       VALUES ($1,$2,$3,$4,'PRIMARY','PRIMARY',clock_timestamp())`,
+      [tenantId, actionId, executionId, nextTechnicianId],
+    );
+    const notification = await client.query<{ id: string }>(
+      `INSERT INTO workflow.notifications
+       (tenant_id,notification_type,title,message,entity_type,entity_id,priority,
+        action_route,action_payload,audience,deduplication_key)
+       SELECT $1,'WORK_ORDER_TRANSFERRED','Ordem de serviço transferida',
+              'Uma OS pausada foi transferida para você. Revise o histórico antes de retomar.',
+              'WORK_ORDER_ACTION',$2,action.priority,'/technician',
+              jsonb_build_object('entityType','WORK_ORDER_ACTION','entityId',action.id::text),
+              jsonb_build_object('userIds',jsonb_build_array($3::text)),
+              'work-order-transfer:' || action.id::text || ':' || $4::text
+       FROM maintenance.work_order_actions action
+       WHERE action.tenant_id=$1::uuid AND action.id=$2::uuid
+       RETURNING id`,
+      [tenantId, actionId, nextTechnicianId, randomUUID()],
+    );
+    const notificationId = notification.rows[0]?.id;
+    if (!notificationId) throw new Error('A notificação de transferência não foi persistida.');
+    await client.query(
+      `INSERT INTO workflow.notification_recipients
+       (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+       VALUES ($1,$2,$3,'DELIVERED',clock_timestamp(),clock_timestamp(),1)
+       ON CONFLICT (tenant_id,notification_id,user_id) DO UPDATE
+         SET delivery_status='DELIVERED',delivered_at=clock_timestamp(),last_notified_at=clock_timestamp(),
+             delivery_attempts=workflow.notification_recipients.delivery_attempts+1,
+             read_at=NULL,dismissed_at=NULL`,
+      [tenantId, notificationId, nextTechnicianId],
+    );
+  }
+
   async listOperatorActions(
     client: PoolClient,
     userId: string,
     limit: number,
     history = false,
+    allowTenantTechnicianQueue = false,
   ): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `
@@ -1662,7 +1817,7 @@ export class OperationsRepository {
             )
           )
         )
-          AND EXISTS (
+          AND ($4::boolean OR EXISTS (
             SELECT 1 FROM iam.user_scope_assignments scope
             WHERE scope.tenant_id=action.tenant_id AND scope.user_id=$1 AND scope.status='ACTIVE'
               AND ((scope.scope_type='TENANT' AND scope.plant_id IS NULL)
@@ -1670,12 +1825,12 @@ export class OperationsRepository {
                 OR (scope.scope_type='SECTOR' AND scope.sector_id=sector.id)
                 OR (scope.scope_type='LINE' AND scope.line_id=line.id)
                 OR (scope.scope_type='ASSET' AND scope.asset_id=asset.id))
-          )
+          ))
         ORDER BY CASE action.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                  CASE WHEN $3::boolean THEN execution.completed_at END DESC NULLS LAST,
                  action.generated_at, action.id LIMIT $2
       `,
-      [userId, limit, history],
+      [userId, limit, history, allowTenantTechnicianQueue],
     );
     return result.rows;
   }

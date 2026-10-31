@@ -31,6 +31,24 @@ interface UserBody {
   readonly especialidades?: string[];
   readonly escopo_ids?: string[];
 }
+interface BulkUserImportBody {
+  readonly arquivo_nome: string;
+  readonly aba_nome: string;
+  readonly cabecalhos: readonly string[];
+  readonly usuarios: readonly {
+    readonly linha_numero: number;
+    readonly nome: string;
+    readonly email: string;
+    readonly matricula: string;
+    readonly perfil: AdminProfile;
+    readonly status: AdminStatus;
+    readonly senha_temporaria: string;
+    readonly area_codigo: string;
+    readonly area_nome: string;
+    readonly cargo_codigo: string;
+    readonly cargo_nome: string;
+  }[];
+}
 interface ResetBody {
   readonly senha_temporaria: string;
 }
@@ -61,6 +79,9 @@ interface RoleBody {
 interface PermissionBody {
   readonly permissoes: Record<string, boolean>;
 }
+interface PermissionProfileBody {
+  readonly nome: string;
+}
 interface CompanyBody {
   readonly nome: string;
   readonly logo_data_url: string;
@@ -71,6 +92,7 @@ interface AuditQuery {
   readonly entidade?: string;
   readonly responsavel_id?: string;
   readonly limite?: number;
+  readonly deslocamento?: number;
 }
 interface ConfigurationBody {
   readonly configuracao: Record<string, string | number | boolean>;
@@ -163,6 +185,33 @@ export class AdminController {
           technicalRoleId: request.body.cargo_id ?? null,
           specialties: request.body.especialidades ?? [],
           scopeIds: request.body.escopo_ids ?? [],
+        },
+        audit(request),
+      ),
+    );
+  importUsers = async (request: FastifyRequest<{ Body: BulkUserImportBody }>) =>
+    successEnvelope(
+      request,
+      'admin.users.import',
+      await this.service.importUsers(
+        user(request),
+        {
+          fileName: request.body.arquivo_nome,
+          sheetName: request.body.aba_nome,
+          headers: request.body.cabecalhos,
+          rows: request.body.usuarios.map((row) => ({
+            rowNumber: row.linha_numero,
+            name: row.nome,
+            email: row.email,
+            employeeNumber: row.matricula,
+            profile: row.perfil,
+            status: row.status,
+            temporaryPassword: row.senha_temporaria,
+            areaCode: row.area_codigo,
+            areaName: row.area_nome,
+            roleCode: row.cargo_codigo,
+            roleName: row.cargo_nome,
+          })),
         },
         audit(request),
       ),
@@ -308,6 +357,12 @@ export class AdminController {
       'admin.permissions.get',
       await this.service.permissionMatrix(user(request)),
     );
+  provisionDefaultPermissionProfiles = async (request: FastifyRequest) =>
+    successEnvelope(
+      request,
+      'admin.permissions.defaults.provision',
+      await this.service.provisionDefaultPermissionProfiles(user(request), audit(request)),
+    );
   savePermissions = async (request: FastifyRequest<{ Params: Params; Body: PermissionBody }>) =>
     successEnvelope(
       request,
@@ -318,6 +373,12 @@ export class AdminController {
         request.body.permissoes,
         audit(request),
       ),
+    );
+  createPermissionProfile = async (request: FastifyRequest<{ Body: PermissionProfileBody }>) =>
+    successEnvelope(
+      request,
+      'admin.permissions.profile.create',
+      await this.service.createPermissionProfile(user(request), request.body.nome, audit(request)),
     );
   company = async (request: FastifyRequest) =>
     successEnvelope(request, 'admin.company.get', await this.service.company(user(request)));
@@ -459,6 +520,7 @@ export class AdminController {
         entityType: request.query.entidade ?? null,
         responsibleId: request.query.responsavel_id ?? null,
         limit: request.query.limite ?? 200,
+        offset: request.query.deslocamento ?? 0,
       }),
     );
   monitoring = async (request: FastifyRequest) =>

@@ -26,6 +26,53 @@ export interface MonitoringSummaryRow extends QueryResultRow {
 }
 
 export class AdminRepository {
+  async ensureDefaultProfiles(client: PoolClient, tenantId: string): Promise<void> {
+    const sharedRead = [
+      'cmms.structure.read', 'cmms.assets.read', 'cmms.parameters.read', 'cmms.materials.read',
+      'maintenance.checklists.read', 'maintenance.plans.read', 'maintenance.work-orders.read',
+      'maintenance.executions.read', 'maintenance.occurrences.read', 'maintenance.stops.read',
+      'maintenance.alerts.read', 'workflow.notifications.read', 'analytics.technical.read',
+    ];
+    const definitions = [
+      { code: 'GESTOR_TECNICO', name: 'Gestor técnico', type: 'MANAGER', capabilities: sharedRead },
+      { code: 'OPERADOR', name: 'Operador', type: 'OPERATOR', capabilities: [...sharedRead, 'maintenance.executions.perform'] },
+      { code: 'PCM', name: 'Planejador PCM', type: 'MANAGER', capabilities: [...sharedRead, 'cmms.structure.manage', 'cmms.assets.manage', 'cmms.parameters.manage', 'cmms.materials.manage', 'cmms.readings.create', 'maintenance.checklists.manage', 'maintenance.checklists.review', 'maintenance.checklists.publish', 'maintenance.plans.manage', 'maintenance.work-orders.manage', 'maintenance.work-orders.review', 'maintenance.work-orders.release', 'maintenance.actions.assign', 'maintenance.stops.manage', 'maintenance.alerts.manage'] },
+      { code: 'TECNICO', name: 'Técnico de manutenção', type: 'OPERATOR', capabilities: ['maintenance.executions.read', 'maintenance.executions.perform', 'workflow.notifications.read'] },
+      { code: 'QUALIDADE', name: 'Técnico de qualidade', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
+      { code: 'SEGURANCA', name: 'Técnico de segurança', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
+      { code: 'PRODUCAO', name: 'Produção', type: 'OPERATOR', capabilities: ['maintenance.occurrences.read', 'maintenance.occurrences.report', 'maintenance.stops.read', 'workflow.notifications.read'] },
+    ] as const;
+
+    for (const definition of definitions) {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO iam.roles (tenant_id,code,name,description,role_type,protected,status)
+         VALUES ($1,$2,$3,$4,$5,false,'ACTIVE')
+         ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id`,
+        [tenantId, definition.code, definition.name, `${definition.name} · perfil predefinido editável.`, definition.type],
+      );
+      const roleId = inserted.rows[0]?.id;
+      if (!roleId) continue;
+      await client.query(
+        `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
+         SELECT $1,$2,capability.id,'ALLOW' FROM iam.capabilities capability
+         WHERE capability.status='ACTIVE' AND capability.code=ANY($3::text[])
+         ON CONFLICT (tenant_id,role_id,capability_id) DO NOTHING`,
+        [tenantId, roleId, [...definition.capabilities]],
+      );
+    }
+  }
+
+  async createCustomProfile(client: PoolClient, tenantId: string, code: string, name: string): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO iam.roles (tenant_id,code,name,description,role_type,protected,status)
+       VALUES ($1,$2,$3,$4,'CUSTOM',false,'ACTIVE') RETURNING id`,
+      [tenantId, code, name, `${name} · perfil personalizado.`],
+    );
+    const id = result.rows[0]?.id;
+    if (!id) throw new Error('O PostgreSQL não retornou o identificador do perfil.');
+    return id;
+  }
+
   async identityRoles(client: PoolClient): Promise<readonly AdminRow[]> {
     const result = await client.query<AdminRow>(
       `SELECT id, code, name, role_type, protected FROM iam.roles
@@ -80,6 +127,8 @@ export class AdminRepository {
               usuario.created_at AS criado_em, usuario.updated_at AS atualizado_em,
               atribuicao.technical_area_id AS area_id,
               atribuicao.technical_role_id AS cargo_id,
+              area.name AS area_nome,
+              cargo.name AS cargo_nome,
               usuario.specialties::text AS especialidades_json,
               COALESCE(usuario.metadata->'scope_ids', '[]'::jsonb)::text AS escopo_ids_json
        FROM iam.users usuario
@@ -102,6 +151,10 @@ export class AdminRepository {
         AND atribuicao.is_primary AND atribuicao.status = 'ACTIVE'
         AND atribuicao.valid_from <= clock_timestamp()
         AND (atribuicao.valid_until IS NULL OR atribuicao.valid_until > clock_timestamp())
+       LEFT JOIN iam.technical_areas area
+         ON area.tenant_id = usuario.tenant_id AND area.id = atribuicao.technical_area_id
+       LEFT JOIN iam.technical_roles cargo
+         ON cargo.tenant_id = usuario.tenant_id AND cargo.id = atribuicao.technical_role_id
        LEFT JOIN iam.sessions sessao
          ON sessao.tenant_id = usuario.tenant_id AND sessao.user_id = usuario.id
        WHERE usuario.deleted_at IS NULL
@@ -112,7 +165,8 @@ export class AdminRepository {
          AND ($2::text IS NULL OR $2=ANY(papel.codes)
               OR ($2='GESTOR' AND 'GESTOR_TECNICO'=ANY(papel.codes)))
          AND ($3::text IS NULL OR CASE WHEN usuario.status = 'ACTIVE' THEN 'ATIVO' ELSE 'INATIVO' END = $3)
-       GROUP BY usuario.id, papel.code, papel.role_type, papel.codes, atribuicao.technical_area_id, atribuicao.technical_role_id
+       GROUP BY usuario.id, papel.code, papel.role_type, papel.codes,
+                atribuicao.technical_area_id, atribuicao.technical_role_id, area.name, cargo.name
        ORDER BY usuario.name, usuario.id
        LIMIT $4`,
       [query.search, query.profile, query.status, query.limit],
@@ -355,6 +409,30 @@ export class AdminRepository {
     return result.rows;
   }
 
+  async findRoleConflict(
+    client: PoolClient,
+    tenantId: string,
+    areaId: string,
+    code: string,
+    name: string,
+    excludeId: string | null = null,
+  ): Promise<{ id: string; code: string; name: string } | null> {
+    const result = await client.query<{ id: string; code: string; name: string }>(
+      `SELECT id,code,name
+       FROM iam.technical_roles
+       WHERE tenant_id=$1 AND technical_area_id=$2 AND deleted_at IS NULL
+         AND ($5::uuid IS NULL OR id<>$5)
+         AND (
+           upper(regexp_replace(btrim(code), '\\s+', '_', 'g'))=upper($3)
+           OR lower(regexp_replace(btrim(name), '\\s+', ' ', 'g'))=lower($4)
+         )
+       ORDER BY CASE WHEN upper(regexp_replace(btrim(code), '\\s+', '_', 'g'))=upper($3) THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [tenantId, areaId, code.trim().replace(/\s+/gu, '_'), name.trim().replace(/\s+/gu, ' '), excludeId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async saveRole(
     client: PoolClient,
     tenantId: string,
@@ -477,15 +555,23 @@ export class AdminRepository {
     const result = await client.query<AdminRow>(
       `SELECT subscription.status, subscription.ends_at, plan.code AS plano_codigo,
               plan.name AS plano_nome, plan.limits,
-              COALESCE(jsonb_agg(DISTINCT feature.code) FILTER (WHERE feature.code IS NOT NULL),'[]'::jsonb) AS recursos,
+              COALESCE(
+                jsonb_agg(DISTINCT feature.code) FILTER (
+                  WHERE feature.code IS NOT NULL AND COALESCE(
+                    (subscription.overrides -> 'features' ->> feature.code)::boolean,
+                    plan_feature.enabled, false
+                  )
+                ), '[]'::jsonb
+              ) AS recursos,
               maintenance.id AS janela_id, maintenance.status AS janela_status,
               maintenance.reason AS janela_motivo, maintenance.ends_at AS janela_expira_em
        FROM platform.tenants tenant
        LEFT JOIN platform.tenant_subscriptions subscription ON subscription.tenant_id=tenant.id
         AND subscription.status IN ('TRIAL','ACTIVE','PAST_DUE','SUSPENDED')
        LEFT JOIN platform.commercial_plans plan ON plan.id=subscription.commercial_plan_id
-       LEFT JOIN platform.commercial_plan_features plan_feature ON plan_feature.commercial_plan_id=plan.id AND plan_feature.enabled
-       LEFT JOIN platform.feature_catalog feature ON feature.id=plan_feature.feature_id AND feature.status='ACTIVE'
+       LEFT JOIN platform.commercial_plan_features plan_feature ON plan_feature.commercial_plan_id=plan.id
+       LEFT JOIN platform.feature_catalog feature ON feature.status='ACTIVE'
+        AND (feature.id=plan_feature.feature_id OR subscription.overrides ? 'features')
        LEFT JOIN platform.maintenance_windows maintenance ON maintenance.tenant_id=tenant.id AND maintenance.status='OPEN'
        WHERE tenant.id=platform.current_tenant_id()
        GROUP BY subscription.id,plan.id,maintenance.id`,
@@ -775,20 +861,38 @@ export class AdminRepository {
 
   async listAudit(client: PoolClient, query: AuditListQuery): Promise<readonly AdminRow[]> {
     const result = await client.query<AdminRow>(
-      `SELECT event.id,event.occurred_at AS data_hora,event.action AS acao,
-              event.entity_type AS entidade,event.entity_id AS registro,
-              event.before_data AS antes,event.after_data AS depois,event.trace_id,
-              event.role_snapshot AS perfil,usuario.id AS responsavel_id,
-              COALESCE(usuario.name,'Sistema') AS responsavel
-       FROM audit.events event
-       LEFT JOIN iam.users usuario ON usuario.id=event.user_id
-       WHERE ($1='' OR event.action ILIKE '%'||$1||'%' OR event.entity_type ILIKE '%'||$1||'%'
-                    OR COALESCE(event.entity_id,'') ILIKE '%'||$1||'%')
-         AND ($2::text IS NULL OR event.action ILIKE $2||'%')
-         AND ($3::text IS NULL OR event.entity_type=$3)
-         AND ($4::uuid IS NULL OR event.user_id=$4)
-       ORDER BY event.occurred_at DESC,event.id DESC LIMIT $5`,
-      [query.search, query.actionGroup, query.entityType, query.responsibleId, query.limit],
+       `WITH all_events AS (
+         SELECT event.id,event.occurred_at,event.action,event.entity_type,event.entity_id,
+                event.before_data,event.after_data,event.trace_id,event.role_snapshot,
+                event.user_id AS actor_id,event.source,event.user_agent,event.ip_address::text AS ip_address,
+                event.redacted_fields,'USER'::text AS actor_type
+         FROM audit.events event
+       ), filtered AS (
+         SELECT event.*,usuario.name AS actor_name
+         FROM all_events event
+         LEFT JOIN iam.users usuario ON usuario.id=event.actor_id AND event.actor_type='USER'
+         WHERE ($1='' OR event.action ILIKE '%'||$1||'%' OR event.entity_type ILIKE '%'||$1||'%'
+                      OR COALESCE(event.entity_id,'') ILIKE '%'||$1||'%'
+                      OR COALESCE(event.trace_id,'') ILIKE '%'||$1||'%'
+                      OR COALESCE(usuario.name,'') ILIKE '%'||$1||'%')
+           AND ($2::text IS NULL OR event.action ILIKE $2||'%')
+           AND ($3::text IS NULL OR event.entity_type=$3)
+           AND ($4::uuid IS NULL OR event.actor_id=$4)
+       )
+       SELECT page.id,page.occurred_at AS data_hora,page.action AS acao,
+              page.entity_type AS entidade,page.entity_id AS registro,
+              page.before_data AS antes,page.after_data AS depois,page.trace_id,
+              page.role_snapshot AS perfil,page.actor_id AS responsavel_id,
+              COALESCE(page.actor_name,'Sistema') AS responsavel,
+              page.actor_type AS responsavel_tipo,page.source AS origem,
+              page.user_agent,page.ip_address,page.redacted_fields AS campos_ocultos,
+              totals.total
+       FROM (SELECT count(*)::integer AS total FROM filtered) totals
+       LEFT JOIN LATERAL (
+         SELECT * FROM filtered ORDER BY occurred_at DESC,id DESC LIMIT $5 OFFSET $6
+       ) page ON true
+       ORDER BY page.occurred_at DESC NULLS LAST,page.id DESC NULLS LAST`,
+      [query.search, query.actionGroup, query.entityType, query.responsibleId, query.limit, query.offset],
     );
     return result.rows;
   }

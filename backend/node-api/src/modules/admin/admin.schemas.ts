@@ -42,6 +42,31 @@ export const saveUserBodySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const bulkUserImportBodySchema = Type.Object(
+  {
+    arquivo_nome: Type.String({ minLength: 1, maxLength: 180 }),
+    aba_nome: Type.String({ minLength: 1, maxLength: 120 }),
+    cabecalhos: Type.Array(Type.String({ minLength: 1, maxLength: 180 }), { minItems: 1, maxItems: 100 }),
+    usuarios: Type.Array(Type.Object(
+      {
+        linha_numero: Type.Integer({ minimum: 2, maximum: 1_000_000 }),
+        nome: Type.String({ minLength: 3, maxLength: 160 }),
+        email: Type.String({ format: 'email', maxLength: 254 }),
+        matricula: Type.String({ minLength: 3, maxLength: 40 }),
+        perfil: profileSchema,
+        status: statusSchema,
+        senha_temporaria: Type.String({ minLength: 12, maxLength: 128 }),
+        area_codigo: Type.String({ minLength: 2, maxLength: 80 }),
+        area_nome: Type.String({ minLength: 2, maxLength: 160 }),
+        cargo_codigo: Type.String({ minLength: 2, maxLength: 80 }),
+        cargo_nome: Type.String({ minLength: 2, maxLength: 160 }),
+      },
+      { additionalProperties: false },
+    ), { minItems: 1, maxItems: 500 }),
+  },
+  { additionalProperties: false },
+);
+
 export const resetPasswordBodySchema = Type.Object(
   { senha_temporaria: Type.String({ minLength: 12, maxLength: 128 }) },
   { additionalProperties: false },
@@ -90,6 +115,11 @@ export const permissionBodySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const createPermissionProfileBodySchema = Type.Object(
+  { nome: Type.String({ minLength: 3, maxLength: 100 }) },
+  { additionalProperties: false },
+);
+
 export const companyBodySchema = Type.Object(
   {
     nome: Type.String({ minLength: 2, maxLength: 160 }),
@@ -105,6 +135,7 @@ export const auditListQuerySchema = Type.Object(
     entidade: Type.Optional(Type.String({ maxLength: 160 })),
     responsavel_id: Type.Optional(Type.String({ format: 'uuid' })),
     limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+    deslocamento: Type.Optional(Type.Integer({ minimum: 0, maximum: 1_000_000 })),
   },
   { additionalProperties: false },
 );

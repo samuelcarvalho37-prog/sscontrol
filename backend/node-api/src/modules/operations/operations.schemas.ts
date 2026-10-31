@@ -264,6 +264,14 @@ export const inviteCollaboratorBodySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const transferActionBodySchema = Type.Object(
+  {
+    usuario_id: uuid,
+    justificativa: Type.String({ minLength: 3, maxLength: 500 }),
+  },
+  { additionalProperties: false },
+);
+
 export const pauseParticipantSessionBodySchema = Type.Object(
   { motivo: Type.String({ minLength: 3, maxLength: 500 }) },
   { additionalProperties: false },

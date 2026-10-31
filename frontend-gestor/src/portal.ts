@@ -29,10 +29,10 @@ export function getPortalPresentation(): PortalPresentation {
   if (PORTAL_PROFILE === 'ADMIN') {
     return {
       profile: 'ADMIN',
-      eyebrow: 'VORQIX · ADMINISTRAÇÃO',
-      title: 'Acesso do Administrador',
+      eyebrow: 'VORQIX · TI',
+      title: 'Acesso do TI',
       intro: 'Entre para gerenciar a estrutura, os acessos e as configurações da empresa.',
-      exclusiveProfileLabel: 'Administrador',
+      exclusiveProfileLabel: 'TI',
     }
   }
 
@@ -51,6 +51,6 @@ export function getPortalPresentation(): PortalPresentation {
     eyebrow: 'VORQIX · AMBIENTE DE TRABALHO',
     title: 'Acesso de Gestão',
     intro: 'Use sua matrícula. As ferramentas disponíveis seguem as permissões da sua conta.',
-    exclusiveProfileLabel: 'Gestor ou Administrador',
+    exclusiveProfileLabel: 'PCM ou TI',
   }
 }

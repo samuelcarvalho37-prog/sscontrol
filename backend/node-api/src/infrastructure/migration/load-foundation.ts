@@ -39,20 +39,21 @@ const userStatus = {
 
 export async function ensureTenantRoles(context: MigrationLoadContext): Promise<void> {
   const roles = [
-    ['ADMIN', 'Administrador', 'Administração integral do ambiente.', 'ADMIN'],
+    ['ADMIN', 'TI', 'Administração de TI e configuração da estrutura técnica.', 'ADMIN'],
     ['MANAGER', 'Gestor', 'Validação e acompanhamento técnico.', 'MANAGER'],
     ['PCM', 'Planejamento e Controle da Manutenção', 'Administração e operação do domínio da manutenção.', 'MANAGER'],
     ['OPERATOR', 'Operador', 'Execução operacional no chão de fábrica.', 'OPERATOR'],
+    ['TECNICO', 'Técnico de Manutenção', 'Execução técnica de ordens de serviço.', 'OPERATOR'],
     ['SYSTEM', 'Sistema', 'Identidade técnica para eventos automatizados.', 'CUSTOM'],
   ] as const;
   for (const [code, name, description, type] of roles) {
     await context.client.query(
       `INSERT INTO iam.roles
        (id,tenant_id,legacy_id,code,name,description,role_type,protected,status)
-       VALUES ($1,$2,$3,$3,$4,$5,$6,true,'ACTIVE')
+       VALUES ($1,$2,$3,$3,$4,$5,$6,($3 IN ('ADMIN','SYSTEM')),'ACTIVE')
        ON CONFLICT (tenant_id,code) DO UPDATE SET
          name=EXCLUDED.name,description=EXCLUDED.description,role_type=EXCLUDED.role_type,
-         protected=true,status='ACTIVE',updated_at=clock_timestamp()`,
+         protected=EXCLUDED.protected,status='ACTIVE',updated_at=clock_timestamp()`,
       [targetId(context, 'roles', code), context.tenantId, code, name, description, type],
     );
   }
@@ -69,6 +70,7 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
       'admin.governance.read',
       'admin.governance.manage',
       'admin.configuration.manage',
+      'admin.technical-structure.manage',
       'maintenance.occurrences.read',
       'maintenance.stops.read',
       'maintenance.alerts.read',
@@ -118,6 +120,7 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
      ON CONFLICT (tenant_id,role_id,capability_id) DO UPDATE SET effect='ALLOW'`,
     [context.tenantId, targetId(context, 'roles', 'PCM'), [
       'cmms.structure.read', 'cmms.structure.manage',
+      'admin.technical-structure.manage',
       'cmms.assets.read', 'cmms.assets.manage',
       'cmms.parameters.read', 'cmms.parameters.manage',
       'cmms.materials.read', 'cmms.materials.manage', 'cmms.readings.create',
@@ -168,6 +171,19 @@ export async function ensureTenantRoles(context: MigrationLoadContext): Promise<
         'workflow.notifications.read',
       ],
     ],
+  );
+
+  await context.client.query(
+    `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
+     SELECT $1,$2,capability.id,'ALLOW' FROM iam.capabilities capability
+     WHERE capability.status='ACTIVE'
+       AND capability.code = ANY($3::text[])
+     ON CONFLICT (tenant_id,role_id,capability_id) DO NOTHING`,
+    [context.tenantId, targetId(context, 'roles', 'TECNICO'), [
+      'maintenance.executions.read',
+      'maintenance.executions.perform',
+      'workflow.notifications.read',
+    ]],
   );
 }
 

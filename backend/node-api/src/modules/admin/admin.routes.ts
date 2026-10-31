@@ -5,11 +5,13 @@ import type { AdminController } from './admin.controller.js';
 import {
   adminIdentifierParamsSchema,
   auditListQuerySchema,
+  bulkUserImportBodySchema,
   commercialDraftBodySchema,
   commercialPlansBodySchema,
   companyBodySchema,
   configurationBodySchema,
   configurationDraftBodySchema,
+  createPermissionProfileBodySchema,
   permissionBodySchema,
   publishDraftBodySchema,
   resetPasswordBodySchema,
@@ -42,6 +44,11 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
       schema: { ...secured, body: saveUserBodySchema },
       handler: controller.createUser,
     });
+    app.post('/v1/admin/users/import', {
+      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      schema: { ...secured, body: bulkUserImportBodySchema },
+      handler: controller.importUsers,
+    });
     app.patch('/v1/admin/users/:userId', {
       preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
       schema: { ...secured, params: adminIdentifierParamsSchema, body: saveUserBodySchema },
@@ -69,12 +76,12 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
       handler: controller.listAreas,
     });
     app.post('/v1/admin/technical-areas', {
-      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
+      preHandler: (request) => app.authorize(request, 'admin.technical-structure.manage'),
       schema: { ...secured, body: saveTechnicalAreaBodySchema },
       handler: controller.createArea,
     });
     app.patch('/v1/admin/technical-areas/:areaId', {
-      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
+      preHandler: (request) => app.authorize(request, 'admin.technical-structure.manage'),
       schema: {
         ...secured,
         params: adminIdentifierParamsSchema,
@@ -88,12 +95,12 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
       handler: controller.listRoles,
     });
     app.post('/v1/admin/technical-roles', {
-      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
+      preHandler: (request) => app.authorize(request, 'admin.technical-structure.manage'),
       schema: { ...secured, body: saveTechnicalRoleBodySchema },
       handler: controller.createRole,
     });
     app.patch('/v1/admin/technical-roles/:roleId', {
-      preHandler: (request) => app.authorize(request, 'cmms.structure.manage'),
+      preHandler: (request) => app.authorize(request, 'admin.technical-structure.manage'),
       schema: {
         ...secured,
         params: adminIdentifierParamsSchema,
@@ -106,6 +113,16 @@ export function createAdminRoutes(controller: AdminController): FastifyPluginAsy
       preHandler: (request) => app.authorize(request, 'admin.identity.read'),
       schema: secured,
       handler: controller.permissionMatrix,
+    });
+    app.post('/v1/admin/permissions/profiles/defaults', {
+      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      schema: secured,
+      handler: controller.provisionDefaultPermissionProfiles,
+    });
+    app.post('/v1/admin/permissions/profiles', {
+      preHandler: (request) => app.authorize(request, 'admin.identity.manage'),
+      schema: { ...secured, body: createPermissionProfileBodySchema },
+      handler: controller.createPermissionProfile,
     });
     app.patch('/v1/admin/permissions/:profile', {
       preHandler: (request) => app.authorize(request, 'admin.identity.manage'),

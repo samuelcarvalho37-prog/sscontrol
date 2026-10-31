@@ -60,6 +60,13 @@ export async function claimOperatorAction(actionId: string): Promise<void> {
   requireData(response.data, 'operator-actions.assume')
 }
 
+export async function transferPausedOperatorAction(actionId: string, technicianId: string, justification: string): Promise<void> {
+  const response = await callApi<Record<string, unknown>>('operator-actions.transfer', {
+    token: token(), acao_id: actionId, usuario_id: technicianId, justificativa: justification,
+  }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  requireData(response.data, 'operator-actions.transfer')
+}
+
 export async function inviteActionCollaborator(actionId: string, userId: string): Promise<void> {
   const response = await callApi<Record<string, unknown>>('operator-actions.collaborators.invite', { token: token(), acao_id: actionId, usuario_id: userId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   requireData(response.data, 'operator-actions.collaborators.invite')

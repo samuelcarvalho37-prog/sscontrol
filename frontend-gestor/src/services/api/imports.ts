@@ -95,3 +95,11 @@ export function rollbackAdminImport(
     motivo: reason,
   })
 }
+
+export function dismissAdminImportBatch(batchId: string): Promise<{
+  id: string
+  removido_do_historico: boolean
+  dados_operacionais_preservados: boolean
+}> {
+  return writeImportData('admin.importacao.descartar', { lote_id: batchId })
+}

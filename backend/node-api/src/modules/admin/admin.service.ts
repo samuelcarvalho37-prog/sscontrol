@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../../core/errors/app-error.js';
 import type { Environment } from '../../config/environment.js';
 import type { Database } from '../../infrastructure/database/database.js';
@@ -9,6 +9,7 @@ import { readCapabilityTelemetry } from './integrity-telemetry.js';
 import type {
   AdminAuditMetadata,
   AdminProfile,
+  BulkUserImportInput,
   AuditListQuery,
   SaveTechnicalAreaInput,
   SaveTechnicalRoleInput,
@@ -22,6 +23,15 @@ function fail(code: string, message: string, statusCode: number, details?: unkno
 
 function normalizeText(value: string): string {
   return value.trim().replace(/\s+/gu, ' ');
+}
+
+function importKey(value: string): string {
+  return normalizeText(value).normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]/gu, '');
+}
+
+function adminRowText(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
 function scalarText(value: unknown, fallback = ''): string {
@@ -429,6 +439,199 @@ export class AdminService {
     );
   }
 
+  async importUsers(user: AuthenticatedUser, input: BulkUserImportInput, metadata: AdminAuditMetadata) {
+    if (input.rows.length === 0 || input.rows.length > 500) {
+      fail('ADMIN_USER_IMPORT_LIMIT', 'A planilha deve conter de 1 a 500 usuários.', 422);
+    }
+    const emails = new Set<string>();
+    const registrations = new Set<string>();
+    const rowNumbers = new Set<number>();
+    const prepared: Array<BulkUserImportInput['rows'][number]> = [];
+    for (const row of input.rows) {
+      const name = normalizeText(row.name);
+      const email = normalizeText(row.email).toLowerCase();
+      const employeeNumber = normalizeText(row.employeeNumber).toUpperCase();
+      const areaName = normalizeText(row.areaName);
+      const roleName = normalizeText(row.roleName);
+      const emailKey = email.toLocaleLowerCase('pt-BR');
+      const registrationKey = employeeNumber.toLocaleUpperCase('pt-BR');
+      if (name.length < 3 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || !/^[A-Z0-9._-]{3,40}$/u.test(employeeNumber)) {
+        fail('ADMIN_USER_IMPORT_ROW_INVALID', `Dados inválidos na linha ${row.rowNumber}.`, 422, { linha: row.rowNumber });
+      }
+      if (!areaName || !roleName || normalizeText(row.areaCode).length < 2 || normalizeText(row.roleCode).length < 2) {
+        fail('ADMIN_USER_IMPORT_STRUCTURE_REQUIRED', `Área e cargo são obrigatórios na linha ${row.rowNumber}.`, 422, { linha: row.rowNumber });
+      }
+      if (rowNumbers.has(row.rowNumber) || emails.has(emailKey) || registrations.has(registrationKey)) {
+        fail('ADMIN_USER_IMPORT_DUPLICATE_ROW', `A linha ${row.rowNumber} repete uma linha, e-mail ou matrícula da própria planilha.`, 422, { linha: row.rowNumber });
+      }
+      rowNumbers.add(row.rowNumber);
+      emails.add(emailKey);
+      registrations.add(registrationKey);
+      prepared.push({ ...row, name, email, employeeNumber, areaName, roleName, areaCode: normalizeText(row.areaCode).toUpperCase().replace(/\s+/gu, '_'), roleCode: normalizeText(row.roleCode).toUpperCase().replace(/\s+/gu, '_') });
+    }
+
+    const passwordHashes: string[] = [];
+    for (const row of prepared) {
+      if (row.temporaryPassword.length < 12) {
+        fail('ADMIN_TEMPORARY_PASSWORD_INVALID', `Senha temporária inválida na linha ${row.rowNumber}.`, 422, { linha: row.rowNumber });
+      }
+      passwordHashes.push(await this.passwordService.hash(row.temporaryPassword));
+    }
+
+    const batchId = randomUUID();
+    const batchRecords: { id: string; rowNumber: number; userId: string; raw: Record<string, unknown>; normalized: Record<string, unknown> }[] = [];
+    let createdAreas = 0;
+    let createdRoles = 0;
+    await this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 9142026))', [user.tenantId]);
+        const activeAreas = [...await this.repository.listAreas(client, 'ATIVO')];
+        const areaCache = new Map<string, Record<string, unknown>>();
+        const cacheArea = (area: Record<string, unknown>) => {
+          areaCache.set(importKey(adminRowText(area, 'codigo')), area);
+          areaCache.set(importKey(adminRowText(area, 'nome')), area);
+        };
+        activeAreas.forEach(cacheArea);
+        const roleCache = new Map<string, Record<string, unknown>>();
+        const cacheRole = (role: Record<string, unknown>) => {
+          roleCache.set(`${adminRowText(role, 'area_id')}:${importKey(adminRowText(role, 'codigo'))}`, role);
+          roleCache.set(`${adminRowText(role, 'area_id')}:${importKey(adminRowText(role, 'nome'))}`, role);
+        };
+        (await this.repository.listRoles(client, null, 'ATIVO')).forEach(cacheRole);
+        const createdUsers: { id: string; row: (typeof prepared)[number]; area: Record<string, unknown>; role: Record<string, unknown> }[] = [];
+
+        for (let index = 0; index < prepared.length; index += 1) {
+          const row = prepared[index];
+          if (!row) continue;
+          const identityRole = await this.repository.requireIdentityRole(client, row.profile);
+          if (identityRole.role_type === 'ADMIN' || row.profile.toLocaleUpperCase('pt-BR') === 'ADMIN') {
+            fail('ADMIN_USER_IMPORT_ADMIN_PROFILE_BLOCKED', `O perfil TI deve ser atribuído individualmente (linha ${row.rowNumber}).`, 422, { linha: row.rowNumber });
+          }
+          const duplicate = await client.query<{ id: string }>(
+            `SELECT id FROM iam.users WHERE tenant_id=$1 AND deleted_at IS NULL
+             AND (lower(email)=lower($2) OR upper(employee_number)=upper($3)) LIMIT 1`,
+            [user.tenantId, row.email, row.employeeNumber],
+          );
+          if (duplicate.rowCount) {
+            fail('ADMIN_USER_IMPORT_USER_EXISTS', `E-mail ou matrícula já cadastrado (linha ${row.rowNumber}).`, 409, { linha: row.rowNumber });
+          }
+
+          let area = areaCache.get(importKey(row.areaCode)) ?? areaCache.get(importKey(row.areaName));
+          if (!area) {
+            const areaId = await this.repository.saveArea(client, user.tenantId, user.id, {
+              id: null,
+              code: row.areaCode,
+              name: row.areaName,
+              description: 'Criada pela importação de equipe.',
+              status: 'ATIVO',
+              defaultSignatureRequired: false,
+            });
+            area = { id: areaId, codigo: row.areaCode, nome: row.areaName, status: 'ATIVO' };
+            cacheArea(area);
+            createdAreas += 1;
+            await this.repository.audit(client, user.tenantId, user.id, 'ADMIN_TECHNICAL_AREA_CREATED_BY_TEAM_IMPORT', 'iam.technical_areas', areaId, null, area, metadata);
+          }
+          const areaId = adminRowText(area, 'id');
+          if (!areaId) throw new Error(`Não foi possível resolver a área da linha ${row.rowNumber}.`);
+          const roleKey = `${areaId}:${importKey(row.roleCode)}`;
+          let role = roleCache.get(roleKey) ?? roleCache.get(`${areaId}:${importKey(row.roleName)}`);
+          if (role) {
+            const existingCode = importKey(adminRowText(role, 'codigo'));
+            const existingName = importKey(adminRowText(role, 'nome'));
+            if (existingCode !== importKey(row.roleCode) || existingName !== importKey(row.roleName)) {
+              fail('ADMIN_USER_IMPORT_ROLE_CONFLICT', `O cargo da linha ${row.rowNumber} conflita com outro código ou nome já cadastrado na área.`, 409, { linha: row.rowNumber, area: row.areaName, cargo: row.roleName });
+            }
+          }
+          if (!role) {
+            const conflict = await this.repository.findRoleConflict(
+              client,
+              user.tenantId,
+              areaId,
+              row.roleCode,
+              row.roleName,
+            );
+            if (conflict) {
+              fail('ADMIN_USER_IMPORT_ROLE_CONFLICT', `O cargo da linha ${row.rowNumber} conflita com outro código ou nome já cadastrado na área.`, 409, { linha: row.rowNumber, area: row.areaName, cargo: row.roleName, codigoExistente: conflict.code, nomeExistente: conflict.name });
+            }
+            const roleId = await this.repository.saveRole(client, user.tenantId, user.id, {
+              id: null,
+              areaId,
+              code: row.roleCode,
+              name: row.roleName,
+              description: 'Criado pela importação de equipe.',
+              status: 'ATIVO',
+              canSign: false,
+            });
+            role = { id: roleId, area_id: areaId, codigo: row.roleCode, nome: row.roleName, status: 'ATIVO' };
+            cacheRole(role);
+            createdRoles += 1;
+            await this.repository.audit(client, user.tenantId, user.id, 'ADMIN_TECHNICAL_ROLE_CREATED_BY_TEAM_IMPORT', 'iam.technical_roles', roleId, null, role, metadata);
+          }
+          const roleId = adminRowText(role, 'id');
+          const saved = await this.repository.saveUser(client, user.tenantId, user.id, {
+            id: null,
+            name: row.name,
+            email: row.email,
+            employeeNumber: row.employeeNumber,
+            profile: row.profile,
+            status: row.status,
+            temporaryPassword: null,
+            areaId,
+            technicalRoleId: roleId || null,
+            specialties: [],
+            scopeIds: [],
+          }, passwordHashes[index] ?? null);
+          const normalized = {
+            nome: row.name,
+            email: row.email,
+            matricula: row.employeeNumber,
+            perfil: row.profile,
+            area_id: areaId,
+            area: adminRowText(area, 'nome'),
+            cargo_id: roleId,
+            cargo: adminRowText(role, 'nome'),
+            status: row.status,
+          };
+          await this.repository.audit(client, user.tenantId, user.id, 'ADMIN_USER_CREATED_BY_TEAM_IMPORT', 'iam.users', saved.id, null, normalized, metadata);
+          createdUsers.push({ id: saved.id, row, area, role });
+          batchRecords.push({
+            id: randomUUID(),
+            rowNumber: row.rowNumber,
+            userId: saved.id,
+            raw: { nome: row.name, email: row.email, matricula: row.employeeNumber, perfil_acesso: row.profile, area_tecnica: row.areaName, cargo_tecnico: row.roleName, status: row.status },
+            normalized,
+          });
+        }
+
+        const safeFingerprintRows = prepared.map((row) => ({ rowNumber: row.rowNumber, name: row.name, email: row.email, employeeNumber: row.employeeNumber, profile: row.profile, status: row.status, areaCode: row.areaCode, areaName: row.areaName, roleCode: row.roleCode, roleName: row.roleName }));
+        const fingerprint = createHash('sha256').update(JSON.stringify(safeFingerprintRows), 'utf8').digest('hex');
+        const validationHash = createHash('sha256').update(`VORQIX-USER-IMPORT:${batchId}:${fingerprint}`, 'utf8').digest('hex');
+        await client.query(
+          `INSERT INTO governance.import_batches (
+             id,tenant_id,import_type,entity_type,source_file_name,source_sheet_name,status,
+             total_rows,valid_rows,invalid_rows,validation_hash_sha256,headers,ignored_headers,
+             result,created_by,confirmed_by,confirmed_at,content_fingerprint_sha256
+           ) VALUES ($1,$2,'usuarios','iam.users',$3,$4,'CONFIRMED',$5,$5,0,$6,$7,'[]'::jsonb,$8,$9,$9,clock_timestamp(),$10)`,
+          [batchId, user.tenantId, normalizeText(input.fileName), normalizeText(input.sheetName), createdUsers.length, validationHash, JSON.stringify(input.headers), JSON.stringify({ criados: createdUsers.length, atualizados: 0, areas_criadas: createdAreas, cargos_criados: createdRoles }), user.id, fingerprint],
+        );
+        for (const record of batchRecords) {
+          await client.query(
+            `INSERT INTO governance.import_records (
+               id,tenant_id,import_batch_id,source_row_number,entity_type,entity_id,
+               operation,status,raw_data,normalized_data,errors,after_data,applied_at
+             ) VALUES ($1,$2,$3,$4,'iam.users',$5,'CRIAR','APPLIED',$6,$7,'[]'::jsonb,$7,clock_timestamp())`,
+            [record.id, user.tenantId, batchId, record.rowNumber, record.userId, JSON.stringify(record.raw), JSON.stringify(record.normalized)],
+          );
+        }
+        await this.repository.audit(client, user.tenantId, user.id, 'ADMIN_USERS_IMPORT_CONFIRMED', 'governance.import_batches', batchId, null, {
+          tipo: 'usuarios', arquivo_nome: input.fileName, total: createdUsers.length, areas_criadas: createdAreas, cargos_criados: createdRoles,
+        }, metadata);
+      },
+    );
+    return { imported: true, lote_id: batchId, total: batchRecords.length, areas_criadas: createdAreas, cargos_criados: createdRoles };
+  }
+
   async unlockUser(user: AuthenticatedUser, userId: string, metadata: AdminAuditMetadata) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
@@ -537,6 +740,9 @@ export class AdminService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
+        const before = input.id
+          ? (await this.repository.listAreas(client, null)).find((item) => item.id === input.id) ?? null
+          : null;
         const id = await this.repository.saveArea(client, user.tenantId, user.id, input);
         const area = (await this.repository.listAreas(client, null)).find((item) => item.id === id);
         if (!area) throw new Error('A área salva não pôde ser relida.');
@@ -544,10 +750,10 @@ export class AdminService {
           client,
           user.tenantId,
           user.id,
-          input.id ? 'ADMIN_TECHNICAL_AREA_UPDATED' : 'ADMIN_TECHNICAL_AREA_CREATED',
+          before ? 'ADMIN_TECHNICAL_AREA_UPDATED' : 'ADMIN_TECHNICAL_AREA_CREATED',
           'iam.technical_areas',
           id,
-          null,
+          before,
           area,
           metadata,
         );
@@ -580,6 +786,25 @@ export class AdminService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
+        const before = input.id
+          ? (await this.repository.listRoles(client, input.areaId, null)).find((item) => item.id === input.id) ?? null
+          : null;
+        const conflict = await this.repository.findRoleConflict(
+          client,
+          user.tenantId,
+          input.areaId,
+          input.code,
+          input.name,
+          input.id,
+        );
+        if (conflict) {
+          fail('ADMIN_TECHNICAL_ROLE_DUPLICATE', 'Já existe um cargo com esse código ou nome nesta área.', 409, {
+            areaId: input.areaId,
+            cargoId: conflict.id,
+            codigo: conflict.code,
+            nome: conflict.name,
+          });
+        }
         const id = await this.repository.saveRole(client, user.tenantId, user.id, input);
         const cargo = (await this.repository.listRoles(client, input.areaId, null)).find(
           (item) => item.id === id,
@@ -589,10 +814,10 @@ export class AdminService {
           client,
           user.tenantId,
           user.id,
-          input.id ? 'ADMIN_TECHNICAL_ROLE_UPDATED' : 'ADMIN_TECHNICAL_ROLE_CREATED',
+          before ? 'ADMIN_TECHNICAL_ROLE_UPDATED' : 'ADMIN_TECHNICAL_ROLE_CREATED',
           'iam.technical_roles',
           id,
-          null,
+          before,
           cargo,
           metadata,
         );
@@ -632,6 +857,59 @@ export class AdminService {
         };
       },
     );
+  }
+
+  async provisionDefaultPermissionProfiles(user: AuthenticatedUser, metadata: AdminAuditMetadata) {
+    await this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        await this.repository.ensureDefaultProfiles(client, user.tenantId);
+        await this.repository.audit(
+          client,
+          user.tenantId,
+          user.id,
+          'ADMIN_PERMISSION_DEFAULT_PROFILES_PROVISIONED',
+          'iam.roles',
+          user.tenantId,
+          null,
+          { perfis: ['GESTOR_TECNICO', 'OPERADOR', 'PCM', 'TECNICO', 'QUALIDADE', 'SEGURANCA', 'PRODUCAO'] },
+          metadata,
+        );
+      },
+    );
+    return this.permissionMatrix(user);
+  }
+
+  async createPermissionProfile(user: AuthenticatedUser, rawName: string, metadata: AdminAuditMetadata) {
+    const name = normalizeText(rawName);
+    const code = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '')
+      .toLocaleUpperCase('pt-BR').replace(/[^A-Z0-9]+/gu, '_').replace(/^_+|_+$/gu, '').slice(0, 80);
+    if (name.length < 3 || !code) fail('ADMIN_PROFILE_NAME_INVALID', 'Informe um nome de perfil com ao menos 3 caracteres.', 422);
+    const matrix = await this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        await this.repository.ensureDefaultProfiles(client, user.tenantId);
+        const existing = await this.repository.identityRoles(client);
+        if (existing.some((role) => String(role.code).toLocaleUpperCase('pt-BR') === code)) {
+          fail('ADMIN_PROFILE_ALREADY_EXISTS', `Já existe um perfil com o código ${code}.`, 409);
+        }
+        const id = await this.repository.createCustomProfile(client, user.tenantId, code, name);
+        await this.repository.audit(
+          client,
+          user.tenantId,
+          user.id,
+          'ADMIN_PERMISSION_PROFILE_CREATED',
+          'iam.roles',
+          id,
+          null,
+          { id, perfil: code, nome: name, role_type: 'CUSTOM', permissoes_iniciais: [] },
+          metadata,
+        );
+        return { id, code };
+      },
+    );
+    const updated = await this.permissionMatrix(user);
+    return { saved: true, perfil: updated.perfis.find((profile) => profile.perfil === matrix.code) };
   }
 
   async savePermissions(
@@ -730,7 +1008,8 @@ export class AdminService {
         const resources = Array.isArray(row.recursos) ? row.recursos.map(String) : [];
         const normalizedResources = resources.filter((code) => code in commercialFeatureNames);
         const fallback = Object.keys(commercialFeatureNames);
-        const enabled = normalizedResources.length > 0 ? normalizedResources : fallback;
+        const hasSubscription = row.status !== null && row.status !== undefined;
+        const enabled = hasSubscription ? normalizedResources : fallback;
         const subscriptionStatus = scalarText(row.status, 'ACTIVE');
         const active = ['TRIAL', 'ACTIVE'].includes(subscriptionStatus);
         const windowOpen = row.janela_status === 'OPEN';
@@ -790,7 +1069,9 @@ export class AdminService {
         const resources = Array.isArray(accessRow?.recursos)
           ? accessRow.recursos.map((resource) => scalarText(resource)).filter(Boolean)
           : [];
-        const enabled = resources.length > 0 ? resources : Object.keys(commercialFeatureNames);
+        const enabled = accessRow?.status !== null && accessRow?.status !== undefined
+          ? resources
+          : Object.keys(commercialFeatureNames);
         const subscriptionStatus = scalarText(accessRow?.status, 'ACTIVE');
         const subscriptionActive = ['TRIAL', 'ACTIVE'].includes(subscriptionStatus);
         const windowOpen = accessRow?.janela_status === 'OPEN';
@@ -1438,18 +1719,25 @@ export class AdminService {
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
         const rows = await this.repository.listAudit(client, query);
-        const eventos = rows.map((row) => ({
+        const eventos = rows.filter((row) => row.id !== null).map((row) => ({
           id: scalarText(row.id),
           usuario_id: scalarText(row.responsavel_id),
+          responsavel: scalarText(row.responsavel),
+          responsavel_tipo: scalarText(row.responsavel_tipo),
           perfil: scalarText(row.perfil),
           acao: scalarText(row.acao),
           entidade: scalarText(row.entidade),
           entidade_id: scalarText(row.registro),
           antes_json: row.antes === null ? undefined : JSON.stringify(row.antes),
           depois_json: row.depois === null ? undefined : JSON.stringify(row.depois),
+          trace_id: scalarText(row.trace_id),
+          origem: scalarText(row.origem),
+          ip_address: scalarText(row.ip_address),
+          user_agent: scalarText(row.user_agent),
+          campos_ocultos: Array.isArray(row.campos_ocultos) ? row.campos_ocultos : [],
           criado_em: new Date(scalarText(row.data_hora)).toISOString(),
         }));
-        return { total: eventos.length, eventos };
+        return { total: Number(rows[0]?.total ?? 0), deslocamento: query.offset, eventos };
       },
     );
   }
@@ -1497,6 +1785,7 @@ export class AdminService {
           entityType: null,
           responsibleId: null,
           limit: 1,
+          offset: 0,
         });
         const byCode = issues.reduce<Record<string, number>>((counts, issue) => {
           counts[issue.code] = (counts[issue.code] ?? 0) + 1;

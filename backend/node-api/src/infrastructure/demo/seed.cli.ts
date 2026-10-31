@@ -153,7 +153,7 @@ async function seedIdentities(
     [ids.production, 'USR-PRO-DEMO', 'Produção de Homologação', 'producao.demo@vorqix.local'],
   ] as const;
   const roles = [
-    [ids.adminRole, 'ADMIN', 'Administrador', 'ADMIN'],
+    [ids.adminRole, 'ADMIN', 'TI', 'ADMIN'],
     [ids.managerRole, 'GESTOR_TECNICO', 'Gestor técnico', 'MANAGER'],
     [ids.operatorRole, 'OPERADOR', 'Operador', 'OPERATOR'],
     [ids.qualityRole, 'QUALIDADE', 'Especialista de Qualidade', 'MANAGER'],
@@ -169,9 +169,10 @@ async function seedIdentities(
         INSERT INTO iam.roles (
           id, tenant_id, code, name, description, role_type, protected
         )
-        VALUES ($1, $2, $3, $4, $4 || ' de homologação.', $5, true)
+        VALUES ($1, $2, $3, $4, $4 || ' de homologação.', $5, ($3 IN ('ADMIN', 'SYSTEM')))
         ON CONFLICT (id) DO UPDATE
-        SET name = EXCLUDED.name, description = EXCLUDED.description, status = 'ACTIVE'
+        SET name = EXCLUDED.name, description = EXCLUDED.description,
+            protected = EXCLUDED.protected, status = 'ACTIVE'
       `,
       [id, tenantId, code, name, roleType],
     );
@@ -254,6 +255,7 @@ async function seedIdentities(
       'admin.governance.read',
       'admin.governance.manage',
       'admin.configuration.manage',
+      'admin.technical-structure.manage',
       'maintenance.occurrences.read',
       'maintenance.stops.read',
       'maintenance.alerts.read',
@@ -319,6 +321,7 @@ async function seedIdentities(
     `,
     [tenantId, ids.pcmRole, [
       'cmms.structure.read', 'cmms.structure.manage',
+      'admin.technical-structure.manage',
       'cmms.assets.read', 'cmms.assets.manage',
       'cmms.parameters.read', 'cmms.parameters.manage',
       'cmms.materials.read', 'cmms.materials.manage',
@@ -425,6 +428,21 @@ async function seedIdentities(
         ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
       [tenantId, ids.operatorRole, capabilityCode],
+    );
+  }
+
+  for (const capabilityCode of [
+    'maintenance.executions.read',
+    'maintenance.executions.perform',
+    'workflow.notifications.read',
+  ]) {
+    await client.query(
+      `INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
+       SELECT $1, $2, capability.id, 'ALLOW'
+       FROM iam.capabilities capability
+       WHERE capability.code = $3 AND capability.status = 'ACTIVE'
+       ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING`,
+      [tenantId, ids.maintenanceRole, capabilityCode],
     );
   }
 

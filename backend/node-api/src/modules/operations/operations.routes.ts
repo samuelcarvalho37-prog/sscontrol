@@ -28,6 +28,7 @@ import {
   shiftHandoffBodySchema,
   submitReviewBodySchema,
   technicalDemandListQuerySchema,
+  transferActionBodySchema,
   workOrderListQuerySchema,
 } from './operations.schemas.js';
 
@@ -306,6 +307,16 @@ export function createOperationsRoutes(
         summary: 'Assume a ação e materializa o checklist publicado.',
       },
       handler: controller.assumeAction,
+    });
+    app.post('/v1/maintenance/operator-actions/:actionId/transfer', {
+      preHandler: (request) => app.authorize(request, 'maintenance.executions.perform'),
+      schema: {
+        ...secured,
+        params: operationsIdentifierParamsSchema,
+        body: transferActionBodySchema,
+        summary: 'Transfere uma execução pausada para outro técnico da empresa.',
+      },
+      handler: controller.transferOperatorAction,
     });
     app.get('/v1/maintenance/executions/:executionId', {
       preHandler: (request) => app.authorize(request, 'maintenance.executions.read'),

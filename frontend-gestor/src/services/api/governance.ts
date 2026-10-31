@@ -108,10 +108,19 @@ export function updateAdminDocument(
 }
 
 export function listAdminAudit(
-  filters: { busca?: string; acao?: string; entidade?: string; usuario_id?: string } = {},
+  filters: { busca?: string; acao?: string; entidade?: string; usuario_id?: string; responsavel_id?: string; limite?: number; deslocamento?: number } = {},
   signal?: AbortSignal,
 ): Promise<AdminAuditListData> {
-  return readGovernance('admin.auditoria.listar', { ...filters, limite: 500 }, signal)
+  const requestedLimit = Number.isFinite(filters.limite) ? Math.floor(filters.limite ?? 200) : 200
+  const limite = Math.min(500, Math.max(1, requestedLimit))
+  return readGovernance('admin.auditoria.listar', {
+    busca: filters.busca,
+    grupo_acao: filters.acao,
+    entidade: filters.entidade,
+    responsavel_id: filters.responsavel_id ?? filters.usuario_id,
+    limite,
+    deslocamento: filters.deslocamento ? filters.deslocamento : undefined,
+  }, signal)
 }
 
 export function getAdminMonitoring(signal?: AbortSignal): Promise<AdminMonitoringState> {
@@ -122,7 +131,45 @@ export function listAdminBackups(signal?: AbortSignal): Promise<AdminBackupListD
   return readGovernance('admin.backups.listar', { limite: 200 }, signal)
 }
 
-export async function downloadAdminBackup(backupId: string, fileName: string): Promise<void> {
+export interface AdminBackupFileHandle {
+  createWritable(): Promise<{
+    write(data: Blob): Promise<void>
+    close(): Promise<void>
+    abort(): Promise<void>
+  }>
+}
+
+interface SavePickerWindow extends Window {
+  showSaveFilePicker?: (options: {
+    suggestedName: string
+    types: Array<{ description: string; accept: Record<string, string[]> }>
+  }) => Promise<AdminBackupFileHandle>
+}
+
+export async function chooseAdminBackupSaveLocation(fileName: string): Promise<AdminBackupFileHandle | null> {
+  const picker = (window as SavePickerWindow).showSaveFilePicker
+  if (!picker) return null
+  return picker.call(window, {
+    suggestedName: fileName,
+    types: [{ description: 'Backup VORQIX · JSON compactado', accept: { 'application/gzip': ['.gz'] } }],
+  })
+}
+
+export async function downloadAdminBackup(
+  backupId: string,
+  fileName: string,
+  selectedHandle?: AdminBackupFileHandle | null,
+): Promise<void> {
+  let fileHandle = selectedHandle
+  if (selectedHandle === undefined) {
+    try {
+      fileHandle = await chooseAdminBackupSaveLocation(fileName || `VORQIX-backup-${backupId}.json.gz`)
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return
+      throw cause
+    }
+  }
+
   const baseUrl = getApiUrl().replace(/\/+$/u, '').replace(/\/v1$/u, '')
   const response = await fetch(
     `${baseUrl}/v1/admin/backups/${encodeURIComponent(backupId)}/file`,
@@ -134,22 +181,35 @@ export async function downloadAdminBackup(backupId: string, fileName: string): P
       'BACKUP_DOWNLOAD_FAILED',
     )
   }
-  const url = URL.createObjectURL(await response.blob())
+  const backupFile = await response.blob()
+  if (fileHandle) {
+    const writable = await fileHandle.createWritable()
+    try {
+      await writable.write(backupFile)
+      await writable.close()
+    } catch (cause) {
+      await writable.abort().catch(() => undefined)
+      throw cause
+    }
+    return
+  }
+
+  const url = URL.createObjectURL(backupFile)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = fileName || `backup-${backupId}.json.gz`
+  anchor.download = fileName || `VORQIX-backup-${backupId}.json.gz`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
 }
 
-export function createAdminBackup(reason: string, confirmation: string): Promise<AdminBackupCreateData> {
-  return writeGovernance('admin.backups.criar', { motivo: reason, confirmacao: confirmation })
+export function createAdminBackup(reason: string, confirmation: string, scopes: readonly string[] = ['OPERACIONAL', 'IMPORTACOES']): Promise<AdminBackupCreateData> {
+  return writeGovernance('admin.backups.criar', { motivo: reason, confirmacao: confirmation, escopos: [...scopes] })
 }
 
-export function prepareAdminBackupRestore(backupId: string): Promise<AdminBackupRestorePreparation> {
-  return writeGovernance('admin.backups.preparar_restauracao', { backup_id: backupId })
+export function prepareAdminBackupRestore(backupId: string, scopes?: readonly string[]): Promise<AdminBackupRestorePreparation> {
+  return writeGovernance('admin.backups.preparar_restauracao', { backup_id: backupId, ...(scopes ? { escopos: [...scopes] } : {}) })
 }
 
 export function confirmAdminBackupRestore(input: {

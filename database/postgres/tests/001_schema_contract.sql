@@ -793,7 +793,17 @@ BEGIN
 END;
 $$;
 
-CREATE ROLE fab_schema_test_runtime NOLOGIN;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles
+    WHERE rolname = 'fab_schema_test_runtime'
+  ) THEN
+    CREATE ROLE fab_schema_test_runtime NOLOGIN;
+  END IF;
+END;
+$$;
 GRANT USAGE ON SCHEMA platform TO fab_schema_test_runtime;
 GRANT SELECT ON platform.tenants TO fab_schema_test_runtime;
 GRANT EXECUTE ON FUNCTION platform.current_tenant_id() TO fab_schema_test_runtime;

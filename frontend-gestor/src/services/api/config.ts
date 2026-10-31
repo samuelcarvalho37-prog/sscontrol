@@ -20,6 +20,10 @@ export function getEnvironmentApiUrl(): string {
 }
 
 export function getDevelopmentTenantSlug(): string {
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const requested = new URLSearchParams(window.location.search).get("tenant")?.trim().toLowerCase() ?? "";
+    if (/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(requested)) return requested;
+  }
   return (import.meta.env.VITE_DEV_TENANT_SLUG as string | undefined)?.trim().toLowerCase() ?? "";
 }
 
@@ -63,7 +67,25 @@ function clearLegacyPersistentToken(): void {
 
 export function getApiUrl(): string {
   const fromEnv = getEnvironmentApiUrl();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    const tenantSlug = getDevelopmentTenantSlug();
+    if (import.meta.env.DEV && tenantSlug) {
+      try {
+        const endpoint = new URL(fromEnv);
+        if (
+          endpoint.hostname.endsWith(".localhost") ||
+          endpoint.hostname === "localhost" ||
+          endpoint.hostname === "127.0.0.1"
+        ) {
+          endpoint.hostname = `${tenantSlug}.localhost`;
+          return endpoint.toString().replace(/\/$/u, "");
+        }
+      } catch {
+        return fromEnv;
+      }
+    }
+    return fromEnv;
+  }
   return readLocalStorage(API_URL_KEY);
 }
 
