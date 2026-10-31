@@ -19,9 +19,9 @@ export async function registerSecurityPlugins(
     limits: {
       fieldNameSize: 80,
       fieldSize: 4_096,
-      fields: 3,
-      files: 1,
-      parts: 4,
+      fields: 4,
+      files: 3,
+      parts: 7,
       fileSize: environment.storage.maxEvidenceBytes + 1,
     },
   });
