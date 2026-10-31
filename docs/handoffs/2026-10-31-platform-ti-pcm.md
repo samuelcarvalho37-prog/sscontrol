@@ -12,6 +12,8 @@ Este conjunto reúne as alterações necessárias de interface, API e banco para
 
 Não é necessário manter uma lista de migrações em um arquivo de configuração separado. O migrador do Node lê os arquivos `NNNN_nome.sql` de `database/postgres/migrations`, em ordem, compara cada versão com `platform.schema_migrations` e aplica apenas as pendentes. Os arquivos SQL são parte obrigatória deste handoff.
 
+O arquivo [`platform-ti-pcm.env.example`](platform-ti-pcm.env.example) acompanha este roteiro como modelo das variáveis de conexão. Ele não contém credenciais. Use os valores do ambiente do Samuel no `.env` local do backend; não substitua as demais variáveis existentes.
+
 Para aplicar as migrações depois de atualizar o código e configurar o ambiente do backend:
 
 ```powershell
