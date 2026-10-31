@@ -40,7 +40,7 @@ export class AdminRepository {
       { code: 'TECNICO', name: 'Técnico de manutenção', type: 'OPERATOR', capabilities: ['maintenance.executions.read', 'maintenance.executions.perform', 'workflow.notifications.read'] },
       { code: 'QUALIDADE', name: 'Técnico de qualidade', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
       { code: 'SEGURANCA', name: 'Técnico de segurança', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
-      { code: 'PRODUCAO', name: 'Produção', type: 'OPERATOR', capabilities: ['maintenance.occurrences.read', 'maintenance.occurrences.report', 'maintenance.stops.read', 'workflow.notifications.read'] },
+      { code: 'PRODUCAO', name: 'Produção', type: 'OPERATOR', capabilities: ['cmms.structure.read', 'cmms.assets.read', 'maintenance.occurrences.read', 'maintenance.occurrences.report', 'maintenance.stops.read', 'workflow.notifications.read'] },
     ] as const;
 
     for (const definition of definitions) {

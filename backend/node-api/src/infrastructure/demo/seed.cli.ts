@@ -447,6 +447,8 @@ async function seedIdentities(
   }
 
   for (const capabilityCode of [
+    'cmms.structure.read',
+    'cmms.assets.read',
     'maintenance.occurrences.read',
     'maintenance.occurrences.report',
     'maintenance.stops.read',
@@ -455,12 +457,13 @@ async function seedIdentities(
     await client.query(
       `
         INSERT INTO iam.role_capabilities (tenant_id, role_id, capability_id, effect)
-        SELECT $1, $2, capability.id, 'ALLOW'
-        FROM iam.capabilities capability
-        WHERE capability.code = $3
+        SELECT $1, role.id, capability.id, 'ALLOW'
+        FROM iam.roles role CROSS JOIN iam.capabilities capability
+        WHERE role.tenant_id=$1 AND role.id=ANY($2::uuid[])
+          AND capability.code = $3
         ON CONFLICT (tenant_id, role_id, capability_id) DO NOTHING
       `,
-      [tenantId, ids.operatorRole, capabilityCode],
+      [tenantId, [ids.operatorRole, ids.productionRole], capabilityCode],
     );
   }
 

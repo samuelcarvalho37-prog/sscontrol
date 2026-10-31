@@ -7,6 +7,7 @@ import { Pool, type PoolClient } from 'pg';
 
 import { buildApp } from '../src/app.js';
 import { MonitoringRepository } from '../src/modules/monitoring/monitoring.repository.js';
+import { OperationsRepository } from '../src/modules/operations/operations.repository.js';
 import { createTestEnvironment } from './helpers/environment.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -1442,6 +1443,18 @@ test(
     assert.equal(assumed.statusCode, 200, assumed.body);
     assert.equal(assumed.json().data.action_id, actionId);
     assert.equal(assumed.json().data.responsavel_id, ids.operator);
+    const claimedContext = await app.inject({
+      method: 'GET', url: `/v1/maintenance/operator-actions/${actionId}`,
+      headers: bearer(identities.operator),
+    });
+    assert.equal(claimedContext.statusCode, 200, claimedContext.body);
+    const primaryParticipant = claimedContext.json<{ data: { participantes: {
+      user_id: string; papel: string; status: string; session_status: string;
+    }[] } }>().data.participantes.find(participant => participant.user_id === ids.operator);
+    assert.ok(primaryParticipant);
+    assert.equal(primaryParticipant.papel, 'PRIMARY');
+    assert.equal(primaryParticipant.status, 'PRIMARY');
+    assert.equal(primaryParticipant.session_status, 'STOPPED', 'Assumir a OS não inicia uma sessão de trabalho');
     await transaction(pool, async (client) => {
       await client.query(`SELECT set_config('app.tenant_id',$1,true)`, [randomUUID()]);
       const invisibleParticipants = await client.query(
@@ -2838,5 +2851,35 @@ test(
       identities.safety,
       'Pós-intervenção validada somente pela Segurança',
     );
+    await transaction(pool, async client => {
+      const repository = new OperationsRepository();
+      await repository.resolveOccurrenceForCompletedWorkOrder(client, occurrenceWorkOrderId);
+      const pending = await client.query('SELECT status FROM maintenance.operational_occurrences WHERE id=$1', [occurrenceId]);
+      assert.equal(pending.rows[0].status, 'IN_TREATMENT', 'OS ainda aberta não encerra ocorrência');
+      await client.query("UPDATE maintenance.work_orders SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1", [occurrenceWorkOrderId]);
+      await repository.resolveOccurrenceForCompletedWorkOrder(client, occurrenceWorkOrderId);
+      const resolved = await client.query('SELECT status,treatment_status,closed_at FROM maintenance.operational_occurrences WHERE id=$1', [occurrenceId]);
+      assert.equal(resolved.rows[0].status, 'RESOLVED');
+      assert.equal(resolved.rows[0].treatment_status, 'RESOLVED');
+      assert.ok(resolved.rows[0].closed_at);
+      await repository.resolveOccurrenceForCompletedWorkOrder(client, occurrenceWorkOrderId);
+      const repeated = await client.query('SELECT closed_at FROM maintenance.operational_occurrences WHERE id=$1', [occurrenceId]);
+      assert.deepEqual(repeated.rows[0].closed_at, resolved.rows[0].closed_at);
+      const pendingStopId = randomUUID();
+      await client.query(`INSERT INTO maintenance.equipment_stops
+        (id,tenant_id,asset_id,origin,stop_type,started_at,started_by,reason)
+        VALUES ($1,$2,$3,'MANAGER','PLANNED',clock_timestamp(),$4,'Teste de retorno operacional')`,
+      [pendingStopId, tenantId, ids.asset, ids.admin]);
+      await client.query("UPDATE maintenance.operational_occurrences SET status='IN_TREATMENT',treatment_status='WORK_ORDER_CREATED',closed_at=NULL,equipment_stop_id=$2 WHERE id=$1", [occurrenceId, pendingStopId]);
+      await repository.resolveOccurrenceForCompletedWorkOrder(client, occurrenceWorkOrderId);
+      const awaitingReturn = await client.query('SELECT status FROM maintenance.operational_occurrences WHERE id=$1', [occurrenceId]);
+      assert.equal(awaitingReturn.rows[0].status, 'IN_TREATMENT', 'A conclusão técnica não substitui o retorno operacional');
+      await client.query("UPDATE maintenance.equipment_stops SET status='IN_MAINTENANCE' WHERE id=$1", [pendingStopId]);
+      await client.query("UPDATE maintenance.equipment_stops SET status='WAITING_OPERATIONAL_RETURN' WHERE id=$1", [pendingStopId]);
+      await client.query("UPDATE maintenance.equipment_stops SET status='COMPLETED',completed_at=clock_timestamp(),completed_by=$2 WHERE id=$1", [pendingStopId, ids.admin]);
+      await repository.resolveOccurrenceForCompletedWorkOrder(client, occurrenceWorkOrderId);
+      const returned = await client.query('SELECT status FROM maintenance.operational_occurrences WHERE id=$1', [occurrenceId]);
+      assert.equal(returned.rows[0].status, 'RESOLVED');
+    });
   },
 );

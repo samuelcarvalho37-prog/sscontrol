@@ -12,6 +12,7 @@ export interface AppNavigationProps {
   validationCount: number
   showAdmin: boolean
   canValidate: boolean
+  canReportOccurrence?: boolean
   isTechnician?: boolean
   canReadAnalytics?: boolean
   canManageMaintenance?: boolean
@@ -33,6 +34,7 @@ export function AppNavigation({
   validationCount,
   showAdmin,
   canValidate,
+  canReportOccurrence = false,
   isTechnician = false,
   canReadAnalytics = true,
   canManageMaintenance = false,
@@ -41,7 +43,7 @@ export function AppNavigation({
 }: AppNavigationProps) {
   const visibleItems = ITEMS.filter((item) => {
     if (item.id === 'admin') return showAdmin
-    if (item.id === 'home') return canValidate || isTechnician
+    if (item.id === 'home') return canValidate || isTechnician || canReportOccurrence
     if (item.id === 'validations') return canReadAnalytics
     if (item.id === 'maintenance') return canManageMaintenance
     if (item.id === 'scan') return compactDevice
@@ -65,7 +67,7 @@ export function AppNavigation({
               </span>
             ) : null}
           </span>
-          <span>{id === 'home' && isTechnician ? 'Ordens' : label}</span>
+          <span>{id === 'home' && isTechnician ? 'Ordens' : id === 'home' && canReportOccurrence && !canValidate ? 'Ocorrências' : label}</span>
         </button>
       ))}
     </nav>

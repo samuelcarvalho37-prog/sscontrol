@@ -1478,6 +1478,9 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     const requestGate = detailRequestGateRef.current
     if (!requestGate) return
     const request = requestGate.begin(workOrderId)
+    // The detail panel belongs to the dashboard; leave the focused list before
+    // selecting an order so the panel is mounted and can receive focus.
+    setInsight(null)
     setSelectedWorkOrderId(workOrderId)
     setSelectedWorkOrderCode(publicCode ?? '')
     setSelectedOrderLoading(true)
@@ -1626,6 +1629,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   }
 
   async function openCreateOrder(mode: 'WORK_ORDER' | 'PREVENTIVE' | 'IMPROVEMENT' = 'WORK_ORDER', notification?: GestorNotification) {
+    setInsight(null)
     createOccurrenceAssetResolverRef.current?.cancel()
     resetCreateOrderForm()
     setCreateOrderMode(mode)
@@ -2010,6 +2014,12 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     )}
     {assignmentSuccess ? <div className="pcm-assignment-success" role="status">{assignmentSuccess}</div> : null}
     {createOrderSuccess ? <div className="pcm-assignment-success" role="status">{createOrderSuccess}</div> : null}
+
+    <nav className="pcm-operational-actions" aria-label="Ações de manutenção">
+      <button type="button" onClick={() => void openCreateOrder()} disabled={demoMode || loading || plansLoading || publishedPlans.length === 0}>Criar ordem de serviço</button>
+      <button type="button" onClick={() => void openCreateOrder('PREVENTIVE')} disabled={demoMode || loading || plansLoading || preventivePlans.length === 0}>Programar preventiva</button>
+      <button type="button" onClick={showOperationalQueue} disabled={loading}>Abrir fila completa</button>
+    </nav>
 
       {!displayData && loading && (
         <div className="pcm-loading" role="status">

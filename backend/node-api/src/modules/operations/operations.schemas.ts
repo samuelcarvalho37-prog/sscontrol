@@ -4,8 +4,10 @@ const uuid = Type.String({ format: 'uuid' });
 const nullableUuid = Type.Union([Type.Null(), uuid]);
 const nullableDateTime = Type.Union([Type.Null(), Type.String({ format: 'date-time' })]);
 const nullableText = Type.Union([Type.Null(), Type.String({ maxLength: 4_000 })]);
-const nullableNumber = Type.Union([Type.Null(), Type.Number()]);
-const nullableBoolean = Type.Union([Type.Null(), Type.Boolean()]);
+// A single JSON Schema type union prevents Ajv's anyOf coercion from turning
+// valid zero/false responses into null before they reach the service.
+const nullableNumber = Type.Unsafe<number | null>({ type: ['number', 'null'] });
+const nullableBoolean = Type.Unsafe<boolean | null>({ type: ['boolean', 'null'] });
 
 export const operationsIdentifierParamsSchema = Type.Object(
   {

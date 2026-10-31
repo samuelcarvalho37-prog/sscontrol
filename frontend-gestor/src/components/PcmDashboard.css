@@ -2582,6 +2582,11 @@
 .pcm-dashboard--focus .pcm-create-order-panel,
 .pcm-dashboard--focus .pcm-part-shortages-panel { display: none !important; }
 .pcm-dashboard--focus .pcm-order-detail { display: block; }
+.pcm-operational-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.pcm-operational-actions button { min-height: 40px; padding: 8px 14px; border: 1px solid #aac4db; border-radius: 8px; background: #fff; color: #174a76; font: inherit; font-weight: 700; cursor: pointer; }
+.pcm-operational-actions button:first-child { background: #125da2; color: #fff; border-color: #125da2; }
+.pcm-operational-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.pcm-operational-actions button:focus-visible { outline: 3px solid #63a8e7; outline-offset: 2px; }
 .pcm-dashboard:not(.pcm-dashboard--focus) .pcm-workbench,
 .pcm-dashboard:not(.pcm-dashboard--focus) .pcm-orders,
 .pcm-dashboard:not(.pcm-dashboard--focus) .pcm-plans-overview,

@@ -181,6 +181,7 @@ function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNot
   const [handoffNextStep,setHandoffNextStep]=useState('')
   const [handoffHasPending,setHandoffHasPending]=useState(true)
   const lastNotificationFocus = useRef('')
+  const lastOpenedAction = useRef('')
 
   const reload = useCallback(async () => {
     setLoading(true); setError('')
@@ -253,6 +254,14 @@ function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNot
   useEffect(() => () => detailLoader.clear(), [detailLoader])
 
   async function open(actionId: string) {
+    if (lastOpenedAction.current !== actionId) {
+      setCompletion({ resultado: '', observacao: null, modo_parada: 'NO_STOP' })
+      setResponses({})
+      setHasSupportTechnicians(false)
+      setSupportTechnicianIds(['', ''])
+      setPauseReason('')
+      lastOpenedAction.current = actionId
+    }
     setBlockers([])
     await detailLoader.open(actionId)
   }
@@ -344,6 +353,7 @@ function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNot
       setExecution(await pauseExecution(execution.id, pauseReasonCode, reason))
       setPauseReason('')
       await reload()
+      if (selected) await detailLoader.open(selected.id)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível pausar a execução.') }
     finally { setBusy(false) }
   }
@@ -354,6 +364,7 @@ function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNot
     try {
       setExecution(await resumeExecution(execution.id))
       await reload()
+      if (selected) await detailLoader.open(selected.id)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível retomar a execução.') }
     finally { setBusy(false) }
   }

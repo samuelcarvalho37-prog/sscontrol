@@ -243,12 +243,13 @@ export class OperationsRepository {
   async listActionParticipants(client: PoolClient, actionId: string, currentUserId: string): Promise<readonly OperationsRow[]> {
     const result = await client.query<OperationsRow>(
       `SELECT participant.id,participant.user_id,participant.participant_role,
-              participant.invitation_status,participant.invited_by,participant.invited_at,
+              participant.invitation_status,participant.participant_role AS papel,
+              participant.invitation_status AS status,participant.invited_by,participant.invited_at,
               participant.responded_at,participant.joined_at,participant.left_at,
               user_account.name AS nome,user_account.employee_number AS matricula,
               participant.user_id=$2 AS sou_destinatario,
               COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(interval.ended_at,clock_timestamp())-interval.started_at)))::bigint,0) AS worked_seconds,
-              CASE WHEN bool_or(interval.ended_at IS NULL) THEN 'WORKING'
+              CASE WHEN bool_or(interval.id IS NOT NULL AND interval.ended_at IS NULL) THEN 'WORKING'
                    WHEN participant.invitation_status='INVITED' THEN 'INVITED'
                    ELSE 'STOPPED' END AS session_status
        FROM maintenance.work_order_action_participants participant
@@ -1223,6 +1224,7 @@ export class OperationsRepository {
       `UPDATE maintenance.work_orders SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1`,
       [orderId],
     );
+    await this.resolveOccurrenceForCompletedWorkOrder(client, orderId);
     await client.query(
       `UPDATE workflow.notification_recipients recipient
        SET dismissed_at=COALESCE(recipient.dismissed_at,clock_timestamp()),
@@ -1233,6 +1235,26 @@ export class OperationsRepository {
          AND notification.entity_type IN ('WORK_ORDER','ORDEM_SERVICO','MAINTENANCE_WORK_ORDER')
          AND recipient.dismissed_at IS NULL`,
       [orderId],
+    );
+  }
+
+  async resolveOccurrenceForCompletedWorkOrder(client: PoolClient, workOrderId: unknown): Promise<void> {
+    await client.query(
+      `UPDATE maintenance.operational_occurrences occurrence
+       SET status='RESOLVED',treatment_status='RESOLVED',
+           closed_at=COALESCE(occurrence.closed_at,clock_timestamp()),updated_at=clock_timestamp()
+       FROM maintenance.work_orders work_order
+       WHERE work_order.id=$1 AND work_order.status='COMPLETED'
+         AND work_order.tenant_id=occurrence.tenant_id
+         AND work_order.origin_type='OCCURRENCE' AND work_order.origin_entity_id=occurrence.id
+         AND occurrence.work_order_id=work_order.id
+         AND occurrence.status NOT IN ('RESOLVED','CLOSED','CANCELLED')
+         AND (occurrence.equipment_stop_id IS NULL OR EXISTS (
+           SELECT 1 FROM maintenance.equipment_stops stop
+           WHERE stop.id=occurrence.equipment_stop_id AND stop.tenant_id=occurrence.tenant_id
+             AND stop.status='COMPLETED'
+         ))`,
+      [workOrderId],
     );
   }
 
@@ -3097,6 +3119,7 @@ export class OperationsRepository {
        WHERE work_order.id=$1 AND work_order.status='IN_PROGRESS'`,
       [execution.work_order_id],
     );
+    await this.resolveOccurrenceForCompletedWorkOrder(client, execution.work_order_id);
   }
 
   async reviewCompletedAction(
@@ -3119,6 +3142,7 @@ export class OperationsRepository {
          WHERE id=$1`,
         [action.work_order_id],
       );
+      await this.resolveOccurrenceForCompletedWorkOrder(client, action.work_order_id);
       return;
     }
     await client.query(

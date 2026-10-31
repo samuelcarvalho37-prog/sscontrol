@@ -575,6 +575,7 @@ function TenantApp() {
           validationCount={validationCount}
           showAdmin={false}
           canValidate={technicalContext?.pode_validar ?? false}
+          canReportOccurrence={canReportOccurrence}
           isTechnician={isTechnician}
           canReadAnalytics={canReadAnalytics}
           canManageMaintenance={canManageMaintenance}
