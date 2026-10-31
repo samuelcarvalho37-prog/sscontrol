@@ -1,5 +1,6 @@
 const API_URL_KEY = "fab-control.gestor-api-url";
 const GESTOR_TOKEN_SESSION_KEY = "fab-control.gestor-token";
+const GESTOR_API_TARGET_SESSION_KEY = "fab-control.gestor-api-target";
 const LEGACY_GESTOR_TOKEN_PERSISTENT_KEY =
   "fab-control.gestor-token-persistent";
 
@@ -67,6 +68,22 @@ export function getApiUrl(): string {
   return readLocalStorage(API_URL_KEY);
 }
 
+export function getGestorApiTargetBinding(): string {
+  const apiUrl = getApiUrl().trim().replace(/\/+$/, "");
+  const transport = usesNodeApi() ? "node" : "apps-script";
+  const legacyApiUrl = transport === "apps-script" ? getLegacyApiUrl() : "";
+  return JSON.stringify({
+    apiUrl,
+    legacyApiUrl,
+    tenant: getDevelopmentTenantSlug(),
+    transport,
+  });
+}
+
+export function saveGestorApiTargetBinding(value: string): void {
+  writeSessionStorage(GESTOR_API_TARGET_SESSION_KEY, value);
+}
+
 export function getLegacyApiUrl(): string {
   return (
     (import.meta.env.VITE_APPS_SCRIPT_API_URL as string | undefined)?.trim() ??
@@ -98,17 +115,23 @@ export function saveApiUrl(value: string): void {
 
 export function getGestorToken(): string {
   clearLegacyPersistentToken();
-  return (
-    readSessionStorage(GESTOR_TOKEN_SESSION_KEY) ||
-    inMemoryGestorToken ||
-    environmentGestorToken()
-  );
+  const sessionToken = readSessionStorage(GESTOR_TOKEN_SESSION_KEY) || inMemoryGestorToken;
+  const targetBinding = readSessionStorage(GESTOR_API_TARGET_SESSION_KEY);
+  if (
+    sessionToken &&
+    targetBinding &&
+    targetBinding !== getGestorApiTargetBinding()
+  ) {
+    return "";
+  }
+  return sessionToken || environmentGestorToken();
 }
 
 export function saveGestorToken(value: string): void {
   clearLegacyPersistentToken();
   inMemoryGestorToken = value.trim();
   writeSessionStorage(GESTOR_TOKEN_SESSION_KEY, inMemoryGestorToken);
+  if (!inMemoryGestorToken) writeSessionStorage(GESTOR_API_TARGET_SESSION_KEY, "");
 }
 
 export function clearGestorToken(): void {

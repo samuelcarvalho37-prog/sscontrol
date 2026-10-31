@@ -225,7 +225,7 @@ export async function prepareWorkspace(
   const warmup = await warmupGestor(session.token, signal)
 
   const verifiedModules = session.user.capacidades !== undefined
-    ? await prepareCapabilityWorkspace(session.user.capacidades, signal)
+    ? await prepareCapabilityWorkspace(role, session.user.capacidades, signal)
     : role === 'ADMIN'
     ? await prepareAdminWorkspace(signal, report)
     : await prepareManagerWorkspace(signal, report)
@@ -248,9 +248,17 @@ export async function prepareWorkspace(
   }
 }
 
-async function prepareCapabilityWorkspace(capabilities: string[], signal: AbortSignal): Promise<number> {
+async function prepareCapabilityWorkspace(
+  role: WorkspaceStartupRole,
+  capabilities: string[],
+  signal: AbortSignal,
+): Promise<number> {
   const tasks: StartupTask[] = []
-  if (capabilities.includes('maintenance.work-orders.read') || capabilities.includes('maintenance.work-orders.review')) {
+  const isAdmin = role.trim().toUpperCase() === 'ADMIN'
+  const canLoadTechnicalWorkflow =
+    !isAdmin &&
+    capabilities.includes('maintenance.work-orders.review')
+  if (canLoadTechnicalWorkflow) {
     tasks.push(() => getGestorTechnicalContext(signal), () => getGestorTechnicalDemands(signal))
   }
   if (capabilities.includes('workflow.notifications.read')) tasks.push(() => getUnreadNotificationCount(signal))

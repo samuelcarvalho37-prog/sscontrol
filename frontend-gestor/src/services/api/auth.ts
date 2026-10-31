@@ -17,6 +17,7 @@ export interface GestorSession {
   token: string
   startedAt: string
   expiresAt: number
+  apiTarget?: string
   user: AuthenticatedGestor
 }
 

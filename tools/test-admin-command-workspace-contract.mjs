@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const root = path.resolve(import.meta.dirname, '..')
-const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8').replace(/^\uFEFF/, '')
+const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
 const assert = (condition, message) => {
   if (!condition) throw new Error(`Contrato do Command Workspace inválido: ${message}`)
 }
@@ -69,6 +69,8 @@ assert(governance.includes('admin-audit-dialog__close') && governance.includes('
 assert(styles.includes('.admin-audit-dialog__done') && styles.includes('.admin-audit-inspect-button'), 'botões da auditoria não possuem estilos de produto')
 assert(styles.includes(".admin-document-form input[type='file']::file-selector-button"), 'upload documental permanece com aparência nativa do navegador')
 assert(styles.includes('.admin-catalog-dialog > section > footer button'), 'ações dos popups administrativos não possuem padrão visual compartilhado')
+assert(catalog.includes('Checklist validado') && catalog.includes("selectedEntity === 'planos' ? 'Salvar rascunho'"), 'criação do plano não exige checklist e não esclarece o salvamento em rascunho')
+assert(catalog.includes('admin-catalog-dialog__error') && styles.includes('button.admin-catalog-save-button:last-child:not(:only-child)'), 'validação ou botão visível do plano preventivo ausente')
 assert(styles.includes('.admin-backup-confirm input:checked::after'), 'confirmação de backup permanece com checkbox nativo')
 assert(styles.includes('minmax(160px, 0.52fr)') && styles.includes('font-size: 0.74rem'), 'campos de seleção do Motor podem truncar opções')
 assert(configurationPanel.includes('configOptionLabel(option)'), 'opções do Motor não possuem rótulos legíveis')
@@ -104,14 +106,14 @@ assert(workspace.includes('useState<WorkspaceWindow[]>([])'), 'Workspace não in
 for (const layout of ['smart', 'focus', 'columns', 'rows', 'grid', 'cascade']) {
   assert(workspace.includes(`arrangeWindows('${layout}')`), `layout da vFinal ausente: ${layout}`)
 }
-for (const shellFeature of ['FAB CONTROL · ADMINISTRAÇÃO INDUSTRIAL', 'admin-profile-menu', 'Organizar ao abrir', 'DESEMPENHO DO WORKSPACE', 'Otimizar cache']) {
+for (const shellFeature of ['VORQIX · ADMINISTRAÇÃO INDUSTRIAL', 'admin-profile-menu', 'Organizar ao abrir', 'DESEMPENHO DO WORKSPACE', 'Otimizar cache']) {
   assert(workspace.includes(shellFeature), `refinamento da vFinal ausente: ${shellFeature}`)
 }
 assert(!workspace.includes('vFinal Enterprise'), 'tela inicial ainda exibe marcacao interna de desenvolvimento')
 assert(workspace.includes('CENTRAL DE AJUDA'), 'ajuda nao possui apresentacao de produto final')
 assert(workspace.includes('Em caso de dúvida, acesse a Central de Ajuda'), 'tela inicial nao direciona duvidas ao botao de ajuda')
 const railIcons = [...workspace.matchAll(/id: '[^']+'.+?Icon: (\w+)Icon/g)].map((match) => match[1])
-assert(railIcons.length === 15, 'catálogo do rail não contém os 15 módulos unificados esperados')
+assert(railIcons.length === 16, 'catálogo do rail não contém os 16 módulos unificados esperados')
 assert(new Set(railIcons).size === railIcons.length, 'rail repete ícones entre módulos')
 assert(styles.includes('.admin-desktop-workspace'), 'canvas do Workspace não foi estilizado')
 assert(styles.includes('resize: both'), 'janelas administrativas não podem ser redimensionadas')
@@ -227,5 +229,5 @@ assert(styles.includes('.admin-catalog-dialog'), 'cadastro sem formulário admin
 assert(styles.includes('.admin-governance-table'), 'governança sem layout de Command Workspace')
 
 console.log('CONTRATO DO COMMAND WORKSPACE APROVADO')
-console.log('15 módulos funcionais, cadastros assistidos, documentos, backup, intervenções e KPI conferidos')
+console.log('16 módulos funcionais, cadastros assistidos, documentos, backup, intervenções e KPI conferidos')
 console.log('Vínculos, concorrência, auditoria e workflow Admin -> Validador -> Operador protegidos')

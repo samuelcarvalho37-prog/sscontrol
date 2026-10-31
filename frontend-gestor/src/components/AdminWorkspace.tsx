@@ -29,6 +29,7 @@ import {
   AssetIcon,
   AuditIcon,
   BellIcon,
+  CalendarIcon,
   ChartIcon,
   ChecklistIcon,
   DashboardIcon,
@@ -110,7 +111,7 @@ const MODULES: WorkspaceModule[] = [
   { id: 'inventory', code: 'MP', label: 'Materiais e peças', description: 'Estoque técnico', Icon: PackageIcon, feature: 'CADASTROS' },
   { id: 'workforce', code: 'EQ', label: 'Equipes técnicas', description: 'Áreas, cargos e assinatura', Icon: UsersIcon, feature: 'GESTAO_TECNICA' },
   { id: 'operations', code: 'OS', label: 'Programação, intervenções e OS', description: 'Planejar, validar e liberar', Icon: WrenchIcon, feature: 'GESTAO_TECNICA' },
-  { id: 'plan-approvals', code: 'HP', label: 'Homologação de planos', description: 'Consultar e publicar planos em rascunho', Icon: ChecklistIcon, feature: 'GESTAO_TECNICA' },
+  { id: 'plan-approvals', code: 'HP', label: 'Homologação de planos', description: 'Consultar e publicar planos em rascunho', Icon: CalendarIcon, feature: 'GESTAO_TECNICA' },
   { id: 'analytics', code: 'BI', label: 'Indicadores', description: 'Confiabilidade, tempos e SLA', Icon: ChartIcon, feature: 'INDICADORES' },
   { id: 'documents', code: 'DT', label: 'Documentos', description: 'Arquivos e revisões', Icon: DocumentIcon, feature: 'DOCUMENTOS' },
   { id: 'imports', code: 'IM', label: 'Importar planilhas', description: 'Modelos e implantação', Icon: UploadIcon, feature: 'IMPORTACOES' },
@@ -922,7 +923,7 @@ export function AdminWorkspace({
 
       <header className="admin-desktop-topbar">
         <div className="admin-desktop-brand" aria-label="VORQIX — Unidade Industrial">
-          <img src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+          <img src={companyProfile.logo_data_url || '/vorqix-logo.png'} alt={companyProfile.nome || 'VORQIX — Unidade Industrial'} />
         </div>
 
         <button className="admin-desktop-command" type="button" onClick={() => setPaletteOpen(true)}>

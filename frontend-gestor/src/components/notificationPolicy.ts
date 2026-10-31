@@ -8,6 +8,7 @@ export type NotificationNavigation =
   | { kind: 'occurrence'; id: string }
   | { kind: 'technical-demand'; id: string }
   | { kind: 'part-shortage'; id: string }
+  | { kind: 'technician-action'; actionId?: string; workOrderId?: string }
   | null
 
 export function isQualitySafetyProfile(profile: string): boolean {
@@ -23,40 +24,82 @@ export function isOperationalOccurrenceNotification(
 }
 
 export function isNotificationActionableForProfile(
-  notification: Pick<GestorNotification, 'entidade_tipo'>,
+  notification: Pick<GestorNotification, 'tipo' | 'entidade_tipo' | 'entidade_id' | 'ordem_servico_id' | 'acao_ordem_servico_id'>,
   profile: string,
 ): boolean {
-  return !(
+  if (
     isQualitySafetyProfile(profile) &&
     isOperationalOccurrenceNotification(notification)
-  )
+  ) return false
+
+  if (upper(profile) === 'TECNICO') {
+    const entity = upper(notification.entidade_tipo)
+    const hasAction = Boolean(notification.acao_ordem_servico_id)
+    if (isOperationalOccurrenceNotification(notification)) return false
+    if (entity === 'ANALISES_TECNICAS' || entity === 'TECHNICAL_ANALYSIS') return hasAction
+    return hasAction || entity === 'OS_ACOES'
+  }
+
+  return true
 }
 
 export function isNotificationVisibleForProfile(
-  notification: Pick<GestorNotification, 'entidade_tipo'>,
+  notification: Pick<GestorNotification, 'tipo' | 'entidade_tipo' | 'entidade_id' | 'ordem_servico_id' | 'acao_ordem_servico_id'>,
   profile: string,
 ): boolean {
-  return !(
-    isQualitySafetyProfile(profile) &&
-    isOperationalOccurrenceNotification(notification)
-  )
+  return isNotificationActionableForProfile(notification, profile)
 }
 
 export function filterNotificationsForProfile(
   notifications: readonly GestorNotification[],
   profile: string,
 ): GestorNotification[] {
-  return notifications.filter((notification) =>
+  const visible = notifications.filter((notification) =>
     isNotificationVisibleForProfile(notification, profile),
+  )
+
+  if (!['PCM', 'GESTOR'].includes(upper(profile))) return visible
+
+  // Once a technical analysis exists, keep its actionable notification and
+  // suppress the earlier occurrence card so the same case is not presented
+  // as two separate work items.
+  const analyzedOccurrences = new Set(
+    visible
+      .filter((notification) => ['ANALISES_TECNICAS', 'TECHNICAL_ANALYSIS'].includes(upper(notification.entidade_tipo)))
+      .map((notification) => String(notification.ocorrencia_origem_id ?? '').trim())
+      .filter(Boolean),
+  )
+  return visible.filter((notification) =>
+    !isOperationalOccurrenceNotification(notification) ||
+    !analyzedOccurrences.has(String(notification.entidade_id ?? '').trim()),
   )
 }
 
 export function notificationNavigation(
-  notification: Pick<GestorNotification, 'tipo' | 'entidade_tipo' | 'entidade_id'>,
+  notification: Pick<GestorNotification, 'tipo' | 'entidade_tipo' | 'entidade_id' | 'ordem_servico_id' | 'acao_ordem_servico_id'>,
   profile: string,
 ): NotificationNavigation {
   const entityType = upper(notification.entidade_tipo)
   const id = String(notification.entidade_id ?? '').trim()
+  const normalizedProfile = upper(profile)
+  const isTechnician = normalizedProfile === 'TECNICO'
+
+  if (isTechnician) {
+    const actionId = String(notification.acao_ordem_servico_id ?? '').trim()
+    const workOrderId = String(notification.ordem_servico_id ?? '').trim()
+
+    if (entityType === 'OS_ACOES') {
+      return id ? { kind: 'technician-action', actionId: id } : null
+    }
+    if (actionId || workOrderId) {
+      return { kind: 'technician-action', ...(actionId ? { actionId } : {}), ...(workOrderId ? { workOrderId } : {}) }
+    }
+    if (['WORK_ORDER', 'ORDEM_SERVICO', 'MAINTENANCE_WORK_ORDER', 'ORDENS_SERVICO'].includes(entityType)) {
+      return id ? { kind: 'technician-action', workOrderId: id } : null
+    }
+    return null
+  }
+
   if (!id) return null
 
   if (entityType === 'WORK_ORDER_PART_SHORTAGE' && ['PCM', 'GESTOR'].includes(upper(profile))) {

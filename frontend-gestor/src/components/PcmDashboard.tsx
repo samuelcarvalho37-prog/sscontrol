@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { callApi } from '../services/api/client'
 import { getGestorToken } from '../services/api/config'
 import { getGestorActionDetail, getGestorNotifications, isGestorAuthenticationError } from '../services/api/gestor'
-import { createExternalService, getAdminIntervention, listAdminInterventions, listImprovementRequests, saveAdminIntervention, sendAdminInterventionForValidation, updateMaterialUsageCost } from '../services/api/interventions'
+import { cancelAdminIntervention, createExternalService, getAdminIntervention, listAdminInterventions, listImprovementRequests, saveAdminIntervention, sendAdminInterventionForValidation, updateMaterialUsageCost } from '../services/api/interventions'
 import type { ImprovementRequestSummary } from '../services/api/interventions'
 import { releaseMaintenanceWorkOrder } from '../services/api/maintenanceAssignments'
 import { PcmPartShortagesPanel } from './PcmPartShortagesPanel'
@@ -12,6 +12,7 @@ import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
 import type { GestorActionDetail, GestorNotification } from '../types/gestor'
 import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction } from './pcmOccurrenceAssetResolver'
+import { filterNotificationsForProfile } from './notificationPolicy'
 import { assertWorkOrderDetailMatchesSelection, createWorkOrderDetailRequestGate, focusWorkOrderDetail, loadOperationalWorkOrder, workOrderDetailHeadingCode } from './workOrderDetailNavigation'
 import {
   postInterventionPolicyLabel,
@@ -104,6 +105,8 @@ interface PcmData {
     tecnicos?: { id: string; nome: string; execucoes: number; segundos_apontados: number }[]
     execucoes_detalhadas?: {
       id: string
+      ordem_id: string
+      acao_id: string | null
       tecnico_nome: string
       ordem_codigo: string
       titulo: string
@@ -427,6 +430,8 @@ function humanWorkType(value: string) {
     CORRETIVA: 'Corretiva',
     PREVENTIVE: 'Preventiva',
     PREVENTIVA: 'Preventiva',
+    LUBRICATION: 'Lubrificação',
+    LUBRIFICACAO: 'Lubrificação',
     PREDICTIVE: 'Preditiva',
     PREDITIVA: 'Preditiva',
     IMPROVEMENT: 'Melhoria',
@@ -479,7 +484,7 @@ function MonthlyMttrChart({ items, loading }: { items: MonthlyMttrPoint[]; loadi
   )
 }
 
-function PcmReports({ report, onExport, onPrint }: { report: NonNullable<PcmData['relatorios']>; onExport: () => void; onPrint: () => void }) {
+function PcmReports({ report, onExport, onPrint, onOpenWorkOrder }: { report: NonNullable<PcmData['relatorios']>; onExport: () => void; onPrint: () => void; onOpenWorkOrder: (workOrderId: string, publicCode: string) => void }) {
   const orders = report.ordens ?? {}
   const preventive = report.preventivas ?? {}
   const technicians = report.tecnicos ?? []
@@ -516,9 +521,25 @@ function PcmReports({ report, onExport, onPrint }: { report: NonNullable<PcmData
       {(materialCosts.por_ativo ?? []).length === 0 ? <EmptyState>Não houve consumo de material no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>Ativo</th><th>SKUs consumidos</th><th>Custo total</th></tr></thead><tbody>{materialCosts.por_ativo?.map(item => <tr key={item.ativo_tag}><td><strong>{item.ativo_tag}</strong><br /><small>{item.ativo_nome}</small></td><td>{item.itens_consumidos}</td><td><strong>{formatCurrency(item.custo_total)}</strong></td></tr>)}</tbody></table></div>}
     </article>
     <article className="pcm-reports__team"><div><span className="pcm-section-kicker">EXECUÇÕES CONCLUÍDAS</span><h3>Horários e tempo líquido</h3></div>
-      {executions.length === 0 ? <EmptyState>Não há horários de execução concluída no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>OS</th><th>Técnico</th><th>Início</th><th>Conclusão</th><th>Tempo líquido</th><th>Pausas</th><th>Materiais / custo</th></tr></thead><tbody>{executions.map(item => <tr key={item.id}><td><strong>{item.ordem_codigo}</strong><br /><small>{item.ativo_tag} · {item.titulo}</small></td><td>{item.tecnico_nome}</td><td>{formatDateTime(item.iniciada_em)}</td><td>{formatDateTime(item.concluida_em)}</td><td>{duration(item.duracao_segundos)}</td><td>{duration(item.segundos_pausados)}</td><td>{item.itens_materiais > 0 ? <><strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(item.custo_materiais_total))}</strong><br /><small>{item.itens_materiais} SKU(s)</small></> : <small>Sem consumo</small>}</td></tr>)}</tbody></table></div>}
+      {executions.length === 0 ? <EmptyState>Não há horários de execução concluída no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>OS</th><th>Técnico</th><th>Início</th><th>Conclusão</th><th>Tempo líquido</th><th>Pausas</th><th>Materiais / custo</th></tr></thead><tbody>{executions.map(item => <tr key={item.id} className="pcm-execution-row" tabIndex={0} aria-label={`Abrir informações da OS ${item.ordem_codigo}`} onClick={() => onOpenWorkOrder(item.ordem_id, item.ordem_codigo)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenWorkOrder(item.ordem_id, item.ordem_codigo) } }}><td><button type="button" className="pcm-order-link" aria-label={`Abrir detalhes da ordem ${item.ordem_codigo}`} onClick={event => { event.stopPropagation(); onOpenWorkOrder(item.ordem_id, item.ordem_codigo) }}><strong>{item.ordem_codigo}</strong></button><br /><small>{item.ativo_tag} · {item.titulo}</small></td><td>{item.tecnico_nome}</td><td>{formatDateTime(item.iniciada_em)}</td><td>{formatDateTime(item.concluida_em)}</td><td>{duration(item.duracao_segundos)}</td><td>{duration(item.segundos_pausados)}</td><td>{item.itens_materiais > 0 ? <><strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(item.custo_materiais_total))}</strong><br /><small>{item.itens_materiais} SKU(s)</small></> : <small>Sem consumo</small>}</td></tr>)}</tbody></table></div>}
     </article>
   </section>
+}
+
+function displaySectorName(value: string | null | undefined) {
+  const name = value?.trim() ?? ''
+  const normalized = name.toLocaleUpperCase('pt-BR')
+
+  // Repair only the two known catalog labels whose accented bytes were
+  // replaced before reaching the UI. Keep all other names untouched.
+  if (/^FERMENTA.{0,3}O\s+E\s+MATURA.{0,3}O$/.test(normalized)) {
+    return 'FERMENTAÇÃO E MATURAÇÃO'
+  }
+  if (/^TRATAMENTO\s+DE\s+.{0,2}GUA$/.test(normalized)) {
+    return 'TRATAMENTO DE ÁGUA'
+  }
+
+  return name || 'Não informado'
 }
 
 function toOperationalOrder(action: AdminIntervention): OperationalOrder {
@@ -534,7 +555,7 @@ function toOperationalOrder(action: AdminIntervention): OperationalOrder {
     id: action.id,
     code,
     equipment,
-    sector: action.setor_nome || 'Não informado',
+    sector: displaySectorName(action.setor_nome),
     type: action.tipo || 'Não informado',
     priority: action.prioridade || 'NORMAL',
     responsible: action.responsavel_nome || 'Não atribuído',
@@ -601,6 +622,10 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   const [releaseError, setReleaseError] = useState('')
   const [prepareBusy, setPrepareBusy] = useState(false)
   const [prepareError, setPrepareError] = useState('')
+  const [cancelWorkOrderOpen, setCancelWorkOrderOpen] = useState(false)
+  const [cancelWorkOrderReason, setCancelWorkOrderReason] = useState('')
+  const [cancelWorkOrderBusy, setCancelWorkOrderBusy] = useState(false)
+  const [cancelWorkOrderError, setCancelWorkOrderError] = useState('')
   const [assignmentSuccess, setAssignmentSuccess] = useState('')
   const detailRequestGateRef = useRef<ReturnType<typeof createWorkOrderDetailRequestGate> | null>(null)
   detailRequestGateRef.current ??= createWorkOrderDetailRequestGate()
@@ -783,7 +808,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     void getGestorNotifications(controller.signal)
       .then(notifications => {
         const today = new Date().toDateString()
-        setTodayNotifications(notifications.filter(notification => {
+        setTodayNotifications(filterNotificationsForProfile(notifications, 'PCM').filter(notification => {
           const createdAt = notification.criado_em ? new Date(notification.criado_em) : null
           return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt.toDateString() === today
         }))
@@ -1054,6 +1079,9 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     setSelectedOrder(null)
     setReleaseError('')
     setPrepareError('')
+    setCancelWorkOrderOpen(false)
+    setCancelWorkOrderReason('')
+    setCancelWorkOrderError('')
     try {
       const detail = await getAdminIntervention(request.workOrderId)
       assertWorkOrderDetailMatchesSelection(detail, request)
@@ -1092,6 +1120,9 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     setSelectedOrderLoading(false)
     setReleaseError('')
     setPrepareError('')
+    setCancelWorkOrderOpen(false)
+    setCancelWorkOrderReason('')
+    setCancelWorkOrderError('')
   }
 
   useEffect(() => {
@@ -1132,7 +1163,8 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   )
 
   const executablePlans = useMemo(
-    () => publishedPlans.filter(plan => createOrderMode !== 'PREVENTIVE' || ['PREVENTIVE', 'PREVENTIVA'].includes(normalize(plan.workType))),
+    () => publishedPlans.filter(plan => ['CORRECTIVE', 'CORRETIVA', 'PREVENTIVE', 'PREVENTIVA', 'LUBRICATION', 'LUBRIFICACAO'].includes(normalize(plan.workType))
+      && (createOrderMode !== 'PREVENTIVE' || ['PREVENTIVE', 'PREVENTIVA'].includes(normalize(plan.workType)))),
     [publishedPlans, createOrderMode],
   )
 
@@ -1453,6 +1485,30 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     }
   }
 
+  async function cancelSelectedWorkOrder() {
+    if (!selectedOrder || normalize(selectedOrder.status) !== 'DRAFT') return
+    const reason = cancelWorkOrderReason.trim()
+    if (reason.length < 10) {
+      setCancelWorkOrderError('Descreva o motivo com pelo menos 10 caracteres.')
+      return
+    }
+    setCancelWorkOrderBusy(true)
+    setCancelWorkOrderError('')
+    try {
+      await cancelAdminIntervention(selectedOrder.id, reason)
+      const detail = await getAdminIntervention(selectedOrder.id)
+      setSelectedOrder(detail)
+      setCancelWorkOrderOpen(false)
+      setCancelWorkOrderReason('')
+      setAssignmentSuccess('OS cancelada. O registro e a justificativa foram preservados no histórico.')
+      reload()
+    } catch (cause) {
+      setCancelWorkOrderError(cause instanceof Error ? cause.message : 'Não foi possível cancelar a OS.')
+    } finally {
+      setCancelWorkOrderBusy(false)
+    }
+  }
+
   async function registerExternalService() {
     if (!selectedOrder || externalProvider.trim().length < 2 || externalDescription.trim().length < 3) return
     const parsedAmount = externalAmount.trim() === '' ? null : Number(externalAmount)
@@ -1674,7 +1730,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
             />
           </div>
 
-          {data.relatorios ? <PcmReports report={data.relatorios} onExport={exportPcmReport} onPrint={printPcmReport} /> : null}
+          {data.relatorios ? <PcmReports report={data.relatorios} onExport={exportPcmReport} onPrint={printPcmReport} onOpenWorkOrder={(workOrderId, publicCode) => void openWorkOrderById(workOrderId, publicCode)} /> : null}
 
 
           {improvementRequests.some(request => request.status === 'OPEN') ? <section className="pcm-panel pcm-orders" aria-labelledby="pcm-improvement-requests-title">
@@ -1828,7 +1884,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
                     </div>
                     <div className="pcm-order-detail__fact">
                       <dt>Setor</dt>
-                      <dd>{selectedOrder.setor_nome || 'Não informado'}</dd>
+                      <dd>{displaySectorName(selectedOrder.setor_nome)}</dd>
                     </div>
                     <div className="pcm-order-detail__fact">
                       <dt>Responsável</dt>
@@ -1865,7 +1921,8 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
                       </li>)}
                     </ol>
                   </section> : null}
-                  {selectedActionDetail?.materiais?.length ? <section className="pcm-order-assignment"><h3>Materiais e custo da OS</h3><p>Saídas registradas pelo técnico. Valores desconhecidos podem ser complementados sem alterar a conclusão técnica.</p><ul>{selectedActionDetail.materiais.map((material, index) => { const data = material as Record<string, unknown>; const id = String(data.id ?? index); const quantity = Number(data.quantidade ?? 0); const unitCost = data.valor_unitario === null || data.valor_unitario === undefined ? null : Number(data.valor_unitario); const total = data.custo_total === null || data.custo_total === undefined ? null : Number(data.custo_total); const name = String(data.nome_facil ?? data.nome ?? 'Material'); return <li key={id}><strong>{String(data.sku ?? 'Sem SKU')} · {name}</strong><span> — {quantity} {String(data.unidade ?? '')} · {unitCost === null ? 'Preço pendente' : `${formatCurrency(unitCost)} cada · total ${formatCurrency(total ?? 0)}`}</span>{unitCost === null && data.id ? <span><input aria-label={`Valor unitário de ${name}`} type="number" min="0" step="0.0001" value={materialCostDrafts[id] ?? ''} onChange={event => setMaterialCostDrafts(current => ({ ...current, [id]: event.target.value }))} /><button type="button" onClick={() => void complementMaterialCost(id)}>Salvar valor</button></span> : null}</li> })}</ul></section> : null}
+                  {selectedActionDetail?.execucoes?.length ? <section className="pcm-order-assignment" aria-label="Registro da execução"><h3>Execução da manutenção</h3>{selectedActionDetail.execucoes.map((execution, index) => { const data = execution as Record<string, unknown>; const seconds = (value: unknown) => value === null || value === undefined ? null : Number(value); const supports = Array.isArray(data.tecnicos_auxiliares) ? data.tecnicos_auxiliares.map(person => String((person as Record<string, unknown>).nome ?? '')).filter(Boolean) : []; return <dl className="pcm-order-detail__facts" key={String(data.id ?? index)}><div className="pcm-order-detail__fact"><dt>Executada por</dt><dd>{String(data.operador_nome ?? 'Não informado')}</dd></div><div className="pcm-order-detail__fact"><dt>Início</dt><dd>{formatDateTime(String(data.iniciada_em ?? ''))}</dd></div><div className="pcm-order-detail__fact"><dt>Conclusão</dt><dd>{formatDateTime(String(data.concluida_em ?? ''))}</dd></div><div className="pcm-order-detail__fact"><dt>Tempo líquido</dt><dd>{duration(seconds(data.duracao_segundos))}</dd></div><div className="pcm-order-detail__fact"><dt>Pausas</dt><dd>{duration(seconds(data.segundos_pausados))}</dd></div>{supports.length ? <div className="pcm-order-detail__fact pcm-order-detail__fact--wide"><dt>Técnicos de apoio</dt><dd>{supports.join(', ')}</dd></div> : null}</dl> })}</section> : null}
+                  {selectedActionDetail ? <section className="pcm-order-assignment"><h3>Peças e materiais utilizados</h3><p>Saídas registradas pelo técnico. Valores desconhecidos podem ser complementados sem alterar a conclusão técnica.</p>{selectedActionDetail.materiais.length ? <ul>{selectedActionDetail.materiais.map((material, index) => { const data = material as Record<string, unknown>; const id = String(data.id ?? index); const quantity = Number(data.quantidade ?? 0); const unitCost = data.valor_unitario === null || data.valor_unitario === undefined ? null : Number(data.valor_unitario); const total = data.custo_total === null || data.custo_total === undefined ? null : Number(data.custo_total); const name = String(data.nome_facil ?? data.nome ?? 'Material'); return <li key={id}><strong>{String(data.sku ?? 'Sem SKU')} · {name}</strong><span> — {quantity} {String(data.unidade ?? '')} · {unitCost === null ? 'Preço pendente' : `${formatCurrency(unitCost)} cada · total ${formatCurrency(total ?? 0)}`}</span>{unitCost === null && data.id ? <span><input aria-label={`Valor unitário de ${name}`} type="number" min="0" step="0.0001" value={materialCostDrafts[id] ?? ''} onChange={event => setMaterialCostDrafts(current => ({ ...current, [id]: event.target.value }))} /><button type="button" onClick={() => void complementMaterialCost(id)}>Salvar valor</button></span> : null}</li> })}</ul> : <p>Nenhuma peça ou material foi registrado nesta execução.</p>}</section> : null}
                   <section className="pcm-order-assignment"><h3>Custos realizados</h3><p>Materiais: <strong>{formatCurrency(selectedOrder.custos?.materiais ?? 0)}</strong> · Serviços externos: <strong>{formatCurrency(selectedOrder.custos?.servicos_externos ?? 0)}</strong> · Total: <strong>{formatCurrency(selectedOrder.custos?.total_realizado ?? 0)}</strong></p>{selectedOrder.custos?.dados_financeiros_pendentes ? <p>Há valores pendentes de complementação financeira; isso não bloqueia a conclusão técnica.</p> : null}{selectedOrder.servicos_externos?.length ? <ul>{selectedOrder.servicos_externos.map(service => <li key={service.id}><strong>{service.prestador}</strong> — {service.descricao} · {service.valor === null ? 'Valor pendente' : formatCurrency(service.valor)}</li>)}</ul> : <p>Nenhum serviço externo registrado.</p>}{selectedOrder.modo_execucao !== 'INTERNAL' ? <div className="pcm-create-order-modal__form"><label>Prestador<input value={externalProvider} maxLength={240} onChange={event => setExternalProvider(event.target.value)} /></label><label>Descrição<input value={externalDescription} maxLength={2000} onChange={event => setExternalDescription(event.target.value)} /></label><label>Valor (opcional)<input type="number" min="0" step="0.01" value={externalAmount} onChange={event => setExternalAmount(event.target.value)} /></label><label>Data (opcional)<input type="date" value={externalDate} onChange={event => setExternalDate(event.target.value)} /></label><button type="button" disabled={externalBusy || externalProvider.trim().length < 2 || externalDescription.trim().length < 3} onClick={() => void registerExternalService()}>{externalBusy ? 'Registrando…' : 'Registrar serviço externo'}</button>{externalNotice ? <p role="status">{externalNotice}</p> : null}</div> : null}</section>
                   {selectedOrderReadyForPreparation ? <section className="pcm-order-assignment">
                     <h3>Preparar para execução</h3>
@@ -1874,6 +1931,15 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
                       {prepareBusy ? 'Preparando…' : 'Preparar e liberar OS'}
                     </button>
                     {prepareError ? <p className="pcm-order-detail__error" role="alert">{prepareError}</p> : null}
+                  </section> : null}
+                  {normalize(selectedOrder.status) === 'DRAFT' ? <section className="pcm-order-assignment">
+                    <h3>OS criada por engano?</h3>
+                    <p>É possível cancelar somente enquanto ainda está em rascunho. O registro não será apagado; a justificativa ficará na auditoria e a ocorrência poderá gerar outra OS.</p>
+                    {!cancelWorkOrderOpen ? <button type="button" onClick={() => { setCancelWorkOrderOpen(true); setCancelWorkOrderError('') }}>Cancelar esta OS</button> : <div className="pcm-create-order-modal__form">
+                      <label>Justificativa<textarea value={cancelWorkOrderReason} maxLength={1000} onChange={event => setCancelWorkOrderReason(event.target.value)} placeholder="Explique por que esta OS deve ser cancelada" /></label>
+                      <div><button type="button" onClick={() => setCancelWorkOrderOpen(false)} disabled={cancelWorkOrderBusy}>Manter OS</button><button type="button" onClick={() => void cancelSelectedWorkOrder()} disabled={cancelWorkOrderBusy || cancelWorkOrderReason.trim().length < 10}>{cancelWorkOrderBusy ? 'Cancelando…' : 'Confirmar cancelamento'}</button></div>
+                      {cancelWorkOrderError ? <p className="pcm-order-detail__error" role="alert">{cancelWorkOrderError}</p> : null}
+                    </div>}
                   </section> : null}
                   {selectedOrderReadyForRelease ? <section className="pcm-order-assignment">
                     <h3>Liberar para execução</h3>

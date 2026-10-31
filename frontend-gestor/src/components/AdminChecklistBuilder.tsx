@@ -241,7 +241,7 @@ function checklistDraftFromAnalysis(analysis: AdminTechnicalAnalysis): {
     nome: parameterName
       ? `Inspeção de ${parameterLabel} · ${analysis.titulo}`
       : `Checklist técnico · ${analysis.titulo}`,
-    tipo: parameterName ? 'PREDITIVA' : 'INSPECAO',
+    tipo: 'INSPECAO',
     criticidade: normalizedCriticality(analysis.prioridade),
     gatilho_tipo: parameterName ? 'PARAMETRO' : 'DIAS',
     gatilho_valor: parameterName
@@ -795,7 +795,7 @@ export function AdminChecklistBuilder({
                 <label><span>Ativo *</span><select value={plan.ativo_id} onChange={(event) => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter((asset) => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map((asset) => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
                 <label><span>Componente</span><select value={plan.componente_id || ''} onChange={(event) => updatePlan('componente_id', event.target.value)}><option value="">Checklist do ativo completo</option>{availableComponents.map((component) => <option value={component.id} key={component.id}>{String(component.tag || component.id)} · {String(component.nome)}</option>)}</select></label>
                 <label className="is-wide"><span>Nome do checklist *</span><input value={plan.nome} onChange={(event) => updatePlan('nome', event.target.value)} /></label>
-                <label><span>Tipo</span><select value={plan.tipo} onChange={(event) => updatePlan('tipo', event.target.value)}><option value="PREVENTIVA">Preventiva</option><option value="PREDITIVA">Preditiva</option><option value="INSPECAO">Inspeção</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option></select></label>
+                <label><span>Tipo</span><select value={plan.tipo} onChange={(event) => updatePlan('tipo', event.target.value)}>{plan.tipo === 'PREDITIVA' || plan.tipo === 'PREDICTIVE' ? <option value={plan.tipo} disabled>Preditiva · somente histórico</option> : null}<option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="LUBRIFICACAO">Lubrificação</option><option value="INSPECAO">Inspeção</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option></select></label>
                 <label><span>Criticidade</span><select value={plan.criticidade} onChange={(event) => updatePlan('criticidade', event.target.value)}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></label>
                 <label><span>Disparo</span><select value={plan.gatilho_tipo} onChange={(event) => updatePlan('gatilho_tipo', event.target.value)}><option value="DIAS">Periodicidade</option><option value="HORAS">Horímetro</option><option value="PARAMETRO">Parâmetro técnico</option></select></label>
                 <label><span>Intervalo *</span><input type="number" min="0.01" step="0.01" value={plan.gatilho_valor} onChange={(event) => updatePlan('gatilho_valor', event.target.value)} /></label>

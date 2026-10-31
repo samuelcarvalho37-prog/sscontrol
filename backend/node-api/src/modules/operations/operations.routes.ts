@@ -5,6 +5,7 @@ import type { OperationsController } from './operations.controller.js';
 import {
   actionReviewBodySchema,
   assignActionBodySchema,
+  cancelWorkOrderBodySchema,
   completeExecutionBodySchema,
   correctWorkOrderBodySchema,
   consumeMaterialBodySchema,
@@ -171,6 +172,16 @@ export function createOperationsRoutes(
         summary: 'Corrige uma OS devolvida e preserva a revisão anterior no histórico.',
       },
       handler: controller.correctWorkOrder,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/cancel', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: {
+        ...secured,
+        params: operationsIdentifierParamsSchema,
+        body: cancelWorkOrderBodySchema,
+        summary: 'Cancela uma OS ainda em rascunho, preserva o histórico e libera sua ocorrência para nova OS.',
+      },
+      handler: controller.cancelWorkOrder,
     });
     app.post('/v1/maintenance/work-orders/:workOrderId/submit-review', {
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),

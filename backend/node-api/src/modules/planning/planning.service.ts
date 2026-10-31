@@ -1213,6 +1213,12 @@ export class PlanningService {
       async (client) => {
         const plan = await this.repository.findPlan(client, planId, true);
         if (!plan) throw notFound('Plano de manutenção');
+        if (text(plan, 'plan_type') === 'PREDICTIVE') {
+          throw conflict(
+            'PREDICTIVE_RESERVED_FOR_V2',
+            'Planos preditivos são históricos e não podem ser alterados na V1.',
+          );
+        }
         const version = await this.repository.findEditablePlanVersion(client, planId, true);
         if (!version) {
           if (
@@ -1299,6 +1305,12 @@ export class PlanningService {
       async (client) => {
         const plan = await this.repository.findPlan(client, planId, true);
         if (!plan) throw notFound('Plano de manutenção');
+        if (text(plan, 'plan_type') === 'PREDICTIVE') {
+          throw conflict(
+            'PREDICTIVE_RESERVED_FOR_V2',
+            'Planos preditivos são históricos e não podem ser publicados na V1.',
+          );
+        }
         const version = await this.repository.findEditablePlanVersion(client, planId, true);
         if (!version) {
           throw conflict(
@@ -1335,6 +1347,12 @@ export class PlanningService {
       async (client) => {
         const plan = await this.repository.findPlan(client, planId, true);
         if (!plan) throw notFound('Plano de manutenção');
+        if (text(plan, 'plan_type') === 'PREDICTIVE') {
+          throw conflict(
+            'PREDICTIVE_RESERVED_FOR_V2',
+            'Planos preditivos são históricos e não podem receber novas revisões na V1.',
+          );
+        }
         if (await this.repository.findEditablePlanVersion(client, planId, true)) {
           throw conflict(
             'PLAN_DRAFT_ALREADY_EXISTS',

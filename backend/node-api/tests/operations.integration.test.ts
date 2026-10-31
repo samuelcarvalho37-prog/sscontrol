@@ -669,7 +669,7 @@ test(
     ]);
     assert.equal(firstOccurrenceConversion.statusCode, 200, firstOccurrenceConversion.body);
     assert.equal(concurrentOccurrenceConversion.statusCode, 200, concurrentOccurrenceConversion.body);
-    const occurrenceWorkOrderId: string = firstOccurrenceConversion.json().data.id;
+    let occurrenceWorkOrderId: string = firstOccurrenceConversion.json().data.id;
     assert.equal(concurrentOccurrenceConversion.json().data.id, occurrenceWorkOrderId);
 
     const repeatedOccurrenceConversion = await app.inject({
@@ -721,6 +721,35 @@ test(
         [occurrenceNotificationId],
       );
       assert.equal(notification.rows[0].status, 'RETRACTED');
+    });
+
+    const cancelledOccurrenceWorkOrder = await app.inject({
+      method: 'POST',url: `/v1/maintenance/work-orders/${occurrenceWorkOrderId}/cancel`,
+      headers: bearer(identities.admin),payload: { justificativa: 'OS criada em duplicidade para teste.' },
+    });
+    assert.equal(cancelledOccurrenceWorkOrder.statusCode, 200, cancelledOccurrenceWorkOrder.body);
+    assert.equal(cancelledOccurrenceWorkOrder.json().data.status, 'CANCELLED');
+    const cancelledWorkOrderId = occurrenceWorkOrderId;
+
+    const replacementOccurrenceConversion = await app.inject({
+      method: 'POST',url: '/v1/maintenance/work-orders',headers: bearer(identities.admin),
+      payload: occurrenceWorkOrderPayload,
+    });
+    assert.equal(replacementOccurrenceConversion.statusCode, 200, replacementOccurrenceConversion.body);
+    occurrenceWorkOrderId = replacementOccurrenceConversion.json().data.id;
+    assert.notEqual(occurrenceWorkOrderId, cancelledWorkOrderId);
+    await transaction(pool, async (client) => {
+      const historical = await client.query(
+        `SELECT status FROM maintenance.work_orders WHERE id=$1`,[cancelledWorkOrderId],
+      );
+      assert.equal(historical.rows[0].status, 'CANCELLED');
+      const linkedOccurrence = await client.query(
+        `SELECT status,treatment_status,work_order_id FROM maintenance.operational_occurrences WHERE id=$1`,
+        [occurrenceId],
+      );
+      assert.deepEqual(linkedOccurrence.rows[0], {
+        status: 'IN_TREATMENT',treatment_status: 'WORK_ORDER_CREATED',work_order_id: occurrenceWorkOrderId,
+      });
     });
 
     const missingOccurrenceConversion = await app.inject({
@@ -1878,9 +1907,10 @@ test(
       assert.equal(Number(persisted.rows[0]!.readings), 1);
       assert.equal(persisted.rows[0]!.work_order_status, 'COMPLETED');
     });
+    let criticalStandardOrderId: string | null = null;
     for (const scenario of [
       { type: 'CORRECTIVE', scheduled: true, release: false },
-      { type: 'PREDICTIVE', scheduled: true, release: false },
+      { type: 'LUBRICATION', scheduled: true, release: false },
       { type: 'PREVENTIVE', scheduled: true, release: false },
       { type: 'PREVENTIVE', scheduled: false, release: false },
     ]) {
@@ -1903,6 +1933,8 @@ test(
         },
       });
       assert.equal(ordinary.statusCode, 200, ordinary.body);
+      assert.equal(ordinary.json().data.prioridade, scenario.type === 'CORRECTIVE' ? 'CRITICAL' : 'LOW');
+      if (scenario.type === 'CORRECTIVE') criticalStandardOrderId = ordinary.json().data.id;
       const approved = await app.inject({
         method: 'POST',
         url: `/v1/maintenance/work-orders/${ordinary.json().data.id}/submit-review`,
@@ -1925,6 +1957,19 @@ test(
       assert.equal(released.statusCode, 200, released.body);
       assert.equal(released.json().data.status, 'RELEASED');
     }
+    assert.ok(criticalStandardOrderId);
+    const priorityOrderedWorkOrders = await app.inject({
+      method: 'GET',
+      url: '/v1/maintenance/work-orders?limite=100',
+      headers: bearer(identities.admin),
+    });
+    assert.equal(priorityOrderedWorkOrders.statusCode, 200, priorityOrderedWorkOrders.body);
+    const orderedWorkOrders = priorityOrderedWorkOrders.json().data.itens as { id: string; prioridade: string }[];
+    const criticalOrderIndex = orderedWorkOrders.findIndex(order => order.id === criticalStandardOrderId);
+    assert.notEqual(criticalOrderIndex, -1);
+    assert.equal(orderedWorkOrders[criticalOrderIndex]?.prioridade, 'CRITICAL');
+    const firstNonCriticalOrderIndex = orderedWorkOrders.findIndex(order => order.prioridade !== 'CRITICAL');
+    if (firstNonCriticalOrderIndex >= 0) assert.ok(criticalOrderIndex < firstNonCriticalOrderIndex);
     const finalPcm = await app.inject({method:'GET',url:pcmUrl,headers:bearer(identities.admin)});
     assert.equal(finalPcm.statusCode,200,finalPcm.body);
     assert.equal(finalPcm.json().data.pcm.atual.tecnicos_em_atividade,0);
@@ -2045,6 +2090,8 @@ test(
        WHERE notification.tenant_id=$1 AND notification.entity_id=$2`,[tenantId,shortageId]));
     assert.equal(Number(shortageNotificationRecipients.rows[0]?.recipient_count),1);
     assert.equal(shortageNotificationRecipients.rows[0]?.pcm_only,true);
+    const retiredSuperUrgencyPause=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/pause`,headers:bearer(identities.operator),payload:{motivo_codigo:'SUPER_URGENCIA',motivo_detalhe:'Código de pausa retirado.'}});
+    assert.equal(retiredSuperUrgencyPause.statusCode,400,retiredSuperUrgencyPause.body);
     const shortagePause=await app.inject({method:'POST',url:`/v1/maintenance/executions/${normalExecutionId}/pause`,headers:bearer(identities.operator),payload:{motivo_codigo:'AGUARDANDO_PECA',motivo_detalhe:'Sem condição segura de continuar.'}});
     assert.equal(shortagePause.statusCode,200,shortagePause.body);
     const deniedShortageResume=await app.inject({method:'POST',url:`/v1/maintenance/work-orders/${normalWorkOrderId}/executions/${normalExecutionId}/resume`,headers:bearer(identities.admin)});
@@ -2493,6 +2540,19 @@ test(
     });
     assert.equal(invalidType.statusCode, 400, invalidType.body);
 
+    const predictiveType = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/work-orders',
+      headers: bearer(identities.admin),
+      payload: {
+        plano_versao_id: ids.planVersion,
+        tipo_origem: 'ADMIN', entidade_origem_id: null, tipo_trabalho: 'PREDICTIVE',
+        modo_execucao: 'INTERNAL', titulo: 'Tipo preditivo fora da V1', descricao: 'Preditiva fica reservada para a V2.',
+        prioridade: 'LOW', responsavel_id: null, programada_para: null, analise_tecnica: {},
+      },
+    });
+    assert.equal(predictiveType.statusCode, 400, predictiveType.body);
+
     const concurrentCreates = await Promise.all(
       Array.from({ length: 6 }, async (_, index) => app.inject({
         method: 'POST',
@@ -2501,7 +2561,7 @@ test(
         payload: {
           plano_versao_id: ids.planVersion,
           tipo_origem: 'ADMIN', entidade_origem_id: null,
-          tipo_trabalho: index % 2 === 0 ? 'PREVENTIVE' : 'PREDICTIVE',
+          tipo_trabalho: index % 2 === 0 ? 'PREVENTIVE' : 'LUBRICATION',
           modo_execucao: (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3],
           titulo: `OS concorrente ${index + 1}`,
           descricao: 'Validação do contador operacional atômico por tenant.',

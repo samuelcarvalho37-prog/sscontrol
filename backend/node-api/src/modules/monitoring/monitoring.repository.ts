@@ -662,15 +662,32 @@ export class MonitoringRepository {
               inbox.action_route AS rota_acao,inbox.action_payload AS dados_acao,
               inbox.created_at AS criada_em,inbox.delivered_at AS entregue_em,
               inbox.read_at AS lida_em,inbox.dismissed_at AS dispensada_em,inbox.unread AS nao_lida,
-              occurrence.work_order_id AS ordem_servico_id,work_order.operational_code AS ordem_servico_codigo
+              COALESCE(occurrence.work_order_id,analysis_occurrence.work_order_id) AS ordem_servico_id,
+              COALESCE(occurrence.id,analysis_occurrence.id) AS ocorrencia_origem_id,
+              COALESCE(
+                occurrence.work_order_action_id,
+                analysis_occurrence.work_order_action_id,
+                (SELECT action.id FROM maintenance.work_order_actions action
+                 WHERE action.tenant_id=inbox.tenant_id
+                   AND action.work_order_id=COALESCE(occurrence.work_order_id,analysis_occurrence.work_order_id)
+                 ORDER BY action.generated_at DESC,action.id DESC LIMIT 1)
+              ) AS acao_ordem_servico_id,
+              work_order.operational_code AS ordem_servico_codigo
        FROM workflow.v_notification_inbox inbox
        LEFT JOIN maintenance.operational_occurrences occurrence
          ON occurrence.tenant_id=inbox.tenant_id
         AND occurrence.id=inbox.entity_id
         AND inbox.entity_type='OPERATIONAL_OCCURRENCE'
+       LEFT JOIN workflow.technical_analyses technical_analysis
+         ON technical_analysis.tenant_id=inbox.tenant_id
+        AND technical_analysis.id=inbox.entity_id
+        AND inbox.entity_type='TECHNICAL_ANALYSIS'
+       LEFT JOIN maintenance.operational_occurrences analysis_occurrence
+         ON analysis_occurrence.tenant_id=technical_analysis.tenant_id
+        AND analysis_occurrence.id=technical_analysis.occurrence_id
        LEFT JOIN maintenance.work_orders work_order
-         ON work_order.tenant_id=occurrence.tenant_id
-        AND work_order.id=occurrence.work_order_id
+         ON work_order.tenant_id=inbox.tenant_id
+        AND work_order.id=COALESCE(occurrence.work_order_id,analysis_occurrence.work_order_id)
        WHERE inbox.user_id=$1
          AND ($2='' OR inbox.title ILIKE '%'||$2||'%' OR inbox.message ILIKE '%'||$2||'%')
          AND (NOT $3::boolean OR inbox.unread)

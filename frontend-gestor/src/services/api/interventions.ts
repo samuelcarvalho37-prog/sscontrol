@@ -50,6 +50,18 @@ export async function sendAdminInterventionForValidation(input: AdminInterventio
   if (!response.data?.sent) throw new ApiRequestError('A API não confirmou o envio da intervenção.', 'ADMIN_INTERVENTIONS_EMPTY')
 }
 
+export async function cancelAdminIntervention(workOrderId: string, justification: string): Promise<void> {
+  const response = await callApi<AdminIntervention>(
+    'work-orders.cancel',
+    { token: adminToken(), ordem_id: workOrderId, justificativa: justification },
+    undefined,
+    { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE },
+  )
+  if (!response.data || response.data.status !== 'CANCELLED') {
+    throw new ApiRequestError('A API não confirmou o cancelamento da OS.', 'WORK_ORDER_CANCELLATION_EMPTY')
+  }
+}
+
 export async function createExternalService(workOrderId: string, input: {
   provider: string
   description: string

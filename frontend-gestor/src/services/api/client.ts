@@ -240,9 +240,9 @@ const operationalStatusFromNode: Readonly<Record<string, string>> = {
 
 const planTypeFromNode: Readonly<Record<string, string>> = {
   PREVENTIVE: "PREVENTIVA",
+  LUBRICATION: "LUBRIFICACAO",
   PREDICTIVE: "PREDITIVA",
   INSPECTION: "INSPECAO",
-  LUBRICATION: "LUBRIFICACAO",
   CORRECTIVE: "CORRETIVA",
   IMPROVEMENT: "MELHORIA",
   CONDITION_BASED: "BASEADA_CONDICAO",
@@ -873,6 +873,7 @@ function mapNotification(value: unknown): JsonRecord {
     entidade_tipo: entityTypes[entityType] ?? entityType,
     status: item.nao_lida === true ? "NAO_LIDA" : "LIDA",
     criado_em: item.criada_em,
+    ocorrencia_origem_id: item.ocorrencia_origem_id,
   };
 }
 
@@ -1168,6 +1169,13 @@ export function nodeActionRequest(
         // A rota não exige parâmetros, mas o corpo JSON explícito evita que
         // intermediários interpretem o POST vazio como mídia não suportada.
         body: {},
+        token,
+      };
+    case "work-orders.cancel":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/cancel`,
+        body: { justificativa: payload.justificativa },
         token,
       };
     case "gestor.detalhe_acao":

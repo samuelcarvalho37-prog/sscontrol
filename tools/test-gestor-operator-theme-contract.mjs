@@ -14,7 +14,7 @@ const theme = read(
 
 assert.match(
   app,
-  /className="manager-app-stage"[\s\S]*?className="app-shell app-shell--manager"/,
+  /className="manager-app-stage"[\s\S]*?className=\{`app-shell app-shell--manager/,
   'O aplicativo do Gestor deve possuir um escopo visual próprio.',
 )
 assert.match(

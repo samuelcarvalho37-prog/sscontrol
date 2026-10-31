@@ -254,7 +254,11 @@ export interface GestorNotification {
   lida_em?: string
   criado_em?: string
   ordem_servico_id?: string
+  acao_ordem_servico_id?: string
   ordem_servico_codigo?: string
+  ocorrencia_origem_id?: string
+  rota_acao?: string
+  dados_acao?: unknown
 }
 
 export interface GestorExecution {

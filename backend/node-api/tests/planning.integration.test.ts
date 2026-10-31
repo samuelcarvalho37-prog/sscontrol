@@ -659,6 +659,14 @@ test(
       analise_tecnica: { objetivo: 'Homologar plano periódico.' },
       area_tecnica_id: ids.qualityArea,
     };
+    const predictivePlanResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/maintenance/plans',
+      headers: adminHeaders,
+      payload: { ...planPayload, codigo: 'PLN-PLN-PREDICTIVE-V2', tipo: 'PREDICTIVE' },
+    });
+    assert.equal(predictivePlanResponse.statusCode, 400, predictivePlanResponse.body);
+
     const createPlanResponse = await app.inject({
       method: 'POST',
       url: '/v1/maintenance/plans',

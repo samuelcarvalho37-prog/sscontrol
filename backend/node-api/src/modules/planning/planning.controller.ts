@@ -10,6 +10,7 @@ import type {
   Criticality,
   LifecycleStatus,
   PlanType,
+  PlanInputType,
   ReviewDecision,
   SignaturePolicy,
   StopMode,
@@ -120,7 +121,7 @@ interface PlanBody {
   readonly nome: string;
   readonly ativo_id: string;
   readonly componente_id: string | null;
-  readonly tipo: PlanType;
+  readonly tipo: PlanInputType;
   readonly checklist_versao_id: string;
   readonly criticidade: Criticality;
   readonly tipo_disparo: TriggerType;

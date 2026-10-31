@@ -690,6 +690,44 @@ export class OperationsService {
     );
   }
 
+  async cancelWorkOrder(
+    user: AuthenticatedUser,
+    workOrderId: string,
+    justification: string,
+    audit: RequestAuditMetadata,
+  ) {
+    const note = justification.trim();
+    if (note.length < 10) {
+      throw error('WORK_ORDER_CANCELLATION_JUSTIFICATION_REQUIRED', 'Informe uma justificativa com pelo menos 10 caracteres.', 422);
+    }
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const workOrder = await this.repository.findWorkOrder(client, workOrderId, true);
+        if (!workOrder) throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada.', 404);
+        if (text(workOrder, 'status') !== 'DRAFT' || workOrder.technical_demand_id !== null) {
+          throw error('WORK_ORDER_CANCELLATION_NOT_ALLOWED', 'Somente uma OS em rascunho, ainda não enviada para validação ou execução, pode ser cancelada por esta opção.', 409);
+        }
+        if (await this.repository.hasAnyWorkOrderExecution(client, workOrderId)) {
+          throw error('WORK_ORDER_CANCELLATION_HAS_EXECUTION', 'Esta OS possui apontamento de execução e não pode ser cancelada aqui; preserve o histórico e solicite correção administrativa.', 409);
+        }
+        const linkedActions = await client.query(
+          'SELECT 1 FROM maintenance.work_order_actions WHERE work_order_id=$1 LIMIT 1',
+          [workOrderId],
+        );
+        if (linkedActions.rows.length > 0) {
+          throw error('WORK_ORDER_CANCELLATION_HAS_ACTION', 'Esta OS já possui uma ação operacional e não pode ser cancelada por esta opção.', 409);
+        }
+        await this.repository.cancelWorkOrder(client, workOrderId);
+        await this.repository.writeAudit(
+          client, user.tenantId, user.id, audit, 'WORK_ORDER_CANCELLED', 'WORK_ORDER', workOrderId,
+          { justificativa: note, status: 'CANCELLED', historico_preservado: true },
+        );
+        return this.requiredWorkOrderDetail(client, workOrderId);
+      },
+    );
+  }
+
   async submitForReview(
     user: AuthenticatedUser,
     workOrderId: string,

@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import {
   completeOperatorAction,
   claimOperatorAction,
@@ -38,6 +38,8 @@ function label(value: string | null | undefined) {
     CRITICAL: 'Crítica',
     PREVENTIVE: 'Preventiva',
     PREVENTIVA: 'Preventiva',
+    LUBRICATION: 'Lubrificação',
+    LUBRIFICACAO: 'Lubrificação',
     CORRECTIVE: 'Corretiva',
     CORRETIVA: 'Corretiva',
     INSPECTION: 'Inspeção',
@@ -111,8 +113,10 @@ function itemText(item: ExecutionItem) {
 
 type ActionFilter = 'PENDING' | 'IN_PROGRESS' | 'CRITICAL' | 'OVERDUE' | null
 
-export function TechnicianDashboard({ onSessionExpired }: { onSessionExpired: () => void }) {
-  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} /></TechnicianDashboardBoundary>
+type TechnicianNotificationFocus = { actionId?: string; workOrderId?: string } | null
+
+export function TechnicianDashboard({ onSessionExpired, notificationFocus, onNotificationFocusHandled }: { onSessionExpired: () => void; notificationFocus?: TechnicianNotificationFocus; onNotificationFocusHandled?: () => void }) {
+  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} notificationFocus={notificationFocus ?? null} onNotificationFocusHandled={onNotificationFocusHandled} /></TechnicianDashboardBoundary>
 }
 
 class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -132,7 +136,7 @@ class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { m
   }
 }
 
-function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: () => void }) {
+function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNotificationFocusHandled }: { onSessionExpired: () => void; notificationFocus: TechnicianNotificationFocus; onNotificationFocusHandled?: () => void }) {
   const [actions, setActions] = useState<OperatorAction[]>([])
   const [history, setHistory] = useState<OperatorAction[]>([])
   const [selected, setSelected] = useState<OperatorActionDetail | null>(null)
@@ -173,6 +177,7 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
   const [handoffPending,setHandoffPending]=useState('')
   const [handoffNextStep,setHandoffNextStep]=useState('')
   const [handoffHasPending,setHandoffHasPending]=useState(true)
+  const lastNotificationFocus = useRef('')
 
   const reload = useCallback(async () => {
     setLoading(true); setError('')
@@ -241,6 +246,39 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
     setBlockers([])
     await detailLoader.open(actionId)
   }
+
+  useEffect(() => {
+    if (!notificationFocus) {
+      lastNotificationFocus.current = ''
+      return
+    }
+    if (loading) return
+
+    const targetKey = `${notificationFocus.actionId ?? ''}:${notificationFocus.workOrderId ?? ''}`
+    if (lastNotificationFocus.current === targetKey) return
+    lastNotificationFocus.current = targetKey
+
+    const availableActions = [...actions, ...history]
+    const action = notificationFocus.actionId
+      ? availableActions.find((item) => item.id === notificationFocus.actionId)
+      : availableActions
+        .filter((item) => item.ordem_id === notificationFocus.workOrderId)
+        .sort((left, right) => {
+          const rank = (item: OperatorAction) => item.status === 'IN_PROGRESS' ? 0 : item.status === 'READY' ? 1 : 2
+          return rank(left) - rank(right)
+        })[0]
+
+    onNotificationFocusHandled?.()
+    if (!action) {
+      setError('A OS desta notificação não está disponível na sua fila ou histórico. Sincronize a fila; se continuar ausente, peça ao PCM para confirmar o responsável e o vínculo da notificação.')
+      return
+    }
+
+    setError('')
+    setActionFilter(null)
+    setShowAllActions(true)
+    void open(action.id)
+  }, [actions, history, loading, notificationFocus, onNotificationFocusHandled])
 
   async function start() {
     if (!selected) return
@@ -452,7 +490,7 @@ function TechnicianDashboardContent({ onSessionExpired }: { onSessionExpired: ()
       <div className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">{selected.ordem_codigo}</span><h2>{selected.titulo}</h2></div><span>{label(selected.status)}</span></div><p>{selected.descricao}</p>{selectedSchedule ? <div className={`technician-schedule-summary technician-schedule-summary--${selectedSchedule.tone}`}><strong>{selectedSchedule.label}</strong><span>{selectedSchedule.description}</span></div> : null}<dl className="technician-dashboard__facts"><Fact label="Equipamento" value={[selected.ativo_tag, selected.ativo_nome].filter(Boolean).join(' · ')} /><Fact label="Setor" value={[selected.setor_tag, selected.setor_nome].filter(Boolean).join(' · ')} /><Fact label="Linha" value={[selected.linha_tag, selected.linha_nome].filter(Boolean).join(' · ')} /><Fact label="Componente" value={[selected.componente_tag, selected.componente_nome].filter(Boolean).join(' · ')} /><Fact label="Prioridade" value={label(selected.prioridade)} /><Fact label="Tipo" value={label(selected.tipo)} /><Fact label="Modo" value={label(selected.modo_execucao)} /><Fact label="Programação" value={date(selected.programada_para)} /><Fact label="Tempo em aberto" value={elapsed(selected.gerada_em)} /></dl></div>
       <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MELHORIA</span><h2>Sugerir melhoria ao PCM</h2><p>Registre a oportunidade sem criar uma OS diretamente. O PCM fará a avaliação.</p><div className="technician-dashboard__report"><label>Categoria<select value={improvementCategory} disabled={busy} onChange={event => setImprovementCategory(event.target.value as ImprovementCategory)}><option value="MODIFICATION">Modificação</option><option value="MANUFACTURE">Fabricação</option><option value="INSTALLATION">Instalação</option><option value="ADEQUACY">Adequação</option><option value="OTHER">Outra</option></select></label><label>Sugestão<textarea value={improvementSuggestion} maxLength={4000} onChange={event => setImprovementSuggestion(event.target.value)} /></label><label>Motivo<textarea value={improvementReason} maxLength={4000} onChange={event => setImprovementReason(event.target.value)} /></label></div><button type="button" disabled={busy || improvementSuggestion.trim().length < 3 || improvementReason.trim().length < 3} onClick={() => void requestImprovement()}>Enviar solicitação ao PCM</button>{improvementNotice ? <p role="status">{improvementNotice}</p> : null}</section>
       {isSupportTechnician ? <><section className="technician-dashboard__panel"><span className="pcm-section-kicker">EQUIPE DE APOIO</span><h2>OS acompanhada em equipe</h2><p>Você foi atribuído como apoio. Consulte o checklist e o andamento desta OS; o técnico líder registra a execução e realiza a conclusão.</p></section><section className="technician-dashboard__panel"><span className="pcm-section-kicker">CHECKLIST</span><h2>{selected.checklist_nome}</h2><p>{items.length} etapa(s) disponível(is) para acompanhamento.</p><ol>{items.map(item => <li key={item.id}><strong>{item.sequencia}. {item.titulo}</strong>{item.instrucao ? <span> — {item.instrucao}</span> : null}</li>)}</ol></section></> : selected.status === 'BLOCKED' ? <section className="technician-dashboard__panel"><h2>Ação bloqueada</h2><p>Esta ação não está disponível para início. Consulte o PCM para tratar o bloqueio.</p></section> : execution?.status === 'COMPLETED' ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUÍDA</span><h2>Execução concluída</h2><p>A execução foi concluída e não aceita novas respostas, evidências ou finalização.</p><dl className="technician-dashboard__facts"><Fact label="Técnico principal" value={execution.operador_nome} /><Fact label="Técnicos auxiliares" value={execution.tecnicos_auxiliares?.map(technician => technician.nome).join(' · ') || 'Nenhum'} /><Fact label="Iniciada em" value={date(execution.iniciada_em)} /><Fact label="Finalizada em" value={date(execution.concluida_em)} /><Fact label="Tempo líquido" value={duration(execution.duracao_segundos)} /><Fact label="Pausas descontadas" value={duration(execution.segundos_pausados)} /></dl></section> : !execution || execution.status === 'OPEN' ? <section className="technician-dashboard__panel"><h2>Iniciar execução</h2><p>Informe a condição da parada antes de iniciar.</p><div className="technician-dashboard__modes">{(Object.keys(stopModeLabels) as StopMode[]).map(value => <label key={value}><input type="radio" checked={mode === value} onChange={() => setMode(value)} name="stop-mode" /> {stopModeLabels[value]}</label>)}</div><button type="button" onClick={() => void start()} disabled={busy}>Iniciar execução</button></section> : execution.status === 'PAUSED' ? <section className="technician-dashboard__panel"><span className="pcm-section-kicker">EXECUÇÃO PAUSADA</span><h2>O cronômetro está parado</h2><p>{execution.observacao || 'A execução está temporariamente pausada. Retome quando o trabalho puder continuar.'}</p><p>O período de pausa não será considerado no tempo de execução da OS.</p><button type="button" onClick={() => void resume()} disabled={busy}>{busy ? 'Retomando…' : 'Retomar execução'}</button></section> : <>
-        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONTROLE DE TEMPO</span><h2>Execução em andamento</h2><p>O tempo líquido da OS está sendo contabilizado. Se precisar interromper o trabalho, registre o motivo abaixo.</p><label>Motivo operacional<select value={pauseReasonCode} onChange={event => setPauseReasonCode(event.target.value)} disabled={busy}><option value="SUPER_URGENCIA">Super Urgência</option><option value="AGUARDANDO_PECA">Aguardando peça</option><option value="AGUARDANDO_PRODUCAO">Aguardando produção</option><option value="AGUARDANDO_TERCEIRO">Aguardando terceiro</option><option value="CONTINUIDADE_PROXIMO_TURNO">Continuidade no próximo turno</option><option value="DIAGNOSTICO_PENDENTE">Diagnóstico pendente</option><option value="OUTRO">Outro</option></select></label><label className="technician-dashboard__pause"><span>Detalhe da pausa</span><textarea value={pauseReason} onChange={event => setPauseReason(event.target.value)} placeholder="Descreva o motivo da interrupção" maxLength={500} /></label><button type="button" className="technician-dashboard__pause-button" onClick={() => void pause()} disabled={busy || pauseReason.trim().length < 3}>{busy ? 'Pausando…' : 'Pausar execução'}</button></section>
+        <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONTROLE DE TEMPO</span><h2>Execução em andamento</h2><p>O tempo líquido da OS está sendo contabilizado. Se precisar interromper o trabalho, registre o motivo abaixo.</p><label>Motivo operacional<select value={pauseReasonCode} onChange={event => setPauseReasonCode(event.target.value)} disabled={busy}><option value="AGUARDANDO_PECA">Aguardando peça</option><option value="AGUARDANDO_PRODUCAO">Aguardando produção</option><option value="AGUARDANDO_TERCEIRO">Aguardando terceiro</option><option value="CONTINUIDADE_PROXIMO_TURNO">Continuidade no próximo turno</option><option value="DIAGNOSTICO_PENDENTE">Diagnóstico pendente</option><option value="OUTRO">Outro</option></select></label><label className="technician-dashboard__pause"><span>Detalhe da pausa</span><textarea value={pauseReason} onChange={event => setPauseReason(event.target.value)} placeholder="Descreva o motivo da interrupção" maxLength={500} /></label><button type="button" className="technician-dashboard__pause-button" onClick={() => void pause()} disabled={busy || pauseReason.trim().length < 3}>{busy ? 'Pausando…' : 'Pausar execução'}</button></section>
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">MATERIAL E CUSTO</span><h2>Registrar saída de peça</h2><p>Ao confirmar, o estoque é baixado e o custo fica vinculado de forma permanente a esta OS.</p><div className="technician-dashboard__report"><label>Peça por SKU ou nome<select value={materialId} onChange={event => setMaterialId(event.target.value)} disabled={busy || materials.length === 0}>{materials.length === 0 ? <option value="">Nenhum material disponível em estoque</option> : materials.map(material => <option value={material.id} key={material.id}>{material.sku} · {material.nome_facil || material.nome} · {currency(material.valor_unitario)} · saldo {material.estoque_atual} {material.unidade}{material.situacao_estoque === 'LOW' ? ' · estoque baixo' : ''}</option>)}</select></label><label>Quantidade<input type="number" min="0.0001" step="0.0001" value={materialQuantity} onChange={event => setMaterialQuantity(event.target.value)} disabled={busy || materials.length === 0} /></label><label>Observação (opcional)<input value={materialObservation} onChange={event => setMaterialObservation(event.target.value)} maxLength={500} disabled={busy} /></label></div><button type="button" onClick={() => void consumeMaterial()} disabled={busy || !materialId}>{busy ? 'Registrando…' : 'Baixar material e registrar custo'}</button>{execution?.materiais?.length ? <div className="technician-dashboard__report"><strong>Materiais desta OS · total {currency(execution.custo_materiais_total)}</strong>{execution.materiais.map(material => <p key={material.id}>{material.sku} · {material.nome_facil || material.nome} — {material.quantidade} {material.unidade} · {currency(material.valor_unitario)} cada · <strong>{currency(material.custo_total)}</strong></p>)}</div> : <p>Nenhum material foi consumido nesta execução.</p>}</section>
         <section className="technician-dashboard__panel"><div className="technician-dashboard__panel-heading"><div><span className="pcm-section-kicker">CHECKLIST</span><h2>{selected.checklist_nome}</h2></div><span>{items.length} item(ns)</span></div>{itemGroups.map(([category, group]) => <section className="technician-checklist-group" key={category}><h3>{checklistCategoryLabel(category)}</h3>{group.map(item => <ChecklistItemBoundary key={item.id}><ChecklistItem item={item} disabled={busy} value={responses[item.id]} onChange={value => setResponses(current => ({ ...current, [item.id]: { ...(current[item.id] ?? { resposta: itemText(item), valor: item.resposta_numero?.toString() ?? '', observacao: item.observacao ?? '' }), ...value } }))} onSave={() => void save(item)} onUpload={file => void uploadEvidence(item, file)} /></ChecklistItemBoundary>)}</section>)}</section>
         <section className="technician-dashboard__panel"><span className="pcm-section-kicker">CONCLUSÃO</span><h2>Relatório técnico</h2><section className="technician-dashboard__report" aria-label="Equipe da intervenção"><h3>Equipe da intervenção</h3><p><strong>Técnico principal:</strong> {execution.operador_nome}</p><label><input type="checkbox" checked={hasSupportTechnicians} disabled={busy} onChange={event => { setHasSupportTechnicians(event.target.checked); if (!event.target.checked) setSupportTechnicianIds(['', '']) }} /> Outros técnicos participaram?</label>{hasSupportTechnicians ? <><label>Técnico auxiliar 1<select value={supportTechnicianIds[0]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [event.target.value, current[1]])}><option value="">Selecione o auxiliar</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[1]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label><label>Técnico auxiliar 2 (opcional)<select value={supportTechnicianIds[1]} disabled={busy} onChange={event => setSupportTechnicianIds(current => [current[0], event.target.value])}><option value="">Nenhum</option>{eligibleSupportTechnicians.filter(technician => technician.id !== execution.operador_id && technician.id !== supportTechnicianIds[0]).map(technician => <option key={technician.id} value={technician.id}>{technician.nome}{technician.matricula ? ` · ${technician.matricula}` : ''}</option>)}</select></label></> : null}</section><div className="technician-dashboard__report">{[['diagnostico_tecnico', 'Diagnóstico técnico · Obrigatório'], ['acao_realizada', 'Ação realizada · Obrigatório'], ['pecas_materiais', 'Peças / materiais · Obrigatório'], ['medicoes', 'Medições · Obrigatório']].map(([field, text]) => <label key={field}>{text}<textarea required aria-required="true" value={completion.relatorio_tecnico?.[field as keyof NonNullable<TechnicalCompletionInput['relatorio_tecnico']>] ?? ''} onChange={event => setCompletion(current => ({ ...current, relatorio_tecnico: { diagnostico_tecnico: '', acao_realizada: '', pecas_materiais: '', medicoes: '', ...current.relatorio_tecnico, [field]: event.target.value } }))} /></label>)}<label>Resultado · Obrigatório<textarea required aria-required="true" value={completion.resultado} onChange={event => setCompletion(current => ({ ...current, resultado: event.target.value }))} /></label><label>Observação · Obrigatório<textarea required aria-required="true" value={completion.observacao ?? ''} onChange={event => setCompletion(current => ({ ...current, observacao: event.target.value }))} /></label></div>{blockers.length > 0 && <div className="technician-dashboard__blockers" role="alert"><strong>Conclusão bloqueada</strong><ul>{blockers.map(blocker => <li key={`${blocker.item_id}-${blocker.tipo}`}>{blocker.sequencia}. {blocker.titulo} — {blocker.mensagem}</li>)}</ul></div>}<button type="button" onClick={() => void validateAndComplete()} disabled={busy}>{completionButtonLabel(requiresPostIntervention, busy)}</button></section>

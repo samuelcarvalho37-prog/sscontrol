@@ -712,6 +712,7 @@ export function isGestorAuthenticationError(error: unknown): boolean {
     "AUTH_REQUIRED",
     "AUTH_INVALID",
     "AUTH_EXPIRED",
+    "AUTH_SESSION_INVALID",
     "SESSION_EXPIRED",
     "SESSION_INVALID",
     "TOKEN_REQUIRED",

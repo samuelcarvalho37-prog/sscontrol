@@ -161,7 +161,9 @@
   z-index: 60;
   width: min(620px, calc(100% - 32px));
   min-height: 74px;
-  margin: 0 auto 10px;
+  /* Keep the manager navigation visually separated from the OS taskbar and
+     from the final dashboard card below it. */
+  margin: 0 auto max(18px, env(safe-area-inset-bottom));
   padding: 9px 12px calc(var(--safe-bottom) + 3px);
   gap: 7px;
   border: 1px solid var(--line);
@@ -1997,16 +1999,14 @@
   }
 
   .app-shell--manager > .app-navigation {
-    width: 100%;
+    width: calc(100% - 24px);
     min-height: 68px;
-    margin: 0;
+    margin: 0 auto max(14px, env(safe-area-inset-bottom));
     padding: 7px 8px calc(var(--safe-bottom) + 1px);
     gap: 4px;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 0;
-    box-shadow: none;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 8px 20px rgba(27, 47, 79, 0.10);
   }
 
   .app-shell--manager .app-navigation__item {

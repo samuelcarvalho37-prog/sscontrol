@@ -161,7 +161,7 @@ test('numeração operacional é atômica, independente por tenant, transacional
     }
 
     const [ordersA, ordersB] = await Promise.all([
-      Promise.all(Array.from({ length: 12 }, (_, index) => insertOrder(administrator, tenantA, `A-${index}-${randomUUID()}`, index % 2 ? 'PREDICTIVE' : 'PREVENTIVE', (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3]))),
+      Promise.all(Array.from({ length: 12 }, (_, index) => insertOrder(administrator, tenantA, `A-${index}-${randomUUID()}`, index % 2 ? 'LUBRICATION' : 'PREVENTIVE', (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3]))),
       Promise.all(Array.from({ length: 7 }, (_, index) => insertOrder(administrator, tenantB, `B-${index}-${randomUUID()}`))),
     ]);
     assert.deepEqual(ordersA.map(order => order.number).sort((a, b) => a - b), Array.from({ length: 12 }, (_, index) => index + 1));

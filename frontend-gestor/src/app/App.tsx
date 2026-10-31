@@ -112,6 +112,7 @@ export function App() {
   const [analyticsFocusAsset, setAnalyticsFocusAsset] = useState('')
   const [analyticsFocusOccurrence, setAnalyticsFocusOccurrence] = useState('')
   const [partShortageFocusId, setPartShortageFocusId] = useState('')
+  const [technicianActionFocus, setTechnicianActionFocus] = useState<{ actionId?: string; workOrderId?: string } | null>(null)
   const [detailedAnalytics, setDetailedAnalytics] = useState(false)
   const [adminModule, setAdminModule] = useState<AdminModule>('overview')
   const [validationCount, setValidationCount] = useState(0)
@@ -276,6 +277,12 @@ export function App() {
       throw new Error('Esta notificação não possui um registro de destino válido.')
     }
     const destination = notificationNavigation(notification, normalizedProfile)
+    if (destination?.kind === 'technician-action') {
+      setTechnicianActionFocus({ actionId: destination.actionId, workOrderId: destination.workOrderId })
+      setSection('home')
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      return
+    }
     if (destination?.kind === 'technical-demand') {
       preserveValidationDemandInUrl(destination.id)
       handleOpenDecision('demands', { kind: 'demand', id: destination.id })
@@ -295,7 +302,13 @@ export function App() {
       entityType === 'OCORRENCIAS_OPERACIONAIS' ||
       entityType === 'OPERATIONAL_OCCURRENCE'
     ) {
+      if (isTechnician) {
+        throw new Error('Esta ocorrência ainda não está vinculada a uma OS disponível na sua fila. Atualize a Central do Técnico ou peça ao PCM para verificar o vínculo.')
+      }
       throw new Error('Ocorrências operacionais são tratadas pelo PCM e não geram validação desta área.')
+    }
+    if (isTechnician && ['ANALISES_TECNICAS', 'TECHNICAL_ANALYSIS'].includes(entityType)) {
+      throw new Error('Esta análise técnica não contém vínculo com uma OS da sua fila. Abra a OS em Ordens ou solicite ao PCM que confira a associação.')
     }
     if (entityType === 'ATIVOS') {
       handleOpenAnalytics(entityId)
@@ -487,7 +500,7 @@ export function App() {
             </section>
           ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
-          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} /> : null}
+          {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} notificationFocus={technicianActionFocus} onNotificationFocusHandled={() => setTechnicianActionFocus(null)} /> : null}
           {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}

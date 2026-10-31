@@ -53,9 +53,65 @@ button {
   cursor: pointer;
 }
 
+/* Ações sem classe própria não devem cair no botão transparente do navegador. */
+button:not([class]) {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 750;
+}
+
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.68;
+  opacity: 0.72;
+}
+
+.occurrence-wizard__actions {
+  align-items: center;
+  margin-top: 4px;
+}
+
+.occurrence-wizard__primary,
+.occurrence-wizard__secondary {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-weight: 800;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.occurrence-wizard__primary {
+  color: #fff;
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.2);
+}
+
+.occurrence-wizard__primary:not(:disabled):hover {
+  background: linear-gradient(135deg, #086bd0, #064fa7);
+  box-shadow: 0 9px 20px rgba(8, 95, 196, 0.25);
+  transform: translateY(-1px);
+}
+
+.occurrence-wizard__primary:disabled {
+  color: #66768a;
+  border-color: #d7e1eb;
+  background: #e8eef5;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.occurrence-wizard__secondary {
+  color: #264b6c;
+  border-color: #c8d8e7;
+  background: #f8fbff;
+}
+
+.occurrence-wizard__secondary:not(:disabled):hover {
+  background: #eaf2fb;
 }
 
 button:focus-visible,
@@ -2547,6 +2603,52 @@ p {
   border-radius: 11px;
   color: var(--text);
   background: #ffffff;
+}
+
+.auth-password-field {
+  position: relative;
+  display: block;
+}
+
+.auth-form .auth-password-input {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 7px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  color: #59636e;
+  background: transparent;
+  cursor: pointer;
+}
+
+.auth-password-toggle:hover:not(:disabled) {
+  color: #17324d;
+  background: #eef2f6;
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid #1769aa;
+  outline-offset: 1px;
+}
+
+.auth-password-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
 }
 
 .feedback {
@@ -8338,6 +8440,23 @@ p {
   line-height: 1.4;
 }
 
+.admin-catalog-dialog__error {
+  display: grid;
+  gap: 3px;
+  margin: 12px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  color: #991b1b;
+  background: #fff1f2;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.admin-catalog-dialog__error strong {
+  font-weight: 850;
+}
+
 .admin-catalog-dialog > section > footer button {
   display: inline-flex;
   align-items: center;
@@ -8363,6 +8482,17 @@ p {
   background: var(--admin-brand);
 }
 
+.admin-catalog-dialog > section > footer > div > button.primary-button.admin-catalog-save-button:last-child:not(:only-child) {
+  display: inline-flex;
+  min-width: 132px;
+  border-color: #075cb4;
+  color: #fff !important;
+  background: #0875e1 !important;
+  font-size: 0.72rem !important;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 .admin-catalog-dialog > section > footer button.primary-button:hover:not(:disabled),
 .admin-catalog-dialog > section > footer > div > button:last-child:not(:only-child):hover:not(:disabled) {
   border-color: var(--admin-brand-strong);
@@ -8372,6 +8502,38 @@ p {
 .admin-catalog-dialog > section button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+@media (max-width: 640px) {
+  .admin-catalog-dialog {
+    padding: 12px;
+  }
+
+  .admin-catalog-dialog > section {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 12px;
+  }
+
+  .admin-catalog-form {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .admin-catalog-dialog > section > footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px 16px;
+  }
+
+  .admin-catalog-dialog > section > footer > div {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .admin-catalog-dialog > section > footer > div > button {
+    flex: 1 1 0;
+  }
 }
 
 .admin-document-form input[type='file'] {
