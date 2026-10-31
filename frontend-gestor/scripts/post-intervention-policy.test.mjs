@@ -123,6 +123,44 @@ test('não transforma ocorrência operacional em pendência de Qualidade ou Segu
   }
 });
 
+test('PCM vê uma única notificação após a análise e o técnico só recebe item vinculado a OS', async () => {
+  const {
+    filterNotificationsForProfile,
+    isNotificationVisibleForProfile,
+    notificationNavigation,
+  } = await notificationPolicyModule();
+  const occurrence = {
+    id: 'occurrence-notification',
+    tipo: 'OCCURRENCE_REPORTED',
+    entidade_tipo: 'OCORRENCIAS_OPERACIONAIS',
+    entidade_id: 'occurrence-id',
+    status: 'NAO_LIDA',
+  };
+  const analysis = {
+    id: 'analysis-notification',
+    tipo: 'ANALISE_TECNICA',
+    entidade_tipo: 'ANALISES_TECNICAS',
+    entidade_id: 'analysis-id',
+    ocorrencia_origem_id: 'occurrence-id',
+    status: 'NAO_LIDA',
+  };
+
+  assert.deepEqual(filterNotificationsForProfile([occurrence, analysis], 'PCM').map(item => item.id), ['analysis-notification']);
+  assert.equal(isNotificationVisibleForProfile(occurrence, 'TECNICO'), false);
+  assert.equal(isNotificationVisibleForProfile(analysis, 'TECNICO'), false);
+  assert.equal(notificationNavigation(analysis, 'TECNICO'), null);
+
+  const linkedAnalysis = { ...analysis, ordem_servico_id: 'work-order-id' };
+  assert.equal(isNotificationVisibleForProfile(linkedAnalysis, 'TECNICO'), false);
+  linkedAnalysis.acao_ordem_servico_id = 'action-id';
+  assert.equal(isNotificationVisibleForProfile(linkedAnalysis, 'TECNICO'), true);
+  assert.deepEqual(notificationNavigation(linkedAnalysis, 'TECNICO'), {
+    kind: 'technician-action',
+    actionId: 'action-id',
+    workOrderId: 'work-order-id',
+  });
+});
+
 test('notificação de falta de peça do PCM abre a pendência pelo ID interno', async () => {
   const { notificationNavigation, notificationActionLabel } = await notificationPolicyModule();
   const notification = {

@@ -11,7 +11,8 @@ test('ADMIN fica sem atalhos operacionais e mantém analytics somente leitura', 
   for (const module of ['structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations']) {
     assert.match(workspace, new RegExp(`'${module}'`))
   }
-  assert.match(workspace, /if \(ADMIN_MAINTENANCE_MODULES\.has\(moduleId\)\) return false/)
+  assert.match(workspace, /if \(ADMIN_MAINTENANCE_MODULES\.has\(accessModuleId\)\) return false/)
+  assert.match(workspace, /moduleId === 'workforce-areas' \|\| moduleId === 'workforce-roles' \? 'workforce' : moduleId/)
   assert.match(page, /tab === 'analytics' \? <AdminAnalyticsWorkspace/)
   assert.doesNotMatch(page, /<PcmDashboard/)
   assert.doesNotMatch(page, /Programação, intervenções e OS/)

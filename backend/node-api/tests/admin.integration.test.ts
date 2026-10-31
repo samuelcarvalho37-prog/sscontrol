@@ -234,7 +234,7 @@ test(
     });
     assert.equal(monitoring.statusCode, 200, monitoring.body);
     assert.equal(monitoring.json().data.health.ok, true);
-    assert.equal(monitoring.json().data.health.spreadsheetId, 'postgresql');
+    assert.equal(monitoring.json().data.health.spreadsheetId, 'primary-storage');
     assert.equal(monitoring.json().data.diagnostico.total_issues, 0);
     assert.ok(Number(monitoring.json().data.tabelas_declaradas) >= 40);
     assert.ok(Number(monitoring.json().data.auditoria.eventos_24h) >= 1);

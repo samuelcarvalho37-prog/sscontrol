@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import {
   completeOperatorAction,
   claimOperatorAction,
@@ -39,6 +39,8 @@ function label(value: string | null | undefined) {
     CRITICAL: 'Crítica',
     PREVENTIVE: 'Preventiva',
     PREVENTIVA: 'Preventiva',
+    LUBRICATION: 'Lubrificação',
+    LUBRIFICACAO: 'Lubrificação',
     CORRECTIVE: 'Corretiva',
     CORRETIVA: 'Corretiva',
     INSPECTION: 'Inspeção',
@@ -112,8 +114,10 @@ function itemText(item: ExecutionItem) {
 
 type ActionFilter = 'PENDING' | 'IN_PROGRESS' | 'CRITICAL' | 'OVERDUE' | null
 
-export function TechnicianDashboard({ onSessionExpired, focusActionId = '', onActionFocusHandled }: { onSessionExpired: () => void; focusActionId?: string; onActionFocusHandled?: () => void }) {
-  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} focusActionId={focusActionId} onActionFocusHandled={onActionFocusHandled} /></TechnicianDashboardBoundary>
+type TechnicianNotificationFocus = { actionId?: string; workOrderId?: string } | null
+
+export function TechnicianDashboard({ onSessionExpired, notificationFocus, onNotificationFocusHandled }: { onSessionExpired: () => void; notificationFocus?: TechnicianNotificationFocus; onNotificationFocusHandled?: () => void }) {
+  return <TechnicianDashboardBoundary><TechnicianDashboardContent onSessionExpired={onSessionExpired} notificationFocus={notificationFocus ?? null} onNotificationFocusHandled={onNotificationFocusHandled} /></TechnicianDashboardBoundary>
 }
 
 class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -133,7 +137,7 @@ class TechnicianDashboardBoundary extends Component<{ children: ReactNode }, { m
   }
 }
 
-function TechnicianDashboardContent({ onSessionExpired, focusActionId, onActionFocusHandled }: { onSessionExpired: () => void; focusActionId: string; onActionFocusHandled?: () => void }) {
+function TechnicianDashboardContent({ onSessionExpired, notificationFocus, onNotificationFocusHandled }: { onSessionExpired: () => void; notificationFocus: TechnicianNotificationFocus; onNotificationFocusHandled?: () => void }) {
   const [actions, setActions] = useState<OperatorAction[]>([])
   const [history, setHistory] = useState<OperatorAction[]>([])
   const [selected, setSelected] = useState<OperatorActionDetail | null>(null)
@@ -176,6 +180,7 @@ function TechnicianDashboardContent({ onSessionExpired, focusActionId, onActionF
   const [handoffPending,setHandoffPending]=useState('')
   const [handoffNextStep,setHandoffNextStep]=useState('')
   const [handoffHasPending,setHandoffHasPending]=useState(true)
+  const lastNotificationFocus = useRef('')
 
   const reload = useCallback(async () => {
     setLoading(true); setError('')
@@ -253,9 +258,37 @@ function TechnicianDashboardContent({ onSessionExpired, focusActionId, onActionF
   }
 
   useEffect(() => {
-    if (!focusActionId) return
-    void open(focusActionId).finally(() => onActionFocusHandled?.())
-  }, [focusActionId, onActionFocusHandled])
+    if (!notificationFocus) {
+      lastNotificationFocus.current = ''
+      return
+    }
+    if (loading) return
+
+    const targetKey = `${notificationFocus.actionId ?? ''}:${notificationFocus.workOrderId ?? ''}`
+    if (lastNotificationFocus.current === targetKey) return
+    lastNotificationFocus.current = targetKey
+
+    const availableActions = [...actions, ...history]
+    const action = notificationFocus.actionId
+      ? availableActions.find((item) => item.id === notificationFocus.actionId)
+      : availableActions
+        .filter((item) => item.ordem_id === notificationFocus.workOrderId)
+        .sort((left, right) => {
+          const rank = (item: OperatorAction) => item.status === 'IN_PROGRESS' ? 0 : item.status === 'READY' ? 1 : 2
+          return rank(left) - rank(right)
+        })[0]
+
+    onNotificationFocusHandled?.()
+    if (!action) {
+      setError('A OS desta notificação não está disponível na sua fila ou histórico. Sincronize a fila; se continuar ausente, peça ao PCM para confirmar o responsável e o vínculo da notificação.')
+      return
+    }
+
+    setError('')
+    setActionFilter(null)
+    setShowAllActions(true)
+    void open(action.id)
+  }, [actions, history, loading, notificationFocus, onNotificationFocusHandled])
 
   async function start() {
     if (!selected) return

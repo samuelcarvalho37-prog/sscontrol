@@ -35,6 +35,7 @@ import {
   AssetIcon,
   AuditIcon,
   BellIcon,
+  CalendarIcon,
   ChartIcon,
   ChecklistIcon,
   DashboardIcon,
@@ -142,7 +143,7 @@ const MODULES: WorkspaceModule[] = [
   { id: 'inventory', code: 'MP', label: 'Materiais e peças', description: 'Estoque técnico', Icon: PackageIcon, feature: 'CADASTROS' },
   { id: 'workforce', code: 'EQ', label: 'Equipes técnicas', description: 'Áreas, cargos e assinatura', searchTerms: 'área técnica PCM produção técnico especialidade função equipe assinatura', Icon: UsersIcon, feature: 'GESTAO_TECNICA' },
   { id: 'operations', code: 'OS', label: 'Programação, intervenções e OS', description: 'Planejar, validar e liberar', searchTerms: 'ordem de serviço manutenção preventiva corretiva parada planejamento gestor PCM', Icon: WrenchIcon, feature: 'GESTAO_TECNICA' },
-  { id: 'plan-approvals', code: 'HP', label: 'Homologação de planos', description: 'Consultar e publicar planos em rascunho', Icon: ChecklistIcon, feature: 'GESTAO_TECNICA' },
+  { id: 'plan-approvals', code: 'HP', label: 'Homologação de planos', description: 'Consultar e publicar planos em rascunho', Icon: CalendarIcon, feature: 'GESTAO_TECNICA' },
   { id: 'analytics', code: 'BI', label: 'Indicadores', description: 'Confiabilidade, tempos e SLA', Icon: ChartIcon, feature: 'INDICADORES' },
   { id: 'documents', code: 'DT', label: 'Documentos', description: 'Arquivos e revisões', Icon: DocumentIcon, feature: 'DOCUMENTOS' },
   { id: 'imports', code: 'ID', label: 'Importação e exportação', description: 'Enviar ou baixar cadastros', searchTerms: 'planilha excel csv json xml carga importar exportar dados', Icon: UploadIcon, feature: 'IMPORTACOES' },
@@ -2286,7 +2287,7 @@ export function AdminWorkspace({
             setNavigationContextOpen((current) => !current)
           }}
         >
-          <img src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+          <img src={companyProfile.logo_data_url || '/vorqix-logo.png'} alt={companyProfile.nome || 'VORQIX — Unidade Industrial'} />
         </button>
         {navigationContextOpen ? (
           <div className="admin-navigation-context-menu" role="menu" aria-label="Barra lateral">
@@ -2435,7 +2436,7 @@ export function AdminWorkspace({
             <section className="admin-desktop-welcome">
               <div className="admin-welcome-card">
                 <div className="admin-welcome-copy">
-                  <img className="vorqix-logo" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
+                  <img className="vorqix-logo" src={companyProfile.logo_data_url || '/vorqix-logo.png'} alt={companyProfile.nome || 'VORQIX — Unidade Industrial'} />
                   <h1>Centro de Comando VORQIX</h1>
                   <p>Usuários, permissões e configurações do ambiente.</p>
                   <div className="admin-welcome-actions">

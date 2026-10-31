@@ -304,7 +304,7 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
       { key: 'componente_id', label: 'Componente (opcional)', type: 'reference', reference: 'componentes', referenceLabel: 'nome', dependsOn: { field: 'ativo_id', targetField: 'ativo_id' } },
       { key: 'checklist_versao_id', label: 'Checklist validado', type: 'checklist', required: true, help: 'Somente modelos publicados, com etapas e compatíveis com o ativo selecionado.' },
       { key: 'nome', label: 'Nome do plano', required: true },
-      { key: 'tipo', label: 'Tipo', type: 'select', options: [{ value: 'PREVENTIVA', label: 'Preventiva' }, { value: 'PREDITIVA', label: 'Preditiva' }, { value: 'INSPECAO', label: 'Inspeção' }], required: true },
+      { key: 'tipo', label: 'Tipo', type: 'select', options: [{ value: 'CORRETIVA', label: 'Corretiva' }, { value: 'PREVENTIVA', label: 'Preventiva' }, { value: 'LUBRIFICACAO', label: 'Lubrificação' }, { value: 'INSPECAO', label: 'Inspeção' }], required: true },
       { key: 'criticidade', label: 'Criticidade', type: 'select', options: CRITICALITY_OPTIONS, required: true },
       { key: 'gatilho_tipo', label: 'Tipo de gatilho', type: 'select', options: [{ value: 'HORAS', label: 'Horímetro' }, { value: 'DIAS', label: 'Periodicidade em dias' }, { value: 'PARAMETRO', label: 'Parâmetro técnico' }], required: true },
       { key: 'gatilho_valor', label: 'Valor do gatilho', type: 'number', required: true },
@@ -531,6 +531,8 @@ export function AdminCatalogWorkspace({
   }
 
   function updateDraftField(field: FieldDefinition, rawValue: string) {
+    // A edição do formulário inicia uma nova tentativa; não deixe um erro antigo parecer atual.
+    setError('')
     setDraft((current) => {
       const next: AdminEntityRecord = {
         ...current,
@@ -828,6 +830,7 @@ export function AdminCatalogWorkspace({
         <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setEditing(undefined) }}>
           <section role="dialog" aria-modal="true" aria-label={`${editing ? 'Editar' : 'Novo'} ${definition.singular}`}>
             <header><div><span className="eyebrow">{editingReadOnly ? 'VISUALIZAÇÃO PROTEGIDA' : editing ? 'EDIÇÃO CONTROLADA' : 'NOVO CADASTRO'}</span><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>×</button></header>
+            {error ? <div className="admin-catalog-dialog__error" role="alert"><strong>Cadastro não concluído.</strong><span>{error}</span></div> : null}
             <fieldset className="admin-catalog-form" disabled={editingReadOnly || saving}>
               {definition.fields.map((field) => {
                 const fieldValue = draft[field.key] ?? ''
@@ -898,7 +901,7 @@ export function AdminCatalogWorkspace({
                 )
               })}
             </fieldset>
-            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O backend força RASCUNHO e INATIVO.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{!editingReadOnly ? <button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
+            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O plano será salvo como rascunho. Depois, publique-o em Homologação de planos.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{!editingReadOnly ? <button className="primary-button admin-catalog-save-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : selectedEntity === 'planos' ? 'Salvar rascunho' : 'Salvar cadastro'}</button> : null}</div></footer>
           </section>
         </div>
       ) : null}

@@ -9,7 +9,7 @@ const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
 
-function harness(capabilities, sessionError) {
+function harness(capabilities, sessionError, role = 'ADMIN') {
   const calls = []
   const exports = {}
   const mock = new Proxy({}, {
@@ -26,7 +26,7 @@ function harness(capabilities, sessionError) {
   return {
     calls,
     run: () => exports.prepareWorkspace(
-      { token: 'test', user: { perfil: 'ADMIN', capacidades: capabilities } },
+      { token: 'test', user: { perfil: role, capacidades: capabilities } },
       new AbortController().signal,
       () => {},
     ),
@@ -41,10 +41,17 @@ test('admin consulta usuários e permissões sem exigir revisão técnica', asyn
 })
 
 test('capacidade de revisão mantém o carregamento do contexto e das demandas', async () => {
-  const h = harness(['maintenance.work-orders.review'])
+  const h = harness(['maintenance.work-orders.review'], undefined, 'PCM')
   assert.equal((await h.run()).verifiedModules, 2)
   assert.ok(h.calls.includes('getGestorTechnicalContext'))
   assert.ok(h.calls.includes('getGestorTechnicalDemands'))
+})
+
+test('admin não carrega fluxo técnico mesmo com capacidade de revisão herdada', async () => {
+  const h = harness(['maintenance.work-orders.review'])
+  assert.equal((await h.run()).verifiedModules, 0)
+  assert.ok(!h.calls.includes('getGestorTechnicalContext'))
+  assert.ok(!h.calls.includes('getGestorTechnicalDemands'))
 })
 
 test('falha de sessão continua bloqueando a entrada', async () => {

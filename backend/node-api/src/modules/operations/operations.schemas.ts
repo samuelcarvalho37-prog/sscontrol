@@ -77,7 +77,7 @@ export const createWorkOrderBodySchema = Type.Object(
     tipo_trabalho: Type.Union([
       Type.Literal('CORRECTIVE'),
       Type.Literal('PREVENTIVE'),
-      Type.Literal('PREDICTIVE'),
+      Type.Literal('LUBRICATION'),
       Type.Literal('IMPROVEMENT'),
     ]),
     modo_execucao: Type.Union([
@@ -159,6 +159,11 @@ export const correctWorkOrderBodySchema = Type.Object(
       Type.Literal('INSTALLATION'), Type.Literal('ADEQUACY'), Type.Literal('OTHER'),
     ])),
   },
+  { additionalProperties: false },
+);
+
+export const cancelWorkOrderBodySchema = Type.Object(
+  { justificativa: Type.String({ minLength: 10, maxLength: 1_000 }) },
   { additionalProperties: false },
 );
 
@@ -249,7 +254,7 @@ export const startExecutionBodySchema = Type.Object(
 export const pauseExecutionBodySchema = Type.Object(
   {
     motivo_codigo: Type.Union([
-      Type.Literal('SUPER_URGENCIA'), Type.Literal('AGUARDANDO_PECA'),
+      Type.Literal('AGUARDANDO_PECA'),
       Type.Literal('AGUARDANDO_PRODUCAO'), Type.Literal('AGUARDANDO_TERCEIRO'),
       Type.Literal('CONTINUIDADE_PROXIMO_TURNO'), Type.Literal('DIAGNOSTICO_PENDENTE'),
       Type.Literal('OUTRO'),

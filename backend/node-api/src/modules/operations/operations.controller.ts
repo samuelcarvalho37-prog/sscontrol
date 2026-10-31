@@ -13,7 +13,7 @@ import type {
   ImprovementCategory,
   Priority,
   SignaturePolicy,
-  WorkOrderType,
+  WorkOrderInputType,
 } from './operations.types.js';
 
 interface Params {
@@ -54,7 +54,7 @@ interface WorkOrderBody {
   readonly ativo_tag?: string;
   readonly tipo_origem: string;
   readonly entidade_origem_id: string | null;
-  readonly tipo_trabalho: WorkOrderType;
+  readonly tipo_trabalho: WorkOrderInputType;
   readonly modo_execucao: ExecutionMode;
   readonly categoria_melhoria?: ImprovementCategory | null;
   readonly titulo: string;
@@ -133,6 +133,7 @@ interface PauseBody {
 }
 interface PauseParticipantBody { readonly motivo: string; }
 interface ResolvePartShortageBody { readonly justificativa: string; }
+interface CancelWorkOrderBody { readonly justificativa: string; }
 interface ShiftHandoffBody {
   readonly condicao_equipamento: string;
   readonly trabalho_pendente: string;
@@ -402,6 +403,20 @@ export class OperationsController {
           executionMode: request.body.modo_execucao,
           improvementCategory: request.body.categoria_melhoria ?? null,
         },
+        audit(request),
+      ),
+    );
+
+  cancelWorkOrder = async (
+    request: FastifyRequest<{ Params: Params; Body: CancelWorkOrderBody }>,
+  ) =>
+    successEnvelope(
+      request,
+      'maintenance.work-orders.cancel',
+      await this.service.cancelWorkOrder(
+        user(request),
+        id(request.params, 'workOrderId'),
+        request.body.justificativa,
         audit(request),
       ),
     );

@@ -38,7 +38,7 @@ export const operatorActions: OperatorAction[] = [
   {
     id: 'ACT-PRG-002',
     group: 'PROGRAMADA',
-    type: 'PREDITIVA',
+    type: 'PREVENTIVA',
     title: 'Coleta de vibração do motorredutor',
     assetTag: 'ENV-001',
     assetName: 'Envasadora 01',

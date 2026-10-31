@@ -307,7 +307,7 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
     schema: {
       params: Type.Object({ planId: Type.String({ format: 'uuid' }) }),
       body: Type.Object({
-        code: Type.String({ minLength: 2, maxLength: 40 }),
+        code: Type.String({ minLength: 2, maxLength: 40, pattern: '^[A-Z0-9][A-Z0-9_-]{1,39}$' }),
         name: Type.String({ minLength: 2, maxLength: 100 }),
         description: Type.String({ maxLength: 1000 }),
         status: Type.Union([Type.Literal('DRAFT'), Type.Literal('ACTIVE'), Type.Literal('RETIRED')]),
@@ -330,7 +330,7 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
   app.post('/v1/platform/plans', {
     preHandler: async (request) => { await authenticatePlatform(request); },
     schema: { body: Type.Object({
-      code: Type.String({ minLength: 2, maxLength: 40 }),
+      code: Type.String({ minLength: 2, maxLength: 40, pattern: '^[A-Z0-9][A-Z0-9_-]{1,39}$' }),
       name: Type.String({ minLength: 2, maxLength: 100 }),
       description: Type.String({ maxLength: 1000 }),
       status: Type.Union([Type.Literal('DRAFT'), Type.Literal('ACTIVE'), Type.Literal('RETIRED')]),
@@ -401,7 +401,7 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
       const attachmentResult = await app.database.query<{
         support_request_id: string; object_id: string; original_name: string; media_type: string;
       }>('SELECT * FROM platform.list_console_support_attachments()');
-      const attachments = new Map<string, Array<{ object_id: string; original_name: string; media_type: string }>>();
+      const attachments = new Map<string, { object_id: string; original_name: string; media_type: string }[]>();
       for (const item of attachmentResult.rows) {
         const current = attachments.get(item.support_request_id) ?? [];
         current.push({ object_id: item.object_id, original_name: item.original_name, media_type: item.media_type });
@@ -464,7 +464,7 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
           statusCode: 401,
         });
       const fields: Record<string, string> = {};
-      const uploads: Array<{ filename: string; mimetype: string; buffer: Buffer }> = [];
+      const uploads: { filename: string; mimetype: string; buffer: Buffer }[] = [];
       for await (const part of request.parts({ limits: {
         fields: 4, files: 3, parts: 7, fieldSize: 4_096,
         fileSize: app.environment.storage.maxEvidenceBytes + 1,

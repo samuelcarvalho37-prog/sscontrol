@@ -446,7 +446,7 @@ export class AdminService {
     const emails = new Set<string>();
     const registrations = new Set<string>();
     const rowNumbers = new Set<number>();
-    const prepared: Array<BulkUserImportInput['rows'][number]> = [];
+    const prepared: BulkUserImportInput['rows'][number][] = [];
     for (const row of input.rows) {
       const name = normalizeText(row.name);
       const email = normalizeText(row.email).toLowerCase();
@@ -1794,15 +1794,15 @@ export class AdminService {
         const latest = latestRows[0];
         return {
           health: {
-            ok: databaseHealth !== null,
+            ok: true,
             app: 'fab-control-api',
             version: this.environment.release.api,
             spreadsheetId: 'primary-storage',
             serverTime: new Date().toISOString(),
             environment: this.environment.release.environment,
             schemaVersion: this.environment.release.schema,
-            databaseReady: databaseHealth !== null,
-            databaseLatencyMs: databaseHealth?.latencyMs ?? null,
+            databaseReady: true,
+            databaseLatencyMs: databaseHealth.latencyMs,
           },
           diagnostico: {
             dry_run: true,

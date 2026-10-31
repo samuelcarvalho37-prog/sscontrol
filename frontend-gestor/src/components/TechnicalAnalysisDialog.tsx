@@ -25,11 +25,30 @@ interface TechnicalAnalysisDialogProps {
 }
 
 type AnalysisStage = "context" | "plan" | "execution";
+type ApiSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+const API_SEVERITY_BY_LABEL: Readonly<Record<string, ApiSeverity>> = {
+  LOW: "LOW",
+  BAIXA: "LOW",
+  MEDIUM: "MEDIUM",
+  MEDIA: "MEDIUM",
+  HIGH: "HIGH",
+  ALTA: "HIGH",
+  CRITICAL: "CRITICAL",
+  CRITICA: "CRITICAL",
+  "CRÍTICA": "CRITICAL",
+};
 
 function upper(value: unknown): string {
   return String(value ?? "")
     .trim()
     .toLocaleUpperCase("pt-BR");
+}
+
+function apiSeverity(value: unknown): ApiSeverity | null {
+  const normalized = upper(value);
+  if (!normalized) return "MEDIUM";
+  return API_SEVERITY_BY_LABEL[normalized] ?? null;
 }
 
 function defaultCause(occurrence: GestorOccurrence): string {
@@ -188,18 +207,22 @@ export function TechnicalAnalysisDialog({
     setError("");
     if (
       stage === "context" &&
-      (diagnosis.trim().length < 5 || probableCause.trim().length < 5)
+      (diagnosis.trim().length < 10 || probableCause.trim().length < 5)
     ) {
-      setError("Confirme a situação e a causa provável antes de avançar.");
+      setError(
+        "O diagnóstico precisa ter ao menos 10 caracteres e a causa provável, 5.",
+      );
       return;
     }
     if (
       stage === "plan" &&
-      (recommendation.trim().length < 5 ||
+      (recommendation.trim().length < 10 ||
         expectedResult.trim().length < 5 ||
         (!recommendChecklist && !recommendOrder))
     ) {
-      setError("Defina a recomendação, o resultado e ao menos uma demanda.");
+      setError(
+        "A recomendação precisa ter ao menos 10 caracteres; defina também o resultado e uma demanda.",
+      );
       return;
     }
     setStage(next);
@@ -220,6 +243,15 @@ export function TechnicalAnalysisDialog({
       setError("Mantenha ao menos uma etapa e um critério de aceite.");
       return;
     }
+    if (recommendChecklist === recommendOrder) {
+      setError("Escolha apenas um encaminhamento: modelo de checklist ou ordem de serviço.");
+      return;
+    }
+    const priority = apiSeverity(occurrence.severidade);
+    if (!priority) {
+      setError("A prioridade da ocorrência não é reconhecida. Peça ao PCM para revisar o registro.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -233,7 +265,7 @@ export function TechnicalAnalysisDialog({
         recomendacao: recommendation.trim(),
         recomenda_checklist: recommendChecklist,
         recomenda_os: recommendOrder,
-        prioridade: occurrence.severidade || "MEDIA",
+        prioridade: priority,
         relatorio_tecnico: brief,
       });
       if (requiresSeparateTechnicalAnalysisDispatch()) {
@@ -376,11 +408,14 @@ export function TechnicalAnalysisDialog({
                   />
                 </label>
               </div>
-              <div className="manager-analysis-demands">
+              <p className="manager-analysis-demands__hint">Escolha um único encaminhamento para esta ocorrência. A análise não criará os dois fluxos.</p>
+              <div className="manager-analysis-demands" role="radiogroup" aria-label="Encaminhamento da análise técnica">
                 <button
                   className={recommendChecklist ? "is-selected" : ""}
                   type="button"
-                  onClick={() => setRecommendChecklist((current) => !current)}
+                  role="radio"
+                  aria-checked={recommendChecklist}
+                  onClick={() => { setRecommendChecklist(true); setRecommendOrder(false); }}
                 >
                   <CheckIcon />
                   <span>
@@ -393,7 +428,9 @@ export function TechnicalAnalysisDialog({
                 <button
                   className={recommendOrder ? "is-selected" : ""}
                   type="button"
-                  onClick={() => setRecommendOrder((current) => !current)}
+                  role="radio"
+                  aria-checked={recommendOrder}
+                  onClick={() => { setRecommendOrder(true); setRecommendChecklist(false); }}
                 >
                   <WrenchIcon />
                   <span>

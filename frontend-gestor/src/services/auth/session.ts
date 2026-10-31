@@ -1,7 +1,9 @@
 import type { GestorSession } from '../api/auth'
 import {
   clearGestorToken,
+  getGestorApiTargetBinding,
   getGestorToken,
+  saveGestorApiTargetBinding,
   saveGestorToken,
 } from '../api/config'
 
@@ -66,6 +68,12 @@ export function readGestorSession(): GestorSession | null {
       return null
     }
 
+    const currentTarget = getGestorApiTargetBinding()
+    if (!parsed.apiTarget || parsed.apiTarget !== currentTarget) {
+      markExpiredGestorSession()
+      return null
+    }
+
     const currentToken = getGestorToken()
     if (currentToken && currentToken !== parsed.token) {
       removeSessionData()
@@ -84,8 +92,11 @@ export function readGestorSession(): GestorSession | null {
 
 export function saveGestorSession(session: GestorSession): void {
   try {
+    const apiTarget = getGestorApiTargetBinding()
+    const boundSession = { ...session, apiTarget }
     saveGestorToken(session.token)
-    window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))
+    saveGestorApiTargetBinding(apiTarget)
+    window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(boundSession))
     window.sessionStorage.removeItem(AUTH_NOTICE_KEY)
     window.sessionStorage.removeItem(STARTUP_COMPLETED_KEY)
     for (const key of LEGACY_PREVIEW_KEYS) window.sessionStorage.removeItem(key)

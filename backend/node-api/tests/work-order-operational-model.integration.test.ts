@@ -147,7 +147,9 @@ test('numeração operacional é atômica, independente por tenant, transacional
   assert.notEqual(databaseName, 'vorqix_dev');
   assert.match(databaseName, /test/u);
 
-  const administrator = new Pool({ connectionString: migrationUrl, max: 16 });
+  // Keep the concurrent numbering requests, but queue them within the local
+  // PostgreSQL connection budget alongside the runtime and running API.
+  const administrator = new Pool({ connectionString: migrationUrl, max: 8 });
   const runtime = new Pool({ connectionString: runtimeUrl, max: 2 });
   try {
     const setup = await administrator.connect();
@@ -161,7 +163,7 @@ test('numeração operacional é atômica, independente por tenant, transacional
     }
 
     const [ordersA, ordersB] = await Promise.all([
-      Promise.all(Array.from({ length: 12 }, (_, index) => insertOrder(administrator, tenantA, `A-${index}-${randomUUID()}`, index % 2 ? 'PREDICTIVE' : 'PREVENTIVE', (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3]))),
+      Promise.all(Array.from({ length: 12 }, (_, index) => insertOrder(administrator, tenantA, `A-${index}-${randomUUID()}`, index % 2 ? 'LUBRICATION' : 'PREVENTIVE', (['INTERNAL', 'EXTERNAL', 'MIXED'] as const)[index % 3]))),
       Promise.all(Array.from({ length: 7 }, (_, index) => insertOrder(administrator, tenantB, `B-${index}-${randomUUID()}`))),
     ]);
     assert.deepEqual(ordersA.map(order => order.number).sort((a, b) => a - b), Array.from({ length: 12 }, (_, index) => index + 1));

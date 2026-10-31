@@ -34,6 +34,7 @@ export type PlanType =
   | 'LUBRICATION'
   | 'CORRECTIVE'
   | 'CONDITION_BASED';
+export type PlanInputType = Exclude<PlanType, 'PREDICTIVE'>;
 export type TriggerType = 'PERIODICITY' | 'HOUR_METER' | 'CONDITION' | 'MANUAL' | 'OCCURRENCE';
 export type StopMode = 'NO_STOP' | 'MANDATORY_STOP' | 'EXECUTOR_DECISION';
 export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REJECTED';
@@ -126,7 +127,7 @@ export interface MaintenancePlanInput {
   readonly name: string;
   readonly assetId: string;
   readonly componentId: string | null;
-  readonly planType: PlanType;
+  readonly planType: PlanInputType;
   readonly checklistTemplateVersionId: string;
   readonly criticality: Criticality;
   readonly triggerType: TriggerType;

@@ -625,12 +625,61 @@ export class OperationsRepository {
     const result = await client.query<OperationsRow>(
       `SELECT *
        FROM maintenance.work_orders
-       WHERE origin_entity_id=$1
+       WHERE origin_entity_id=$1 AND status<>'CANCELLED'
        ORDER BY created_at,id
        FOR UPDATE`,
       [originEntityId],
     );
     return result.rows;
+  }
+
+  async cancelWorkOrder(client: PoolClient, workOrderId: string): Promise<void> {
+    const result = await client.query<{
+      tenant_id: string;
+      origin_type: string;
+      origin_entity_id: string | null;
+    }>(
+      `UPDATE maintenance.work_orders
+       SET status='CANCELLED', updated_at=clock_timestamp()
+       WHERE id=$1 AND status='DRAFT'
+         AND technical_demand_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM maintenance.work_order_actions action WHERE action.work_order_id=$1)
+         AND NOT EXISTS (SELECT 1 FROM maintenance.executions execution WHERE execution.work_order_id=$1)
+       RETURNING tenant_id,origin_type,origin_entity_id`,
+      [workOrderId],
+    );
+    const cancelled = result.rows[0];
+    if (result.rowCount !== 1 || !cancelled) return;
+    await client.query(
+      `UPDATE maintenance.operational_occurrences
+       SET work_order_id=NULL, work_order_action_id=NULL, status='OPEN',
+           treatment_status='UNDER_ANALYSIS', updated_at=clock_timestamp()
+       WHERE tenant_id=$1 AND id=$2 AND work_order_id=$3`,
+      [cancelled.tenant_id, cancelled.origin_entity_id, workOrderId],
+    );
+    await client.query(
+      `UPDATE workflow.notifications notification
+       SET status='ACTIVE'
+       WHERE notification.notification_type='OCCURRENCE_REPORTED'
+         AND notification.entity_type='OPERATIONAL_OCCURRENCE'
+         AND notification.status='RETRACTED'
+         AND notification.tenant_id=$1 AND notification.entity_id=$2
+         AND (notification.deduplication_key IS NULL OR NOT EXISTS (
+           SELECT 1 FROM workflow.notifications active
+           WHERE active.tenant_id=notification.tenant_id
+             AND active.deduplication_key=notification.deduplication_key
+             AND active.status='ACTIVE'
+         ))`,
+      [cancelled.tenant_id, cancelled.origin_entity_id],
+    );
+  }
+
+  async hasAnyWorkOrderExecution(client: PoolClient, workOrderId: string): Promise<boolean> {
+    const result = await client.query(
+      'SELECT 1 FROM maintenance.executions WHERE work_order_id=$1 LIMIT 1',
+      [workOrderId],
+    );
+    return result.rows.length > 0;
   }
 
   async linkOccurrenceToWorkOrder(

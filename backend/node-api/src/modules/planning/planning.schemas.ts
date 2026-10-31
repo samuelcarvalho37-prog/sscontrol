@@ -53,6 +53,13 @@ const planType = Type.Union([
   Type.Literal('CORRECTIVE'),
   Type.Literal('CONDITION_BASED'),
 ]);
+const editablePlanType = Type.Union([
+  Type.Literal('PREVENTIVE'),
+  Type.Literal('INSPECTION'),
+  Type.Literal('LUBRICATION'),
+  Type.Literal('CORRECTIVE'),
+  Type.Literal('CONDITION_BASED'),
+]);
 const triggerType = Type.Union([
   Type.Literal('PERIODICITY'),
   Type.Literal('HOUR_METER'),
@@ -212,7 +219,7 @@ const planFields = Type.Object({
   nome: shortName,
   ativo_id: uuid,
   componente_id: Type.Union([Type.Null(), uuid]),
-  tipo: planType,
+  tipo: editablePlanType,
   checklist_versao_id: uuid,
   criticidade: criticality,
   tipo_disparo: triggerType,

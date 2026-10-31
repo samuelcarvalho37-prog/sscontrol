@@ -149,7 +149,11 @@ function metadataOf(notification: GestorNotification, profile = ""): Notificatio
     return {
       category: "technical",
       typeLabel: "Análise técnica",
-      actionLabel: actionLabel("Abrir análise"),
+      actionLabel: actionLabel(
+        upper(profile) === "TECNICO" && notification.ordem_servico_id
+          ? "Abrir OS para continuar"
+          : "Abrir análise",
+      ),
       entityLabel: "Ocorrência analisada",
       actionable,
     };

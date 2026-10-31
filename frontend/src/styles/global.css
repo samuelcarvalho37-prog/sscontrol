@@ -53,6 +53,62 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Ações sem classe própria não devem depender do estilo transparente do navegador. */
+button:not([class]) {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 750;
+}
+
+.occurrence-wizard__actions {
+  align-items: center;
+  margin-top: 4px;
+}
+
+.occurrence-wizard__primary,
+.occurrence-wizard__secondary {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-weight: 800;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.occurrence-wizard__primary {
+  color: #fff;
+  background: linear-gradient(135deg, #0a7aea, #075fc4);
+  box-shadow: 0 7px 16px rgba(8, 117, 225, 0.2);
+}
+
+.occurrence-wizard__primary:not(:disabled):hover {
+  background: linear-gradient(135deg, #086bd0, #064fa7);
+  box-shadow: 0 9px 20px rgba(8, 95, 196, 0.25);
+  transform: translateY(-1px);
+}
+
+.occurrence-wizard__primary:disabled {
+  color: #66768a;
+  border-color: #d7e1eb;
+  background: #e8eef5;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.occurrence-wizard__secondary {
+  color: #264b6c;
+  border-color: #c8d8e7;
+  background: #f8fbff;
+}
+
+.occurrence-wizard__secondary:not(:disabled):hover {
+  background: #eaf2fb;
+}
+
 button:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.25);
   outline-offset: 2px;

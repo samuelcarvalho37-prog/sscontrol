@@ -45,7 +45,8 @@ export async function loadPcmReports(
          AND execution.completed_at >= bounds.start_at AND execution.completed_at <= bounds.end_at
        GROUP BY execution.operator_id, person.name
      ), execution_details AS (
-       SELECT execution.id, person.name AS tecnico_nome, work_order.operational_code AS ordem_codigo,
+       SELECT execution.id, work_order.id AS ordem_id, action.id AS acao_id,
+              person.name AS tecnico_nome, work_order.operational_code AS ordem_codigo,
               work_order.code AS ordem_codigo_legado,
          work_order.title AS titulo, asset.tag AS ativo_tag,
          execution.started_at AS iniciada_em, execution.completed_at AS concluida_em,
@@ -60,6 +61,8 @@ export async function loadPcmReports(
        FROM maintenance.executions execution
        JOIN iam.users person ON person.id=execution.operator_id AND person.tenant_id=execution.tenant_id
        JOIN scoped_orders work_order ON work_order.id=execution.work_order_id AND work_order.tenant_id=execution.tenant_id
+       LEFT JOIN maintenance.work_order_actions action
+         ON action.id=execution.work_order_action_id AND action.tenant_id=execution.tenant_id
        JOIN cmms.assets asset ON asset.id=work_order.asset_id AND asset.tenant_id=work_order.tenant_id
        CROSS JOIN bounds
        WHERE execution.completed_at IS NOT NULL
@@ -149,7 +152,7 @@ export async function loadPcmReports(
          ) row), '[]'::jsonb)
        ),
        'execucoes_detalhadas', COALESCE((SELECT jsonb_agg(row) FROM (
-         SELECT id, tecnico_nome, ordem_codigo, titulo, ativo_tag, iniciada_em,
+         SELECT id, ordem_id, acao_id, tecnico_nome, ordem_codigo, titulo, ativo_tag, iniciada_em,
            concluida_em, duracao_segundos, segundos_pausados,
            custo_materiais_total, itens_materiais
          FROM execution_details ORDER BY concluida_em DESC

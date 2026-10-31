@@ -1239,6 +1239,20 @@
   border-bottom-color: transparent;
 }
 
+.pcm-execution-row {
+  cursor: pointer;
+}
+
+.pcm-execution-row:hover,
+.pcm-execution-row:focus-visible {
+  background: #edf6ff;
+}
+
+.pcm-execution-row:focus-visible {
+  outline: 3px solid rgba(23, 103, 197, 0.3);
+  outline-offset: -3px;
+}
+
 .pcm-order-link:focus-visible,
 .pcm-order-detail__close:focus-visible,
 .pcm-order-filter select:focus-visible,

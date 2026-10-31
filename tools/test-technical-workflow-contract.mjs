@@ -104,10 +104,10 @@ for (const action of requiredActions.filter((action) => action.startsWith('admin
 }
 
 for (const action of requiredActions.filter((action) => action.startsWith('gestor.') || action === 'cmms.kpis_tecnicos')) {
-  assert(gestorApi.includes(`'${action}'`), `cliente gestor não usa ${action}`)
+  assert(gestorApi.includes(`'${action}'`) || gestorApi.includes(`"${action}"`), `cliente gestor não usa ${action}`)
 }
 
-assert(decisions.includes('<h1>Validar</h1>'), 'área de validação não apresenta a ação principal')
+assert(decisions.includes("'Validar'}</h1>"), 'área de validação não apresenta a ação principal')
 assert(decisions.includes('PRÓXIMO PASSO'), 'fila não orienta a próxima decisão')
 assert(decisions.includes('<option value="demands">Solicitações') && decisions.includes('<option value="models">Checklists'), 'categorias de documentos não estão organizadas')
 assert(!decisions.includes('<option value="operations">Ocorrências'), 'ocorrências ainda concorrem com documentos na área de assinatura')
@@ -145,7 +145,7 @@ assert(
 )
 assert(
   workflow.includes('function gestorDemandaValidar_') &&
-    gestorApi.includes("'gestor.demandas.validar'") &&
+    (gestorApi.includes("'gestor.demandas.validar'") || gestorApi.includes('"gestor.demandas.validar"')) &&
     demandDialog.includes('validateGestorTechnicalDemand'),
   'validação atômica com assinatura não está conectada ao frontend',
 )
@@ -224,8 +224,8 @@ assert(
 assert(gestorApi.includes('getGestorTechnicalKpisForPeriod'), 'cliente não envia período e ativo aos KPIs')
 assert(
   gestorApi.includes('getGestorAssetJourney') &&
-    gestorApi.includes("'gestor.dossie_ativo'") &&
-    !gestorApi.includes("'operador.contexto_qr'"),
+    gestorApi.includes('gestor.dossie_ativo') &&
+    !gestorApi.includes('operador.contexto_qr'),
   'ficha do ativo não usa o dossiê técnico rastreável do Gestor',
 )
 assert(assetJourney.includes('Faixas configuradas') && assetJourney.includes('Últimas alterações') && assetJourney.includes('Histórico'), 'jornada completa do ativo está incompleta')
@@ -299,15 +299,16 @@ assert(
 assert(gestorApi.includes('getGestorNotifications') && gestorApi.includes('markGestorNotificationRead'), 'central de notificações não usa o backend real')
 assert(gestorApp.includes('notification.entidade_tipo') && notifications.includes('NAO_LIDA'), 'notificações não preservam contexto e leitura')
 assert(
-  gestorApi.includes("{ limite: 300 }") &&
-    gestorApi.includes("normalizedStatus(item.status) === 'NAO_LIDA'") &&
-    workflow.includes('context_acknowledged:true'),
-  'contagem não distingue mensagens não lidas de contextos operacionais já reconhecidos',
+  gestorApi.includes("{ somente_nao_lidas: true, limite: 100 }") &&
+    gestorApi.includes("normalizedStatus(item.status) === \"NAO_LIDA\"") &&
+    gestorApi.includes("!entities.has(`OCORRENCIAS_OPERACIONAIS:${item.id}`)") &&
+    gestorApi.includes("!entities.has(key)"),
+  'contagem de notificações não limita não lidas nem evita duplicar contextos operacionais já notificados',
 )
 assert(
   notifications.indexOf('await markGestorNotificationRead(destination)') <
     notifications.indexOf('await onOpenNotification(destination)') &&
-    notifications.includes('const pending = notifications.filter(isUnread)'),
+    notifications.includes('const pending = notifications.filter((item) => isUnreadForProfile(item, profile))'),
   'clique e leitura em lote não persistem a leitura antes de navegar',
 )
 assert(
@@ -378,13 +379,13 @@ assert(
   analytics.includes('Execuções concluídas') &&
     analytics.includes('Ver auditoria') &&
     gestorApi.includes('getGestorCompletedActions') &&
-    gestorApi.includes("status: 'CONCLUIDA'"),
+    gestorApi.includes('status: "CONCLUIDA"'),
   'conclusões do Operador não foram transferidas para o histórico auditável do Gestor',
 )
 assert(
   operatorQueue.includes('status:"PENDENTE,EM_EXECUCAO"') &&
     operatorQueue.includes('incluir_concluidas:false') &&
-    operatorApi.includes("status: 'PENDENTE,EM_EXECUCAO'") &&
+    operatorApi.includes('status: "PENDENTE,EM_EXECUCAO"') &&
     operatorApi.includes('incluir_concluidas: false') &&
     !operatorHome.includes("'CONCLUIDAS'") &&
     operatorApp.includes('remainingActions'),
@@ -395,7 +396,7 @@ assert(
     workflow.includes('function gestorParadaCriarTratamento_') &&
     workflow.includes('TRATAMENTO_PARADA_CRIADO') &&
     notifications.includes('Tratar parada') &&
-    gestorApi.includes("'gestor.paradas.criar_tratamento'"),
+    gestorApi.includes('"gestor.paradas.criar_tratamento"'),
   'parada técnica aberta não cria uma ocorrência rastreável para tratamento',
 )
 assert(

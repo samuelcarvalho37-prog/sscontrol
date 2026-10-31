@@ -110,7 +110,7 @@ test('botão acessível está ligado à OS filtrada e abre painel identificado p
   const source = await readFile(new URL('../src/components/PcmDashboard.tsx', import.meta.url), 'utf8')
   assert.match(source, /filteredOperationalOrders\.map\(item =>/)
   assert.match(source, /aria-label=\{`Abrir detalhes da ordem \$\{item\.code\}`\}/)
-  assert.match(source, /onClick=\{\(\) => void openOperationalOrder\(item\)\}/)
+  assert.match(source, /onClick=\{\(\) => demoMode \? openInsight\(item\.code,[^\n]+: void openOperationalOrder\(item\)\}/)
   assert.match(source, /<button type="button" className="pcm-order-link"/)
   assert.match(source, /loadOperationalWorkOrder\(order, workOrderId => openWorkOrderById\(workOrderId, order\.code\)\)/)
   assert.match(source, /if \(orderStatus && humanStatus\(item\.status\) !== orderStatus\) return false/)
