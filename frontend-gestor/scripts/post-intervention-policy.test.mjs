@@ -161,6 +161,18 @@ test('PCM vê uma única notificação após a análise e o técnico só recebe 
   });
 });
 
+test('técnico vê e abre notificações nativas de ação e ordem sem campos legados', async () => {
+  const { filterNotificationsForProfile, notificationNavigation } = await notificationPolicyModule();
+  for (const [entity, destination] of [
+    ['WORK_ORDER_ACTION', { kind: 'technician-action', actionId: 'native-id' }],
+    ['WORK_ORDER', { kind: 'technician-action', workOrderId: 'native-id' }],
+  ]) {
+    const item = { id: 'notice', tipo: 'WORK_ORDER_AVAILABLE', entidade_tipo: entity, entidade_id: 'native-id', status: 'NAO_LIDA' };
+    assert.equal(filterNotificationsForProfile([item], 'TECNICO').length, 1);
+    assert.deepEqual(notificationNavigation(item, 'TECNICO'), destination);
+  }
+});
+
 test('notificação de falta de peça do PCM abre a pendência pelo ID interno', async () => {
   const { notificationNavigation, notificationActionLabel } = await notificationPolicyModule();
   const notification = {

@@ -11,6 +11,13 @@ export interface PcmOccurrenceAssetContext {
 
 type OccurrenceLoader = (occurrenceId: string) => Promise<GestorOccurrence>
 
+export function shouldShowPcmNotice(notification: GestorNotification, now = new Date()): boolean {
+  const entity = text(notification.entidade_tipo).toUpperCase()
+  if (['OCORRENCIAS_OPERACIONAIS', 'OPERATIONAL_OCCURRENCE'].includes(entity) && !text(notification.ordem_servico_id)) return true
+  const createdAt = notification.criado_em ? new Date(notification.criado_em) : null
+  return Boolean(createdAt && !Number.isNaN(createdAt.getTime()) && createdAt.toDateString() === now.toDateString())
+}
+
 export type PcmOccurrenceAssetResolution =
   | { status: 'success'; context: PcmOccurrenceAssetContext }
   | { status: 'error'; message: string }

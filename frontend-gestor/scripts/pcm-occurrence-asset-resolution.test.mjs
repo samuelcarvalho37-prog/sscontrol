@@ -39,6 +39,15 @@ test.after(async () => {
   await vite?.close()
 })
 
+test('ocorrência sem OS continua acessível após a virada do dia mesmo já lida', async () => {
+  const { shouldShowPcmNotice } = await resolverModule()
+  const now = new Date('2026-11-01T12:00:00')
+  const notice = { id: 'notice', tipo: 'OCCURRENCE_REPORTED', entidade_tipo: 'OCORRENCIAS_OPERACIONAIS', status: 'LIDA', criado_em: '2026-10-31T12:00:00' }
+  assert.equal(shouldShowPcmNotice(notice, now), true)
+  assert.equal(shouldShowPcmNotice({ ...notice, ordem_servico_id: 'order-id' }, now), false)
+  assert.equal(shouldShowPcmNotice({ ...notice, criado_em: '2026-11-01T09:00:00', ordem_servico_id: 'order-id' }, now), true)
+})
+
 function occurrence(overrides = {}) {
   return {
     id: 'occurrence-1',

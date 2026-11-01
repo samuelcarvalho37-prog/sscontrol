@@ -38,7 +38,7 @@ export function isNotificationActionableForProfile(
     const hasAction = Boolean(notification.acao_ordem_servico_id)
     if (isOperationalOccurrenceNotification(notification)) return false
     if (entity === 'ANALISES_TECNICAS' || entity === 'TECHNICAL_ANALYSIS') return hasAction
-    return hasAction || entity === 'OS_ACOES'
+    return hasAction || ['OS_ACOES', 'WORK_ORDER_ACTION', 'WORK_ORDER', 'ORDEM_SERVICO', 'MAINTENANCE_WORK_ORDER', 'ORDENS_SERVICO'].includes(entity)
   }
 
   return true
@@ -89,7 +89,7 @@ export function notificationNavigation(
     const actionId = String(notification.acao_ordem_servico_id ?? '').trim()
     const workOrderId = String(notification.ordem_servico_id ?? '').trim()
 
-    if (entityType === 'OS_ACOES') {
+    if (['OS_ACOES', 'WORK_ORDER_ACTION'].includes(entityType)) {
       return id ? { kind: 'technician-action', actionId: id } : null
     }
     if (actionId || workOrderId) {

@@ -14,7 +14,7 @@ import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
 import type { AdminEntityRecord } from '../types/catalog'
 import type { GestorActionDetail, GestorNotification } from '../types/gestor'
-import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction } from './pcmOccurrenceAssetResolver'
+import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction, shouldShowPcmNotice } from './pcmOccurrenceAssetResolver'
 import { createPcmDemoSnapshot } from './pcmDashboardDemo'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { filterNotificationsForProfile } from './notificationPolicy'
@@ -977,11 +977,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     setNotificationsError('')
     void getGestorNotifications(controller.signal)
       .then(notifications => {
-        const today = new Date().toDateString()
-        setTodayNotifications(filterNotificationsForProfile(notifications, 'PCM').filter(notification => {
-          const createdAt = notification.criado_em ? new Date(notification.criado_em) : null
-          return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt.toDateString() === today
-        }))
+        setTodayNotifications(filterNotificationsForProfile(notifications, 'PCM').filter(notification => shouldShowPcmNotice(notification)))
       })
       .catch(cause => {
         if (controller.signal.aborted) return
@@ -989,7 +985,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
           onSessionExpired()
           return
         }
-        setNotificationsError('Não foi possível carregar as notificações de hoje.')
+        setNotificationsError('Não foi possível carregar os avisos pendentes.')
       })
     return () => controller.abort()
   }, [refresh, onSessionExpired])
