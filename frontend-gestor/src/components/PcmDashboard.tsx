@@ -18,7 +18,7 @@ import { createPcmOccurrenceAssetResolver, pcmOccurrenceNotificationAction, shou
 import { createPcmDemoSnapshot } from './pcmDashboardDemo'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import { filterNotificationsForProfile } from './notificationPolicy'
-import { assertWorkOrderDetailMatchesSelection, createWorkOrderDetailRequestGate, focusWorkOrderDetail, loadOperationalWorkOrder, workOrderDetailHeadingCode } from './workOrderDetailNavigation'
+import { assertWorkOrderDetailMatchesSelection, createWorkOrderDetailRequestGate, focusWorkOrderDetail, isDraftWorkOrderStatus, loadOperationalWorkOrder, workOrderDetailHeadingCode } from './workOrderDetailNavigation'
 import {
   postInterventionPolicyLabel,
   postInterventionPolicySelectionError,
@@ -1892,7 +1892,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   }
 
   async function cancelSelectedWorkOrder() {
-    if (!selectedOrder || normalize(selectedOrder.status) !== 'DRAFT') return
+    if (!selectedOrder || !isDraftWorkOrderStatus(selectedOrder.status)) return
     const reason = cancelWorkOrderReason.trim()
     if (reason.length < 10) {
       setCancelWorkOrderError('Descreva o motivo com pelo menos 10 caracteres.')
@@ -2325,7 +2325,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
                     </button>
                     {prepareError ? <p className="pcm-order-detail__error" role="alert">{prepareError}</p> : null}
                   </section> : null}
-                  {normalize(selectedOrder.status) === 'DRAFT' ? <section className="pcm-order-assignment">
+                  {isDraftWorkOrderStatus(selectedOrder.status) ? <section className="pcm-order-assignment">
                     <h3>OS criada por engano?</h3>
                     <p>É possível cancelar somente enquanto ainda está em rascunho. O registro não será apagado; a justificativa ficará na auditoria e a ocorrência poderá gerar outra OS.</p>
                     {!cancelWorkOrderOpen ? <button type="button" onClick={() => { setCancelWorkOrderOpen(true); setCancelWorkOrderError('') }}>Cancelar esta OS</button> : <div className="pcm-create-order-modal__form">

@@ -27,6 +27,16 @@ function order(id, code) {
   return { id, raw: { id, codigo: code } }
 }
 
+test('cancelamento de rascunho reconhece o status nativo e o traduzido sem incluir ordens liberadas', async () => {
+  const { navigation } = await modules()
+  assert.equal(navigation.isDraftWorkOrderStatus('DRAFT'), true)
+  assert.equal(navigation.isDraftWorkOrderStatus('RASCUNHO'), true)
+  assert.equal(navigation.isDraftWorkOrderStatus(' rascunho '), true)
+  for (const status of ['RELEASED', 'LIBERADA', 'CHANGES_REQUESTED', 'COMPLETED', 'CANCELLED', '']) {
+    assert.equal(navigation.isDraftWorkOrderStatus(status), false)
+  }
+})
+
 test('seleciona OS A e depois substitui pelo detalhe da OS B usando IDs internos', async () => {
   const { navigation } = await modules()
   const gate = navigation.createWorkOrderDetailRequestGate()

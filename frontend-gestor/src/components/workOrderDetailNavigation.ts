@@ -60,3 +60,6 @@ export function workOrderDetailHeadingCode(
 ): string {
   return detailCode || selectedCode || 'Detalhes da ordem'
 }
+export function isDraftWorkOrderStatus(status: string): boolean {
+  return ['DRAFT', 'RASCUNHO'].includes(status.trim().toUpperCase())
+}
