@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, CalendarCheck2, ChartNoAxesCombined, CirclePause, ClipboardList, ClockAlert, Download, FileQuestionMark, Printer, Repeat2, Siren, TimerReset, TriangleAlert, UsersRound, Wrench } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Activity, CalendarCheck2, ChartNoAxesCombined, CircleHelp, CirclePause, ClipboardList, ClockAlert, Download, FileQuestionMark, Printer, Repeat2, Siren, TimerReset, TriangleAlert, UsersRound, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { callApi } from '../services/api/client'
 import { getGestorToken } from '../services/api/config'
@@ -262,11 +262,12 @@ function HorizontalBarChart({
   </div>
 }
 
-function PcmPieChart({ items, emptyMessage, valueLabel, palette }: {
+function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donut' }: {
   items: ReadonlyArray<{ id: string; label: string; value: number }>
   emptyMessage: string
   valueLabel: string
   palette?: PcmCanvasPalette
+  variant?: 'pie' | 'donut'
 }) {
   const [hiddenIds, setHiddenIds] = useState<string[]>([])
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -285,9 +286,10 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette }: {
     const radians = angle * Math.PI / 180
     return { x: 50 + radius * Math.cos(radians), y: 50 + radius * Math.sin(radians) }
   }
-  const donutPath = (start: number, end: number) => {
+  const slicePath = (start: number, end: number) => {
     const outerStart = polar(46, start)
     const outerEnd = polar(46, end)
+    if (variant === 'pie') return `M 50 50 L ${outerStart.x} ${outerStart.y} A 46 46 0 ${end - start > 180 ? 1 : 0} 1 ${outerEnd.x} ${outerEnd.y} Z`
     const innerEnd = polar(27, end)
     const innerStart = polar(27, start)
     const largeArc = end - start > 180 ? 1 : 0
@@ -297,10 +299,14 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette }: {
   const toggle = (id: string) => setHiddenIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   return <div className="pcm-pie-chart" role="group" aria-label={valueLabel}>
     <div className="pcm-pie-chart__visual">
-      <svg className="pcm-pie-chart__svg" viewBox="0 0 100 100" role="img" aria-label={`${valueLabel}: ${positiveItems.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
-        {total === 0 ? <circle cx="50" cy="50" r="36" fill="none" stroke="#e5ebf0" strokeWidth="18" /> : slices.map(item => <g key={item.id} tabIndex={0} role="button" aria-label={`${item.label}: ${item.value}, ${number(item.percentage)} por cento. Clique para ocultar ou mostrar.`} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(item.id) } }}><title>{item.label}: {item.value} ({number(item.percentage)}%)</title>{Math.abs(item.end - item.start) >= 359.99 ? <circle cx="50" cy="50" r="36" fill="none" stroke={item.color} strokeWidth="18" /> : <path d={donutPath(item.start, item.end)} fill={item.color} />}</g>)}
+      <svg className={`pcm-pie-chart__svg${variant === 'pie' ? ' is-pie' : ' is-donut'}`} viewBox="0 0 100 100" role="img" aria-label={`${valueLabel}: ${positiveItems.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
+      {total === 0 ? <circle cx="50" cy="50" r={variant === 'donut' ? 36 : 46} fill={variant === 'donut' ? 'none' : '#e5ebf0'} stroke={variant === 'donut' ? '#e5ebf0' : 'none'} strokeWidth="18" /> : slices.map(item => <g key={item.id} tabIndex={0} role="button" aria-label={`${item.label}: ${item.value}, ${number(item.percentage)} por cento. Clique para ocultar ou mostrar.`} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(item.id) } }}><title>{item.label}: {item.value} ({number(item.percentage)}%)</title>{Math.abs(item.end - item.start) >= 359.99 ? variant === 'donut' ? <circle cx="50" cy="50" r="36" fill="none" stroke={item.color} strokeWidth="var(--pcm-chart-line-width, 18)" /> : <circle cx="50" cy="50" r="46" fill={item.color} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" /> : <path d={slicePath(item.start, item.end)} fill={item.color} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" />}</g>)}
       </svg>
-      <span className="pcm-pie-chart__center"><strong>{hovered ? hovered.value : total}</strong><small>{hovered ? hovered.label : total ? 'Total' : 'Sem dados'}</small></span>
+      {slices.map(item => {
+        const point = polar(variant === 'donut' ? 36 : 29, (item.start + item.end) / 2)
+        return <span key={`label-${item.id}`} className="pcm-pie-chart__slice-label" style={{ left: `${point.x}%`, top: `${point.y}%` }}><span className="pcm-pie-chart__slice-value">{number(item.value)}</span><span className="pcm-pie-chart__slice-percent">{number(item.percentage)}%</span></span>
+      })}
+      {variant === 'donut' ? <span className="pcm-pie-chart__center"><strong>{hovered ? hovered.value : total}</strong><small>{hovered ? hovered.label : total ? 'Total' : 'Sem dados'}</small></span> : null}
     </div>
     <ul>{positiveItems.map((item, index) => {
       const active = slices.find(slice => slice.id === item.id)
@@ -342,7 +348,7 @@ function ReliabilityComparison({
         <div className={`pcm-time-comparison${mode === 'comparison' ? ' pcm-time-comparison--bars' : ''}`} role="group" aria-label={`${title}: ${availableItems.map((item) => `${item.label} ${item.displayValue}`).join('; ')}`}>
           {availableItems.map((item) => (
             <div className="pcm-time-comparison__item" key={item.label}>
-              <div className="pcm-time-comparison__data"><span>{item.label}</span><strong>{item.displayValue}</strong><small>{item.detail}</small></div>
+              <div className="pcm-time-comparison__data" title={item.detail}><span>{item.label}</span><strong>{item.displayValue}</strong></div>
               {mode === 'comparison' ? <div className="pcm-time-comparison__track" aria-hidden="true"><i style={{ width: `${Math.max(4, (item.value / maximum) * 100)}%`, background: palette?.[item.label === 'MTBF' ? 1 : 0] ?? palette?.[0] ?? '#176fc1' }} /></div> : null}
             </div>
           ))}
@@ -481,7 +487,17 @@ function maintenanceStatusLabel(value: MaintenanceStatus) {
   return value === 'ATENCAO' ? 'ATENÇÃO' : value === 'CRITICO' ? 'CRÍTICO' : 'NORMAL'
 }
 
-function MonthlyMttrChart({ items, loading, mode = 'bar', palette }: { items: MonthlyMttrPoint[]; loading: boolean; mode?: 'line' | 'bar' | 'progress'; palette?: PcmCanvasPalette }) {
+function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 'default' }: { items: MonthlyMttrPoint[]; loading: boolean; mode?: 'line' | 'area' | 'bar' | 'progress'; palette?: PcmCanvasPalette; chartStyle?: 'default' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth' | 'oval' | 'exploded' | 'depth' }) {
+  const areaGradientId = `pcm-mttr-area-${useId().replace(/:/g, '')}`
+  const [focusedMonth, setFocusedMonth] = useState<string | null>(null)
+  const [interval, setInterval] = useState<{ start: string; end: string; fixed: boolean } | null>(null)
+  const [previewX, setPreviewX] = useState<number | null>(null)
+  const startPoint = items.find(item => item.month === interval?.start)
+  const endPoint = items.find(item => item.month === interval?.end)
+  const selectPoint = (month: string) => {
+    setPreviewX(null)
+    setInterval(current => !current || current.fixed ? { start: month, end: month, fixed: false } : { ...current, end: month, fixed: true })
+  }
   const chartColor = palette?.[0] ?? '#176fc1'
   const chartTint = palette?.[0] ?? '#176fc1'
   const maximum = Math.max(1, ...items.map(item => item.mttrSeconds ?? 0))
@@ -491,7 +507,19 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette }: { items: Mo
     x: items.length < 2 ? 300 : 28 + index * (544 / (items.length - 1)),
     y: 152 - (item.mttrSeconds / maximum) * 126,
   }])
-  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const linePath = chartStyle === 'smooth' && points.length > 2
+    ? points.reduce((path, point, index) => {
+      if (index === 0) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+      const previous = points[index - 1]
+      const beforePrevious = points[index - 2] ?? previous
+      const next = points[index + 1] ?? point
+      const controlOneX = previous.x + (point.x - beforePrevious.x) / 6
+      const controlOneY = previous.y + (point.y - beforePrevious.y) / 6
+      const controlTwoX = point.x - (next.x - previous.x) / 6
+      const controlTwoY = point.y - (next.y - previous.y) / 6
+      return `${path} C ${controlOneX.toFixed(1)} ${controlOneY.toFixed(1)}, ${controlTwoX.toFixed(1)} ${controlTwoY.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
+    }, '')
+    : points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
 
   return (
     <div className="pcm-indicator-chart pcm-indicator-chart--monthly">
@@ -505,25 +533,47 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette }: { items: Mo
       {loading ? <p className="pcm-indicator-chart__empty">Carregando comparação mensal…</p> : !hasSample ? (
         <p className="pcm-indicator-chart__empty">Ainda não há dados mensais de MTTR.</p>
       ) : (
-        mode === 'line' ? <div className="pcm-monthly-line-chart" role="img" aria-label={`Tendência mensal do MTTR: ${points.map(point => `${point.label} ${duration(point.mttrSeconds)}`).join('; ')}`}>
-          <svg viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true">
-            <defs><linearGradient id="pcm-mttr-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor={chartTint} stopOpacity=".5" /><stop offset="100%" stopColor={chartTint} stopOpacity="0" /></linearGradient></defs>
-            {[26, 68, 110, 152].map(y => <line key={y} x1="20" x2="580" y1={y} y2={y} stroke="#e7edf2" strokeWidth="1" />)}
-            {points.length > 1 ? <path d={`${linePath} L ${points[points.length - 1]?.x ?? 572} 152 L ${points[0]?.x ?? 28} 152 Z`} fill="url(#pcm-mttr-area)" /> : null}
-            {points.length > 0 ? <path d={linePath} fill="none" stroke={chartColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /> : null}
-            {points.map(point => <g key={point.month} className="pcm-monthly-line-chart__point"><circle cx={point.x} cy={point.y} r="5" fill="#fff" stroke={chartColor} strokeWidth="3" vectorEffect="non-scaling-stroke" /><title>{point.label}: {duration(point.mttrSeconds)}</title><text x={point.x} y="173" textAnchor="middle" fill="#60798e" fontSize="11">{point.label}</text></g>)}
+        mode === 'line' || mode === 'area' ? <div className={`pcm-monthly-line-chart${mode === 'area' ? ' is-area' : ''}`} role="img" aria-label={`Tendência mensal do MTTR: ${points.map(point => `${point.label} ${duration(point.mttrSeconds)}`).join('; ')}`}>
+          <svg viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true" onMouseMove={event => {
+            if (!interval || interval.fixed || points.length === 0) return
+            const rect = event.currentTarget.getBoundingClientRect()
+            const x = Math.max(points[0].x, Math.min(points[points.length - 1].x, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 600))
+            setPreviewX(x)
+            const nearest = points.reduce((closest, point) => Math.abs(point.x - x) < Math.abs(closest.x - x) ? point : closest)
+            setInterval(current => current && !current.fixed ? { ...current, end: nearest.month } : current)
+          }}>
+            <defs><linearGradient id={areaGradientId} x1="0" x2={chartStyle === 'gradient' ? '1' : '0'} y1="0" y2={chartStyle === 'gradient' ? '0' : '1'}><stop offset="0%" stopColor={chartTint} stopOpacity={mode === 'area' ? '.48' : '.08'} /><stop offset="100%" stopColor={chartStyle === 'gradient' ? 'var(--pcm-gradient-end, #63a2df)' : chartTint} stopOpacity={chartStyle === 'gradient' ? '.3' : '0'} /></linearGradient></defs>
+            {[26, 68, 110, 152].map(y => <line key={y} x1="20" x2="580" y1={y} y2={y} stroke="var(--pcm-chart-grid, #e7edf2)" strokeWidth="1" />)}
+            <defs><linearGradient id={`${areaGradientId}-line`} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={chartColor} /><stop offset="100%" stopColor="var(--pcm-gradient-end, #63a2df)" /></linearGradient></defs>
+            {interval ? (() => {
+              const first = points.find(point => point.month === interval.start)
+              const last = points.find(point => point.month === interval.end)
+              const edge = !interval.fixed && previewX !== null ? previewX : last?.x
+              return first && edge !== undefined ? <defs><clipPath id={`${areaGradientId}-selection`}><rect x={Math.min(first.x, edge)} y="0" width={Math.max(1, Math.abs(edge - first.x))} height="180" /></clipPath></defs> : null
+            })() : null}
+            {mode === 'area' && points.length > 1 ? <path d={`${linePath} L ${points[points.length - 1]?.x ?? 572} 152 L ${points[0]?.x ?? 28} 152 Z`} fill={`url(#${areaGradientId})`} clipPath={interval ? `url(#${areaGradientId}-selection)` : undefined} /> : null}
+            {points.length > 0 ? <path className="pcm-monthly-data-line" style={{ '--pcm-line-paint': chartStyle === 'gradient' ? `url(#${areaGradientId}-line)` : chartColor } as React.CSSProperties} d={linePath} fill="none" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /> : null}
+            {interval ? (() => {
+              const firstIndex = points.findIndex(point => point.month === interval.start)
+              const lastIndex = points.findIndex(point => point.month === interval.end)
+              if (firstIndex < 0 || lastIndex < 0) return null
+              const selected = points.slice(Math.min(firstIndex, lastIndex), Math.max(firstIndex, lastIndex) + 1)
+              const path = selected.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ')
+              return <g className="pcm-monthly-line-chart__interval" pointerEvents="none"><path d={path} fill="none" stroke={chartColor} strokeWidth="7" strokeOpacity=".4" strokeLinecap="round" vectorEffect="non-scaling-stroke" />{[selected[0], selected[selected.length - 1]].filter((point, index) => point && (index === 0 || selected.length > 1)).map(point => <circle key={point.month} cx={point.x} cy={point.y} r="9" fill="none" stroke={chartColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}</g>
+            })() : null}
+            {points.map(point => <g key={point.month} role="button" tabIndex={0} aria-label={`Selecionar ${point.label}: ${duration(point.mttrSeconds)}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); selectPoint(point.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); selectPoint(point.month) } }} onMouseEnter={() => setInterval(current => current && !current.fixed ? { ...current, end: point.month } : current)} className="pcm-monthly-line-chart__point"><circle cx={point.x} cy={point.y} r="var(--pcm-chart-point-size, 5)" fill="var(--pcm-chart-surface, #fff)" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" vectorEffect="non-scaling-stroke" /><title>{point.label}: {duration(point.mttrSeconds)}</title><text x={point.x} y="173" textAnchor="middle" fill="var(--pcm-widget-content, #60798e)" fontSize="11">{point.label}</text></g>)}
           </svg>
         </div> : mode === 'progress' ? <div className="pcm-monthly-progress" role="img" aria-label={`Progresso mensal relativo do MTTR: ${items.map(item => `${item.label} ${item.mttrSeconds === null ? 'sem amostra' : duration(item.mttrSeconds)}`).join('; ')}`}>
-          {items.map(item => <div className="pcm-monthly-progress__item" key={item.month} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
+          {items.map(item => <div className="pcm-monthly-progress__item" key={item.month} data-active={focusedMonth === item.month ? 'true' : 'false'} role="button" tabIndex={0} aria-pressed={focusedMonth === item.month} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) } }} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
             <span className="pcm-monthly-progress__month">{item.label}</span>
             <div className="pcm-monthly-progress__track"><span style={{ width: `${item.mttrSeconds === null ? 0 : Math.max(4, (item.mttrSeconds / maximum) * 100)}%`, background: chartColor }} /></div>
             <strong>{item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)}</strong>
           </div>)}
         </div> : <div className="pcm-monthly-chart" role="img" aria-label="Comparação mensal do MTTR">
           {items.map(item => {
-            const height = item.mttrSeconds === null ? 0 : Math.max(8, (item.mttrSeconds / maximum) * 100)
+            const height = item.mttrSeconds === null ? 0 : Math.max(0, (item.mttrSeconds / (maximum * 1.15)) * 100)
             return (
-              <div className="pcm-monthly-chart__column" key={item.month} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
+              <div className="pcm-monthly-chart__column" key={item.month} data-active={focusedMonth === item.month ? 'true' : 'false'} role="button" tabIndex={0} aria-pressed={focusedMonth === item.month} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) } }} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
                 <span className="pcm-monthly-chart__value">{item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)}</span>
                 <div className="pcm-monthly-chart__track">
                   <span className="pcm-monthly-chart__bar" style={{ height: `${height}%`, background: chartColor }} />
@@ -535,6 +585,7 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette }: { items: Mo
         </div>
       )}
       <p className="pcm-indicator-chart__note">Para calcular o MTTR, registre o início e o término da falha.</p>
+      {(mode === 'line' || mode === 'area') ? <div className="pcm-chart-interval" aria-live="polite">{startPoint && endPoint ? <><span>{startPoint.label} → {endPoint.label}: {duration(startPoint.mttrSeconds)} → {duration(endPoint.mttrSeconds)}</span><button type="button" onClick={() => setInterval(null)}>Limpar intervalo</button></> : <span>Clique em um ponto para iniciar; passe pelos demais e clique para fixar o intervalo.</span>}</div> : null}
     </div>
   )
 }
@@ -626,7 +677,7 @@ interface ExecutablePlan {
   recurrenceDays: number | null
 }
 
-export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { onSessionExpired: () => void; partShortageFocusId?: string }) {
+export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void }) {
   const [days, setDays] = useState('30')
   const [demoMode, setDemoMode] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -699,7 +750,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   const [improvementRequestId, setImprovementRequestId] = useState('')
   const [materialCostDrafts, setMaterialCostDrafts] = useState<Record<string, string>>({})
   const [todayNotifications, setTodayNotifications] = useState<GestorNotification[]>([])
-  const [notificationsError, setNotificationsError] = useState('')
   const demoSnapshot = useMemo(() => createPcmDemoSnapshot(), [])
   const displayData: PcmData | null = demoMode ? demoSnapshot.data : data
   const displayOrders = demoMode ? demoSnapshot.orders : orders
@@ -713,16 +763,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     })
     return () => window.cancelAnimationFrame(frame)
   }, [createOrderOpen])
-
-  const pendingTodayNotifications = useMemo(() => {
-    const completedOrigins = new Set(
-      orders
-        .filter(order => ['COMPLETED', 'CONCLUIDA', 'CONCLUÍDA'].includes(normalize(order.status)))
-        .map(order => order.entidade_origem_id)
-        .filter((originId): originId is string => Boolean(originId)),
-    )
-    return todayNotifications.filter(notification => !completedOrigins.has(notification.entidade_id ?? ''))
-  }, [orders, todayNotifications])
 
   const reload = useCallback(() => setRefresh(value => value + 1), [])
   const refreshAutomatically = useCallback(() => {
@@ -758,27 +798,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
 
   function showOverdueOrders() {
     setInsight({ title: 'Ordens atrasadas', description: 'Ordens abertas cuja programação já venceu.', items: dailyInsights.overdue })
-  }
-
-  function showNotificationDetails(notification: GestorNotification) {
-    const action = pcmOccurrenceNotificationAction(notification)
-    const linkedOrder = action.kind === 'follow'
-      ? operationalOrders.find(order => order.id === action.workOrderId)
-      : undefined
-    setInsight({
-      title: notification.titulo,
-      description: linkedOrder
-        ? `${linkedOrder.code} · ${linkedOrder.equipment} · ${linkedOrder.sector}. Selecione o registro para abrir a ordem.`
-        : `${notification.mensagem || 'Aviso operacional recebido.'} Selecione o registro para continuar.`,
-      items: [{
-        id: `notification:${notification.id}`,
-        title: linkedOrder ? `${linkedOrder.code} · ${linkedOrder.equipment}` : notification.titulo,
-        detail: linkedOrder
-          ? `${linkedOrder.sector} · ${humanWorkType(linkedOrder.type)} · ${humanStatus(linkedOrder.status)}`
-          : action.kind === 'follow' ? 'Ordem vinculada; abrir detalhes' : 'Solicitação recebida; iniciar abertura de ordem',
-        status: linkedOrder ? humanPriority(linkedOrder.priority) : 'Aviso',
-      }],
-    })
   }
 
   function exportOperationalQueue() {
@@ -949,7 +968,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
 
   useEffect(() => {
     const controller = new AbortController()
-    setNotificationsError('')
     void getGestorNotifications(controller.signal)
       .then(notifications => {
         const today = new Date().toDateString()
@@ -964,7 +982,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
           onSessionExpired()
           return
         }
-        setNotificationsError('Não foi possível carregar as notificações de hoje.')
       })
     return () => controller.abort()
   }, [refresh, onSessionExpired])
@@ -1280,6 +1297,13 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     critical: { label: 'Ordens críticas', value: activeCriticalOrders, note: 'Ordens abertas com prioridade crítica.', tone: activeCriticalOrders > 0 ? 'danger' as const : 'default' as const, icon: Siren as LucideIcon, onClick: showCriticalOrders },
     overdue: { label: 'Ordens atrasadas', value: current?.ordens_atrasadas ?? 0, note: 'Ordens com programação vencida.', tone: (current?.ordens_atrasadas ?? 0) > 0 ? 'warning' as const : 'default' as const, icon: ClockAlert as LucideIcon, onClick: showOverdueOrders },
   }
+  const operationalAlerts = [
+    { id: 'stopped', label: 'Ativos parados', value: current?.ativos_parados ?? 0, icon: CirclePause, action: showStoppedAssets, tone: 'danger' },
+    { id: 'critical', label: 'Ordens críticas', value: activeCriticalOrders, icon: Siren, action: showCriticalOrders, tone: 'danger' },
+    { id: 'overdue', label: 'Ordens atrasadas', value: current?.ordens_atrasadas ?? 0, icon: ClockAlert, action: showOverdueOrders, tone: 'warning' },
+    { id: 'preventives', label: 'Preventivas próximas', value: current?.preventivas_proximas ?? 0, icon: CalendarCheck2, action: showPreventivePlans, tone: 'info' },
+  ].filter(alert => alert.value > 0)
+  const operationalAlertCount = operationalAlerts.reduce((total, alert) => total + alert.value, 0)
   const report = displayData?.relatorios
   const sectorFailures = (displayData?.falhas_por_setor ?? []).map(item => ({ id: item.setor_id, label: item.setor_nome, value: item.falhas }))
   const assetFailures = (displayData?.falhas_por_ativo ?? []).map(item => ({ id: item.ativo_id, label: `${item.ativo_tag} · ${item.ativo_nome}`, detail: item.setor_nome, value: item.falhas }))
@@ -1320,26 +1344,26 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     },
     {
       id: 'monthly-mttr', title: 'MTTR mensal', categoryId: 'time', note: 'Tendência de tempo médio para reparar falhas.',
-      modes: [{ id: 'line', label: 'Linha' }, { id: 'bar', label: 'Colunas' }, { id: 'progress', label: 'Progresso' }], defaultMode: 'line',
+      modes: [{ id: 'line', label: 'Linha' }, { id: 'area', label: 'Área' }, { id: 'bar', label: 'Colunas' }, { id: 'progress', label: 'Barras de progresso' }], defaultMode: 'line',
       onActivate: () => openInsight('MTTR mensal', 'Média mensal do tempo para reparo.', monthlyMttr.map(item => ({ id: `report-month:${item.month}`, title: item.label, detail: item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds) }))),
-      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette) => <MonthlyMttrChart items={monthlyMttr} loading={loading} mode={mode === 'bar' || mode === 'progress' ? mode : 'line'} palette={palette} />,
+      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, _segments?: PcmCanvasSegments, chartStyle?: 'default' | 'oval' | 'exploded' | 'depth' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth') => <MonthlyMttrChart items={monthlyMttr} loading={loading} mode={mode === 'bar' || mode === 'progress' || mode === 'area' ? mode : 'line'} palette={palette} chartStyle={chartStyle} />,
     },
     {
       id: 'sector-failures', title: 'Falhas por setor', categoryId: 'assets', note: 'Setores com registros de falha no período.',
-      modes: [{ id: 'bar', label: 'Barras' }, { id: 'pie', label: 'Pizza' }, { id: 'list', label: 'Lista' }], defaultMode: 'bar',
+      modes: [{ id: 'bar', label: 'Barras' }, { id: 'pie', label: 'Pizza' }, { id: 'donut', label: 'Rosca' }, { id: 'list', label: 'Lista' }], defaultMode: 'bar',
       onActivate: () => openInsight('Falhas por setor', 'Setores com falhas registradas no período.', sectorFailures.map(item => ({ id: `report-sector:${item.id}`, title: item.label, detail: `${item.value} falha(s)` }))),
       render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
         const items = sectorFailures.filter(item => !segments?.sector || item.label === segments.sector)
-        return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Sem falhas por setor no período." valueLabel="Falhas por setor" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem falhas por setor no período." valueLabel="Falhas por setor" palette={palette} />
+        return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Sem falhas por setor no período." valueLabel="Falhas por setor" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem falhas por setor no período." valueLabel="Falhas por setor" palette={palette} />
       },
     },
     {
       id: 'asset-failures', title: 'Falhas por ativo', categoryId: 'assets', note: 'Ativos com registros de falha no período.',
-      modes: [{ id: 'bar', label: 'Barras' }, { id: 'pie', label: 'Pizza' }, { id: 'list', label: 'Lista' }], defaultMode: 'bar',
+      modes: [{ id: 'bar', label: 'Barras' }, { id: 'pie', label: 'Pizza' }, { id: 'donut', label: 'Rosca' }, { id: 'list', label: 'Lista' }], defaultMode: 'bar',
       onActivate: () => openInsight('Falhas por ativo', 'Ativos com falhas registradas no período.', assetFailures.map(item => ({ id: `report-asset:${item.id}`, title: item.label, detail: `${item.value} falha(s) · ${item.detail ?? 'Setor não informado'}` }))),
       render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
         const items = assetFailures.filter(item => (!segments?.sector || item.detail === segments.sector) && (!segments?.equipment || item.label === segments.equipment))
-        return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Sem falhas por ativo no período." valueLabel="Falhas por ativo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem falhas por ativo no período." valueLabel="Falhas por ativo" palette={palette} />
+        return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Sem falhas por ativo no período." valueLabel="Falhas por ativo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem falhas por ativo no período." valueLabel="Falhas por ativo" palette={palette} />
       },
     },
     {
@@ -1350,11 +1374,11 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
     },
     ...(displayData?.tecnicos?.length ? [{
       id: 'team-executions', title: 'Técnicos em atividade', categoryId: 'team', note: 'Execuções de manutenção em andamento.',
-      modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
+      modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
       onActivate: () => openInsight('Técnicos em atividade', 'Execuções atualmente em andamento por técnico.', (displayData.tecnicos ?? []).map(item => ({ id: `report-team:${item.id}`, title: item.nome, detail: `${item.execucoes} execução(ões)` }))),
       render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
         const technicians = (displayData.tecnicos ?? []).filter(item => !segments?.responsible || item.nome === segments.responsible).map(item => ({ id: item.id, label: item.nome, value: item.execucoes }))
-        return mode === 'list' ? <ol className="pcm-canvas-list">{technicians.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={technicians} emptyMessage="Sem técnicos em atividade." valueLabel="Execuções por técnico" palette={palette} /> : <HorizontalBarChart items={technicians} emptyMessage="Sem técnicos em atividade." valueLabel="Execuções por técnico" palette={palette} />
+        return mode === 'list' ? <ol className="pcm-canvas-list">{technicians.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={technicians} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Sem técnicos em atividade." valueLabel="Execuções por técnico" palette={palette} /> : <HorizontalBarChart items={technicians} emptyMessage="Sem técnicos em atividade." valueLabel="Execuções por técnico" palette={palette} />
       },
     }] : []),
     ...(report ? [
@@ -1366,11 +1390,11 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
       pcmNumberWidget({ id: 'result-low-stock', title: 'Estoque baixo', categoryId: 'stock', value: report.estoque_baixo?.quantidade ?? 0, note: 'Itens no mínimo ou abaixo dele.', icon: TriangleAlert, tone: (report.estoque_baixo?.quantidade ?? 0) > 0 ? 'warning' : 'success', onClick: () => openInsight('Itens com estoque baixo', 'Materiais no mínimo ou abaixo dele.', (report.estoque_baixo?.itens ?? []).map(item => ({ id: `report-stock:${item.sku}`, title: `${item.sku} · ${item.nome}`, detail: `Saldo ${item.estoque_atual} ${item.unidade} · mínimo ${item.estoque_minimo} ${item.unidade} · ${formatCurrency(item.valor_unitario)}` }))) }),
       {
         id: 'result-team-hours', title: 'Horas da equipe', categoryId: 'team', note: 'Execuções concluídas e horas apontadas no período.',
-        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
+        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
         onActivate: () => openInsight('Horas da equipe', 'Horas apontadas por técnico em execuções concluídas.', (report.tecnicos ?? []).map(item => ({ id: `report-team-hours:${item.id}`, title: item.nome, detail: `${item.execucoes} OS concluída(s) · ${duration(item.segundos_apontados)}` }))),
         render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
           const items = (report.tecnicos ?? []).filter(item => !segments?.responsible || item.nome === segments.responsible).map(item => ({ id: item.id, label: item.nome, value: Math.round(item.segundos_apontados / 3600 * 10) / 10, detail: `${item.execucoes} OS concluída(s) · ${duration(item.segundos_apontados)}` }))
-          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}<small>{item.detail}</small></span><strong>{number(item.value)} h</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Sem horas apontadas no período." valueLabel="Horas apontadas por técnico" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem horas apontadas no período." valueLabel="Horas apontadas por técnico" palette={palette} />
+          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}<small>{item.detail}</small></span><strong>{number(item.value)} h</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Sem horas apontadas no período." valueLabel="Horas apontadas por técnico" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem horas apontadas no período." valueLabel="Horas apontadas por técnico" palette={palette} />
         },
       },
       {
@@ -1380,11 +1404,11 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
       },
       {
         id: 'result-material-cost-assets', title: 'Materiais por ativo', categoryId: 'stock', note: 'Custo e quantidade de itens consumidos por ativo.',
-        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
+        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
         onActivate: () => openInsight('Materiais por ativo', 'Custo e itens consumidos por ativo no período.', (report.custos_materiais?.por_ativo ?? []).map((item, index) => ({ id: `report-cost-detail:${index}`, title: `${item.ativo_tag} · ${item.ativo_nome}`, detail: `${item.itens_consumidos} item(ns) · ${formatCurrency(item.custo_total)}` }))),
         render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
           const items = (report.custos_materiais?.por_ativo ?? []).filter(item => !segments?.equipment || `${item.ativo_tag} · ${item.ativo_nome}` === segments.equipment).map((item, index) => ({ id: `${item.ativo_tag}-${index}`, label: `${item.ativo_tag} · ${item.ativo_nome}`, value: Number(item.custo_total), detail: `${item.itens_consumidos} item(ns)` }))
-          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}<small>{item.detail}</small></span><strong>{formatCurrency(item.value)}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Sem consumo de materiais no período." valueLabel="Custo por ativo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem consumo de materiais no período." valueLabel="Custo por ativo" palette={palette} />
+          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}<small>{item.detail}</small></span><strong>{formatCurrency(item.value)}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Sem consumo de materiais no período." valueLabel="Custo por ativo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Sem consumo de materiais no período." valueLabel="Custo por ativo" palette={palette} />
         },
       },
       {
@@ -1407,22 +1431,22 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
       },
       {
         id: 'report-orders-type', title: 'Ordens por tipo', categoryId: 'orders', note: 'Ordens movimentadas no período.',
-        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
+        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
         onActivate: () => openInsight('Ordens por tipo', 'Distribuição das ordens movimentadas no período.', (report.ordens?.por_tipo ?? []).map(item => ({ id: `report-type:${item.tipo}`, title: humanWorkType(item.tipo), detail: `${item.quantidade} ordem(ns)` }))),
         render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
           const subset = ordersForSegments(segments)
           const items = [...new Set(subset.map(item => humanWorkType(item.type)))].map(label => ({ id: label, label, value: subset.filter(item => humanWorkType(item.type) === label).length }))
-          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Ainda não há ordens no período." valueLabel="Ordens por tipo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Ainda não há ordens no período." valueLabel="Ordens por tipo" palette={palette} />
+          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Ainda não há ordens no período." valueLabel="Ordens por tipo" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Ainda não há ordens no período." valueLabel="Ordens por tipo" palette={palette} />
         },
       },
       {
         id: 'report-orders-priority', title: 'Fila por prioridade', categoryId: 'orders', note: 'Ordens ainda abertas.',
-        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
+        modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
         onActivate: () => openInsight('Fila por prioridade', 'Distribuição das ordens abertas por prioridade.', (report.ordens?.por_prioridade ?? []).map(item => ({ id: `report-priority:${item.prioridade}`, title: humanPriority(item.prioridade), detail: `${item.quantidade} ordem(ns)` }))),
         render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, segments?: PcmCanvasSegments) => {
           const subset = ordersForSegments(segments).filter(item => !isClosedWorkOrder(item.status))
           const items = [...new Set(subset.map(item => humanPriority(item.priority)))].map(label => ({ id: label, label, value: subset.filter(item => humanPriority(item.priority) === label).length }))
-          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' ? <PcmPieChart items={items} emptyMessage="Não há ordens abertas para classificar." valueLabel="Ordens por prioridade" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Não há ordens abertas para classificar." valueLabel="Ordens por prioridade" palette={palette} />
+          return mode === 'list' ? <ol className="pcm-canvas-list">{items.map(item => <li key={item.id}><span>{item.label}</span><strong>{item.value}</strong></li>)}</ol> : mode === 'pie' || mode === 'donut' ? <PcmPieChart items={items} variant={mode === 'pie' ? 'pie' : 'donut'} emptyMessage="Não há ordens abertas para classificar." valueLabel="Ordens por prioridade" palette={palette} /> : <HorizontalBarChart items={items} emptyMessage="Não há ordens abertas para classificar." valueLabel="Ordens por prioridade" palette={palette} />
         },
       },
     ] : []),
@@ -1891,59 +1915,34 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
   return (
     <section className={`pcm-dashboard pcm-dashboard--desktop${insight ? ' pcm-dashboard--focus' : ''}`} aria-label="Dashboard do PCM" aria-busy={loading}>
       <header className="pcm-heading">
-        <div>
-          <h1>Visão de manutenção</h1>
-          {displayData?.atualizado_em && !demoMode ? <small className="pcm-heading__updated" title="Os dados são atualizados automaticamente a cada cinco minutos, ao voltar para esta aba ou quando a conexão é restabelecida.">Atualizado {formatDateTime(displayData.atualizado_em)}</small> : null}
+        <div className="pcm-heading__meta">
+          {displayData?.atualizado_em && !demoMode ? <small className="pcm-heading__updated" title="Atualização automática dos dados.">Atualizado {formatDateTime(displayData.atualizado_em)}</small> : <span className="pcm-heading__updated">Dados de demonstração</span>}
         </div>
-
         <div className="pcm-heading__tools">
-          <button type="button" className="pcm-demo-toggle" aria-pressed={demoMode} disabled={createOrderOpen} onClick={() => { setDemoMode(value => !value); setInsight(null) }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M7 15l4-4 3 2 5-6"/><circle cx="19" cy="7" r="1.5"/></svg>
-            {demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'}
+          <button type="button" className="pcm-demo-toggle pcm-demo-toggle--icon" aria-label={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} title={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} aria-pressed={demoMode} disabled={createOrderOpen} onClick={() => { setDemoMode(value => !value); setInsight(null) }}>
+            <ChartNoAxesCombined size={15} aria-hidden="true" />
           </button>
-          {maintenanceStatus ? <span className={`pcm-dashboard-condition pcm-dashboard-condition--${maintenanceStatus.toLowerCase()}`}>
-            <i aria-hidden="true" /> {maintenanceStatusLabel(maintenanceStatus)}
+          {maintenanceStatus ? <span className={`pcm-dashboard-condition pcm-dashboard-condition--${maintenanceStatus.toLowerCase()}`} title={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`} aria-label={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`}>
+            <i aria-hidden="true" /><span className="pcm-sr-only">{maintenanceStatusLabel(maintenanceStatus)}</span>
           </span> : null}
-          <div className="pcm-controls">
-            <label>
-              Período
-              <select value={days} onChange={event => setDays(event.target.value)}>
-                <option value="7">7 dias</option>
-                <option value="30">30 dias</option>
-                <option value="90">90 dias</option>
-                <option value="365">12 meses</option>
-              </select>
-            </label>
-          </div>
         </div>
       </header>
 
       {demoMode ? <div className="pcm-demo-banner" role="status"><strong>Demonstração fictícia</strong><span>Exemplos locais para avaliar a tela. Nenhum dado será gravado na empresa.</span></div> : null}
 
-      <section className="pcm-notification-rail" aria-labelledby="pcm-today-notifications-title">
-        <header>
-          <span className="pcm-notification-rail__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
-          </span>
-          <h2 id="pcm-today-notifications-title">Avisos</h2>
-          <span className="pcm-notification-rail__count">{demoMode ? 2 : pendingTodayNotifications.length}</span>
-        </header>
-        {!demoMode && notificationsError ? <p className="pcm-today-notifications__error" role="alert">{notificationsError}</p> : null}
-        {demoMode ? <ul className="pcm-notification-rail__list">
-          <li><button type="button" className="pcm-notification-rail__item pcm-notification-rail__item--shortcut is-critical" title="Ver os detalhes do aviso" onClick={() => openInsight('Parada crítica · EQ-PA-01', 'Ativo parado com ordem crítica aberta. Selecione o registro para consultar os detalhes.', [{ id: 'demo-critical-1', title: 'OS-204 · Pasteurizador 01', detail: 'Linha de manteiga · parada desde 08:40', status: 'Crítica' }])}><strong>Parada crítica · EQ-PA-01</strong><span aria-hidden="true">›</span></button></li>
-          <li><button type="button" className="pcm-notification-rail__item pcm-notification-rail__item--shortcut is-high" title="Ir para os planos preventivos" onClick={showPreventivePlans}><strong>3 preventivas nesta semana</strong><span aria-hidden="true">›</span></button></li>
-        </ul> : pendingTodayNotifications.length ? (
-          <ul className="pcm-notification-rail__list">
-            {pendingTodayNotifications.slice(0, 3).map(notification => {
-              const action = pcmOccurrenceNotificationAction(notification)
-              return <li key={notification.id}>
-                <button type="button" className={`pcm-notification-rail__item is-${normalize(notification.prioridade || 'MEDIA').toLowerCase()}`} title="Ver detalhes do aviso" onClick={() => showNotificationDetails(notification)}>
-                  <strong>{notification.titulo}</strong>
-                </button>
-              </li>
-            })}
-          </ul>
-        ) : null}
+      <section className="pcm-operational-alerts" aria-labelledby="pcm-operational-alerts-title">
+        <div className="pcm-operational-alerts__summary">
+          <span id="pcm-operational-alerts-title">Avisos</span>
+          <strong>{operationalAlertCount}</strong>
+        </div>
+        {operationalAlerts.length ? <div className="pcm-operational-alerts__categories" aria-label="Tipos de aviso ativos">
+          {operationalAlerts.map(alert => {
+            const Icon = alert.icon
+            return <button key={alert.id} type="button" className={`pcm-operational-alerts__category is-${alert.tone}`} title={`${alert.label}: ${alert.value}. Clique para ver os registros.`} aria-label={`${alert.label}: ${alert.value}. Ver registros.`} onClick={alert.action}>
+              <Icon size={15} aria-hidden="true" /><span>{alert.label}</span><strong>{alert.value}</strong>
+            </button>
+          })}
+        </div> : <span className="pcm-operational-alerts__empty">Nenhum aviso operacional</span>}
       </section>
 
     {!demoMode && error && (
@@ -1964,8 +1963,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
 
       {displayData && current && reliability && maintenanceStatus && (
         insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} /> : <>
-      <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onPrintCanvas={printPcmCanvas} helpContent={<details className="pcm-method pcm-method--help">
-            <summary>Como usar e interpretar a lousa</summary>
+      <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onOpenHistory={onOpenHistory} onPrintCanvas={printPcmCanvas} toolbarContent={<label className="pcm-canvas__period" title="Filtrar indicadores por período"><span>Período</span><select value={days} onChange={event => setDays(event.target.value)} aria-label="Período dos indicadores"><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">12 meses</option></select></label>} helpContent={<div className="pcm-canvas__help-content">
             <p>Adicione indicadores pelo botão “+”, organize-os arrastando os cartões e use a paleta de cada cartão para definir visual, aparência e filtros próprios. Salve o layout para reutilizar sua organização.</p>
             <p>
               Os totais atuais incluem todos os registros abertos dos ativos ativos. O período selecionado
@@ -1986,7 +1984,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '' }: { o
               O backlog soma a duração estimada dos planos de todas as ordens abertas. Não desconta avanço
               parcial e não representa horas-homem.
             </p>
-          </details>} />
+          </div>} />
 
           <div className="pcm-workbench">
             <section className="pcm-focus-board" aria-labelledby="pcm-focus-board-title">

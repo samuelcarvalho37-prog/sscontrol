@@ -514,11 +514,10 @@ function TenantApp() {
           ) : null}
           {section === 'validations' && canReadAnalytics ? (
             <>
-            {usesNodeApi() && canViewPcmDashboard ? <nav className="pcm-view-switch" aria-label="Área do PCM">
-              <button type="button" aria-current={!detailedAnalytics ? 'page' : undefined} aria-pressed={!detailedAnalytics} onClick={() => setDetailedAnalytics(false)}>Painel</button>
-              <button type="button" aria-current={detailedAnalytics ? 'page' : undefined} aria-pressed={detailedAnalytics} onClick={() => setDetailedAnalytics(true)}>Histórico e análise</button>
+            {usesNodeApi() && canViewPcmDashboard && detailedAnalytics ? <nav className="pcm-view-switch pcm-view-switch--return" aria-label="Área do PCM">
+              <button type="button" aria-pressed="false" onClick={() => setDetailedAnalytics(false)}>Voltar ao painel do PCM</button>
             </nav> : null}
-            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} /> :
+            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} onOpenHistory={() => setDetailedAnalytics(true)} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
@@ -584,6 +583,17 @@ function TenantApp() {
 }
 
 export function App() {
+  useEffect(() => {
+    try {
+      const savedTheme = window.localStorage.getItem('vorqix.pcm.dashboard-theme.v1')
+      if (savedTheme === 'light' || savedTheme === 'ice' || savedTheme === 'dark') {
+        document.documentElement.dataset.pcmDashboardTheme = savedTheme
+      }
+    } catch {
+      // O tema segue o padrão claro quando o armazenamento estiver indisponível.
+    }
+  }, [])
+
   const isPlatformRoute = window.location.pathname === '/plataforma'
     || window.location.pathname.startsWith('/plataforma/')
   return isPlatformRoute ? <PlatformConsole /> : <TenantApp />
