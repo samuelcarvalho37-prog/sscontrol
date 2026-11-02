@@ -2379,3 +2379,95 @@
 .technician-dashboard__list { gap: 14px; }.technician-action { position: relative; min-height: 190px; padding: 16px !important; border: 1px solid #365b82 !important; border-left: 4px solid #2991f5 !important; border-radius: 12px !important; }.technician-action:hover { border-color: #65aeff !important; border-left-color: #8cc9ff !important; }.technician-action__top strong { color: #91c9ff; letter-spacing: .035em; font-size: .76rem; }.technician-action > strong { color: #fff; font-size: 1.02rem; line-height: 1.35; }.technician-action em { align-self: start; padding: 4px 7px; border-radius: 999px; background: rgba(255, 202, 110, .12); }
 @media (max-width: 900px) { .technician-dashboard__shortcuts { grid-template-columns: 1fr; }.technician-dashboard__shortcut-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .technician-dashboard__heading { padding: 20px; }.technician-dashboard__heading > button { width: 100%; }.technician-dashboard__connection b { width: 100%; padding: 0; border: 0; }.technician-dashboard__shortcut-list { grid-template-columns: 1fr; }.technician-dashboard__metric { min-height: 100px; }.technician-dashboard__shortcuts { padding: 14px; } }
+
+/* O tema escuro do PCM também cobre o shell do gestor e as superfícies dos gráficos. */
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager > .topbar,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager > .app-navigation {
+  border-color: #31485b !important;
+  background: #182d3f !important;
+  color: #e5eef5 !important;
+}
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .topbar__identity,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .topbar__identity strong,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .topbar__identity span,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .user-badge {
+  color: #d7e5ef !important;
+}
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .manager-notification-trigger,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .logout-button,
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .connection-chip {
+  border-color: #3b566b !important;
+  background: #20384c !important;
+  color: #e5eef5 !important;
+}
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .app-navigation__item {
+  color: #d7e5ef !important;
+}
+html[data-pcm-dashboard-theme="dark"] .app-shell--manager .app-navigation__item.is-active {
+  background: #24435c !important;
+  color: #9ed1f7 !important;
+}
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__summary,
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__category {
+  border-color: #3b566b !important;
+  background: #1b3042 !important;
+  color: #d8e8f4 !important;
+}
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__summary strong,
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__category strong {
+  background: #29455b !important;
+  color: #e5eef5 !important;
+}
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__category.is-danger { color: #ffaaa5 !important; }
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__category.is-warning { color: #ffd28a !important; }
+html[data-pcm-dashboard-theme="dark"] .pcm-dashboard .pcm-operational-alerts__category.is-info { color: #8fdfbd !important; }
+
+.pcm-canvas__widget-body .pcm-monthly-line-chart,
+.pcm-canvas__widget-body .pcm-monthly-chart,
+.pcm-canvas__widget-body .pcm-bar-chart,
+.pcm-canvas__widget-body .pcm-comparison-chart,
+.pcm-canvas__widget-body .pcm-pie-chart {
+  color: var(--pcm-widget-content, inherit);
+  background-color: transparent !important;
+}
+.pcm-canvas__widget-body .pcm-monthly-line-chart svg,
+.pcm-canvas__widget-body .pcm-pie-chart__svg { overflow: visible; }
+.pcm-canvas__widget-body .pcm-monthly-line-chart svg line,
+.pcm-canvas__widget-body .pcm-monthly-line-chart svg path:not([stroke]) {
+  stroke: var(--pcm-chart-grid, #e7edf2);
+}
+.pcm-canvas__widget-body .pcm-monthly-line-chart svg text,
+.pcm-canvas__widget-body .pcm-monthly-chart__value,
+.pcm-canvas__widget-body .pcm-monthly-chart__label,
+.pcm-canvas__widget-body .pcm-bar-chart__label,
+.pcm-canvas__widget-body .pcm-bar-chart__value {
+  color: var(--pcm-widget-content, #60798e);
+  fill: var(--pcm-widget-content, #60798e);
+}
+.pcm-canvas__widget-body .pcm-bar-chart__track,
+.pcm-canvas__widget-body .pcm-monthly-chart__track,
+.pcm-canvas__widget-body .pcm-monthly-progress__track,
+.pcm-canvas__widget-body .pcm-time-comparison__track {
+  background-color: var(--pcm-chart-track, #e7eef5) !important;
+}
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-indicator-chart,
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-monthly-line-chart,
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-monthly-chart,
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-bar-chart,
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-comparison-chart,
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-pie-chart {
+  background: transparent !important;
+  backdrop-filter: none;
+}
+.pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-time-comparison__item {
+  background-color: color-mix(in srgb, var(--pcm-widget-content, #12324d) 8%, transparent) !important;
+}
+html[data-pcm-dashboard-theme="dark"] .pcm-canvas__widget-body .pcm-bar-chart__track,
+html[data-pcm-dashboard-theme="dark"] .pcm-canvas__widget-body .pcm-monthly-chart__track,
+html[data-pcm-dashboard-theme="dark"] .pcm-canvas__widget-body .pcm-monthly-progress__track,
+html[data-pcm-dashboard-theme="dark"] .pcm-canvas__widget-body .pcm-time-comparison__track {
+  background-color: var(--pcm-chart-track, #294356) !important;
+}
+html[data-pcm-dashboard-theme="dark"] .pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body .pcm-time-comparison__item {
+  background-color: color-mix(in srgb, var(--pcm-widget-content, #edf5fb) 8%, transparent) !important;
+}
