@@ -12,6 +12,7 @@ import {
   startOperatorStop,
 } from '../services/api/operator'
 import { readQrContextCache, writeQrContextCache } from '../services/storage/operatorCache'
+import { createQrFrameDetector } from '../services/media/qrFrameDetector'
 import type {
   FinishStopResponseData,
   OperatorQrContextData,
@@ -21,9 +22,6 @@ import type {
   StartStopResponseData,
 } from '../types/api'
 
-type BarcodeDetectorResult = { rawValue?: string }
-type BarcodeDetectorInstance = { detect(source: HTMLVideoElement): Promise<BarcodeDetectorResult[]> }
-type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorInstance
 type OccurrenceTarget = '' | 'EQUIPAMENTO' | 'COMPONENTE'
 type ParameterTarget = 'EQUIPAMENTO' | 'COMPONENTE'
 type ParameterCode =
@@ -387,25 +385,19 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
     let cancelled = false
 
     const start = async () => {
-      const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector
-      if (!Detector) {
-        setCameraError('Este navegador não possui leitura nativa de QR. Tente novamente ou digite o código.')
-        // O modo manual permanece fechado até o operador solicitar.
-        setManualOpen(false)
-        setCameraActive(false)
-        return
-      }
       try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Abra o endereço HTTPS do teste para permitir o acesso à câmera.')
+        const detector = await createQrFrameDetector()
+        if (cancelled) return
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
         })
         if (cancelled) return stream.getTracks().forEach((track) => track.stop())
         streamRef.current = stream
-        if (!videoRef.current) return
+        if (!videoRef.current) return stream.getTracks().forEach((track) => track.stop())
         videoRef.current.srcObject = stream
         await videoRef.current.play()
-        const detector = new Detector({ formats: ['qr_code'] })
         const scan = async () => {
           if (cancelled || !videoRef.current) return
           try {
