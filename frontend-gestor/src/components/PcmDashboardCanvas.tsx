@@ -3,6 +3,9 @@ import type { ChangeEvent, CSSProperties, DragEvent, FormEvent, KeyboardEvent, M
 import { createPortal } from 'react-dom'
 import { ChartNoAxesCombined, Check, CircleHelp, ClipboardPaste, Copy, Download, Eye, EyeOff, Filter, History, Layers, LayoutTemplate, Magnet, Move, Palette, Plus, Printer, Save, Search, Sparkles, SunMoon, Trash2, Upload, X } from 'lucide-react'
 import './PcmDashboardCanvas.css'
+import executiveDark from './presets/pcm-executive-dark.json'
+import executiveIce from './presets/pcm-executive-ice.json'
+import executiveLight from './presets/pcm-executive-light.json'
 import { getChartVolume, pickFocusEffect, PcmChartPresentationContext } from './PcmChartPresentation'
 import type { PcmChartPresentation } from './PcmChartPresentation'
 
@@ -219,47 +222,11 @@ const boardGroup: PcmCanvasGroup = { id: 'board', label: 'Painel' }
 const professionalLayoutId = '__professional_default__'
 const executiveThemes = { 'preset-executive-light': 'light', 'preset-executive-ice': 'ice', 'preset-executive-dark': 'dark' } as const
 function createExecutiveLayout(widgets: PcmCanvasWidget[], theme: 'light' | 'ice' | 'dark'): CanvasLayout {
-  const next = createDefaultLayout(widgets)
-  const dark = theme === 'dark'
-  const surface = dark ? '#18364d' : theme === 'ice' ? '#f6fbff' : '#ffffff'
-  const text = dark ? '#edf5fc' : '#17354d'
-  const accent = dark ? '#55bbed' : '#176fc1'
-  for (const [id, placement] of Object.entries(next.placements)) {
-    Object.assign(placement, { cardBackground: surface, cardBackgroundOpacity: 100, cardBorder: 'none', cardRadius: 4, titleColor: dark ? '#b7d0e0' : '#48667e', contentColor: text, iconColor: accent, accentColor: accent, titleShadow: 0, contentShadow: 0, cardShadow: 0, chartCenterColor: text, legendTextColor: text, legendValueColor: text, chartFocusTarget: 'chart', chartFocusEffect: 'glow', chartFocusIntensity: 30, cardFocusEffect: 'lift', cardFocusDuration: 400, mttrUnit: 'h', mtbfUnit: 'h' })
-    delete placement.left; delete placement.top; delete placement.row; delete placement.column; delete placement.rowSpan
-    if (id.startsWith('reliability-')) placement.span = 8
-    if (id === 'monthly-mttr') Object.assign(placement, { span: 24, height: 330, mode: 'area', chartStyle: 'smooth', titleSize: 18, showChartAxes: true })
-    if (id === 'mttr-mtbf-comparison') Object.assign(placement, { span: 24, height: 120, showTitle: false, linkTimeMetricColors: true })
-  }
-  next.customGroups = next.customGroups.map(group => ({ ...group, background: 'transparent', border: 'none', titleColor: text, titleSize: 14 }))
-  next.groupOrder = ['board', 'group-prioridades', 'group-confiabilidade', 'group-carga', 'group-ativos', 'group-planejamento', 'group-resultados', 'group-materiais']
-  for (const placement of Object.values(next.placements)) Object.assign(placement, { height: 112, titleSize: 12, contentSize: 26, cardEffect: 'flat', accentPosition: 'none', iconSize: 22 })
-  const position = (id: string, span: number, left: number, top: number, height: number, extra: Partial<CanvasPlacement> = {}) => {
-    if (next.placements[id]) Object.assign(next.placements[id], { span, left, top, height, ...extra })
-  }
-  ;['attention-stopped', 'attention-critical', 'attention-overdue', 'preventives-next'].forEach((id, index) => position(id, 6, index * 25, 0, 100, { accentPosition: 'left', accentColor: ['#db5d72', '#df942d', '#c3a13a', '#21aa91'][index], iconColor: ['#db5d72', '#df942d', '#c3a13a', '#21aa91'][index] }))
-  position('reliability-availability', 10, 0, 0, 196, { contentSize: 42, iconSize: 30, accentPosition: 'left', accentColor: '#24b393' })
-  position('reliability-failures', 13, 42.5, 0, 90, { accentPosition: 'left', accentColor: '#d98935' })
-  position('reliability-recurrence', 13, 42.5, 106, 90, { accentPosition: 'left', accentColor: '#9a7dd9' })
-  position('mttr-mtbf-comparison', 24, 0, 212, 110, { showTitle: false, metricNameSize: 20, metricValueSize: 20, metricBarHeight: 4, customColors: [dark ? '#50c8b3' : '#128872', dark ? '#79baff' : '#216eb7'] })
-  position('monthly-mttr', 24, 0, 338, 330, { mode: 'area', chartStyle: 'smooth', titleSize: 18, customSubtitle: 'Evolução mensal · selecione MTTR ou MTBF', subtitleSize: 11, dataLabelMode: 'value', dataLabelSize: 12, legendVisible: false })
-  ;['operational-backlog', 'operational-open-orders', 'operational-active-technicians', 'operational-unestimated'].forEach((id, index) => position(id, 6, index * 25, 0, 112))
-  position('sector-failures', 14, 0, 0, 310, { contentSize: 14 })
-  position('asset-failures', 9, 62.5, 0, 310, { mode: 'donut', chartDiameter: 155, legendSize: 11, legendPosition: 'right', dataLabelMode: 'none', pieCallouts: false })
-  position('result-preventives-on-time', 12, 0, 0, 112)
-  position('result-preventives-late', 11, 54.1667, 0, 112)
-  for (const [leftId, rightId, top, height] of [['result-orders-open', 'result-orders-closed', 0, 108], ['report-orders-type', 'report-orders-priority', 124, 230], ['team-executions', 'result-team-hours', 370, 250], ['result-export-csv', 'result-print-pdf', 898, 44], ['result-material-cost', 'result-low-stock', 0, 112], ['result-stock-items', 'result-material-cost-assets', 128, 250]] as const) {
-    position(leftId, 11, 0, top, height)
-    position(rightId, 12, 50, top, height)
-  }
-  position('result-executions', 24, 0, 636, 246, { contentSize: 14 })
-  next.groupHeights = {}
-  for (const group of next.customGroups) {
-    const members = Object.values(next.placements).filter(placement => placement.groupId === group.id)
-    next.groupHeights[group.id] = Math.max(0, ...members.map(placement => (placement.top ?? 0) + (placement.height ?? 112))) + 48
-  }
-  next.widgetOrder = next.widgetOrder.filter(id => id !== 'attention-preventives').sort((a, b) => next.groupOrder.indexOf(next.placements[a].groupId) - next.groupOrder.indexOf(next.placements[b].groupId) || (next.placements[a].top ?? 0) - (next.placements[b].top ?? 0) || (next.placements[a].left ?? 0) - (next.placements[b].left ?? 0))
-  return next
+  const source = structuredClone(({ light: executiveLight, ice: executiveIce, dark: executiveDark })[theme]) as unknown as CanvasLayout
+  const validIds = new Set(widgets.map(widget => widget.id))
+  source.widgetOrder = source.widgetOrder.filter(id => validIds.has(id))
+  source.placements = Object.fromEntries(Object.entries(source.placements).filter(([id]) => validIds.has(id)))
+  return source
 }
 const storageKey = 'vorqix.pcm.dashboard-canvas.v4'
 const dashboardThemeStorageKey = 'vorqix.pcm.dashboard-theme.v1'
@@ -446,7 +413,8 @@ function createDefaultLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
 
 function readInitialLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
   const selectedId = readSelectedLayoutId()
-  if (selectedId === professionalLayoutId) return createDefaultLayout(widgets)
+  if (selectedId === professionalLayoutId) return createExecutiveLayout(widgets, 'dark')
+  if (!window.localStorage.getItem(storageKey) && !selectedId) return createExecutiveLayout(widgets, 'dark')
   const selected = readSavedLayouts().find(item => item.id === selectedId)
   return selected?.layout ?? readLayout(widgets)
 }
@@ -688,7 +656,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
   const [dashboardTheme, setDashboardTheme] = useState<'light' | 'ice' | 'dark'>(() => {
     try {
       const saved = window.localStorage.getItem(dashboardThemeStorageKey)
-      return saved === 'ice' || saved === 'dark' ? saved : 'dark'
+      return saved === 'light' || saved === 'ice' || saved === 'dark' ? saved : 'dark'
     } catch {
       return 'dark'
     }
@@ -1617,7 +1585,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         magnetEnabled: true,
       }
     } else if (id === professionalLayoutId) {
-      nextLayout = createDefaultLayout(widgets)
+      nextLayout = createExecutiveLayout(widgets, dashboardTheme)
       nextLayout.blankLayout = false
     } else {
       const baseLayout = createDefaultLayout(widgets)
