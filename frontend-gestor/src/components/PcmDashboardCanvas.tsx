@@ -6,6 +6,7 @@ import './PcmDashboardCanvas.css'
 import executiveDark from './presets/pcm-executive-dark.json'
 import executiveIce from './presets/pcm-executive-ice.json'
 import executiveLight from './presets/pcm-executive-light.json'
+import professionalPreset from './presets/pcm-professional.json'
 import { getChartVolume, pickFocusEffect, PcmChartPresentationContext } from './PcmChartPresentation'
 import type { PcmChartPresentation } from './PcmChartPresentation'
 
@@ -221,6 +222,21 @@ type CanvasStyleValues = Partial<Pick<CanvasPlacement, typeof stylePlacementKeys
 const boardGroup: PcmCanvasGroup = { id: 'board', label: 'Painel' }
 const professionalLayoutId = '__professional_default__'
 const executiveThemes = { 'preset-executive-light': 'light', 'preset-executive-ice': 'ice', 'preset-executive-dark': 'dark' } as const
+function createProfessionalLayout(): CanvasLayout { return structuredClone(professionalPreset) as unknown as CanvasLayout }
+function createCompactLayout(widgets: PcmCanvasWidget[], theme: 'light' | 'ice' | 'dark'): CanvasLayout {
+  const next = createExecutiveLayout(widgets, theme)
+  next.groupHeights = {}
+  for (const [id, placement] of Object.entries(next.placements)) {
+    delete placement.left; delete placement.top; delete placement.row; delete placement.column; delete placement.rowSpan
+    const chart = ['bar', 'pie', 'donut', 'area', 'line', 'list'].includes(placement.mode)
+    Object.assign(placement, { span: chart ? 12 : 6, height: chart ? 210 : 90, titleSize: 11, contentSize: chart ? 12 : 22, iconSize: 18, cardFocusEffect: 'none', chartFocusIntensity: 20 })
+    if (id === 'monthly-mttr') Object.assign(placement, { span: 24, height: 240, subtitleSize: 10 })
+    if (id === 'mttr-mtbf-comparison') Object.assign(placement, { span: 24, height: 100, metricNameSize: 17, metricValueSize: 18 })
+    if (id === 'asset-failures') Object.assign(placement, { chartDiameter: 110, legendSize: 10 })
+  }
+  next.widgetOrder = next.widgetOrder.filter(id => !['result-export-csv', 'result-print-pdf'].includes(id))
+  return next
+}
 function createExecutiveLayout(widgets: PcmCanvasWidget[], theme: 'light' | 'ice' | 'dark'): CanvasLayout {
   const source = structuredClone(({ light: executiveLight, ice: executiveIce, dark: executiveDark })[theme]) as unknown as CanvasLayout
   const validIds = new Set(widgets.map(widget => widget.id))
@@ -413,8 +429,8 @@ function createDefaultLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
 
 function readInitialLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
   const selectedId = readSelectedLayoutId()
-  if (selectedId === professionalLayoutId) return createExecutiveLayout(widgets, 'dark')
-  if (!window.localStorage.getItem(storageKey) && !selectedId) return createExecutiveLayout(widgets, 'dark')
+  if (selectedId === professionalLayoutId) return createProfessionalLayout()
+  if (!window.localStorage.getItem(storageKey) && !selectedId) return createProfessionalLayout()
   const selected = readSavedLayouts().find(item => item.id === selectedId)
   return selected?.layout ?? readLayout(widgets)
 }
@@ -1585,8 +1601,13 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         magnetEnabled: true,
       }
     } else if (id === professionalLayoutId) {
-      nextLayout = createExecutiveLayout(widgets, dashboardTheme)
+      nextLayout = createProfessionalLayout()
+      setDashboardTheme('dark')
+      setAreaBackground('')
+      setPanelAppearance({ background: 'transparent', border: 'transparent', width: 0 })
       nextLayout.blankLayout = false
+    } else if (id === 'preset-reliability') {
+      nextLayout = createCompactLayout(widgets, dashboardTheme)
     } else {
       const baseLayout = createDefaultLayout(widgets)
       const preferredOrders: Record<string, string[]> = {
@@ -1988,7 +2009,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
           <summary className={`pcm-canvas__icon-button pcm-canvas__toolbar-icon${selectedLayoutId ? ' is-active' : ''}`} title="Escolher layout" aria-label="Escolher layout"><LayoutTemplate size={15} aria-hidden="true" /></summary>
           <div className="pcm-canvas__layout-options" role="menu" aria-label="Layouts disponíveis">
             <div className="pcm-canvas__layout-actions" role="group" aria-label="Ações do layout"><button type="button" title="Salvar como novo layout" aria-label="Salvar como novo layout" onClick={event => { setSavingNamedLayout(true); event.currentTarget.closest('details')?.removeAttribute('open') }}><Save size={15} aria-hidden="true" /></button><button type="button" title="Exportar layout" aria-label="Exportar layout" onClick={exportCurrentLayout}><Download size={15} aria-hidden="true" /></button><button type="button" title="Importar layout" aria-label="Importar layout" onClick={() => layoutImportRef.current?.click()}><Upload size={15} aria-hidden="true" /></button><input ref={layoutImportRef} type="file" accept="application/json,.json" onChange={importLayout} tabIndex={-1} aria-label="Importar layout JSON" /></div><strong>Layouts padrão</strong>
-            {[['preset-executive-light', 'Executivo Light'], ['preset-executive-ice', 'Executivo Ice'], ['preset-executive-dark', 'Executivo Dark'], [professionalLayoutId, 'Padrão profissional'], ['preset-reliability', 'Confiabilidade'], ['preset-blank', 'Em branco · limpar lousa']].map(([id, label]) => <button key={id} type="button" role="menuitemradio" aria-checked={selectedLayoutId === id} className={selectedLayoutId === id ? 'is-active' : ''} onClick={event => { applyBuiltInLayout(id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{label}</span>{selectedLayoutId === id ? <Check size={14} aria-label="Layout ativo" /> : null}</button>)}
+            {[['preset-executive-light', 'Executivo Light'], ['preset-executive-ice', 'Executivo Ice'], ['preset-executive-dark', 'Executivo Dark'], [professionalLayoutId, 'Padrão profissional'], ['preset-reliability', 'Compacto'], ['preset-blank', 'Em branco · limpar lousa']].map(([id, label]) => <button key={id} type="button" role="menuitemradio" aria-checked={selectedLayoutId === id} className={selectedLayoutId === id ? 'is-active' : ''} onClick={event => { applyBuiltInLayout(id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{label}</span>{selectedLayoutId === id ? <Check size={14} aria-label="Layout ativo" /> : null}</button>)}
             {savedLayouts.length ? <><strong>Meus layouts</strong>{savedLayouts.map(item => <div className="pcm-canvas__saved-layout-row" key={item.id}><button type="button" role="menuitemradio" aria-checked={selectedLayoutId === item.id} className={selectedLayoutId === item.id ? 'is-active' : ''} onClick={event => { selectSavedLayout(item.id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{item.name}</span>{selectedLayoutId === item.id ? <Check size={14} aria-label="Layout ativo" /> : null}</button><button type="button" className="pcm-canvas__saved-layout-delete" aria-label={`Excluir layout ${item.name}`} title={`Excluir layout ${item.name}`} onClick={event => { event.stopPropagation(); deleteSavedLayout(item.id, item.name) }}><Trash2 size={13} aria-hidden="true" /></button></div>)}</> : null}
           </div>
         </details>
