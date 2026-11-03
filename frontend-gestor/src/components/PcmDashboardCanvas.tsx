@@ -217,6 +217,23 @@ type CanvasStyleValues = Partial<Pick<CanvasPlacement, typeof stylePlacementKeys
 
 const boardGroup: PcmCanvasGroup = { id: 'board', label: 'Painel' }
 const professionalLayoutId = '__professional_default__'
+const executiveThemes = { 'preset-executive-light': 'light', 'preset-executive-ice': 'ice', 'preset-executive-dark': 'dark' } as const
+function createExecutiveLayout(widgets: PcmCanvasWidget[], theme: 'light' | 'ice' | 'dark'): CanvasLayout {
+  const next = createDefaultLayout(widgets)
+  const dark = theme === 'dark'
+  const surface = dark ? '#18364d' : theme === 'ice' ? '#f6fbff' : '#ffffff'
+  const text = dark ? '#edf5fc' : '#17354d'
+  const accent = dark ? '#55bbed' : '#176fc1'
+  for (const [id, placement] of Object.entries(next.placements)) {
+    Object.assign(placement, { cardBackground: surface, cardBackgroundOpacity: 100, cardBorder: 'none', cardRadius: 4, titleColor: dark ? '#b7d0e0' : '#48667e', contentColor: text, iconColor: accent, accentColor: accent, titleShadow: 0, contentShadow: 0, cardShadow: 0, chartCenterColor: text, legendTextColor: text, legendValueColor: text, chartFocusTarget: 'chart', chartFocusEffect: 'glow', chartFocusIntensity: 30, cardFocusEffect: 'lift', cardFocusDuration: 400, mttrUnit: 'h', mtbfUnit: 'h' })
+    delete placement.left; delete placement.top; delete placement.row; delete placement.column; delete placement.rowSpan
+    if (id.startsWith('reliability-')) placement.span = 8
+    if (id === 'monthly-mttr') Object.assign(placement, { span: 24, height: 330, mode: 'area', chartStyle: 'smooth', titleSize: 18, showChartAxes: true })
+    if (id === 'mttr-mtbf-comparison') Object.assign(placement, { span: 24, height: 120, showTitle: false, linkTimeMetricColors: true })
+  }
+  next.customGroups = next.customGroups.map(group => ({ ...group, background: 'transparent', border: 'none', titleColor: text, titleSize: 14 }))
+  return next
+}
 const storageKey = 'vorqix.pcm.dashboard-canvas.v4'
 const dashboardThemeStorageKey = 'vorqix.pcm.dashboard-theme.v1'
 const previousStorageKeys = ['vorqix.pcm.dashboard-canvas.v3', 'vorqix.pcm.dashboard-canvas.v2']
@@ -409,7 +426,7 @@ function readInitialLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
 
 function readInitialSelectedLayoutId(widgets: PcmCanvasWidget[], savedLayouts: SavedCanvasLayout[]): string {
   const storedId = readSelectedLayoutId()
-  if (storedId === professionalLayoutId || storedId === 'preset-blank' || storedId === 'preset-reliability' || savedLayouts.some(item => item.id === storedId)) return storedId
+  if (storedId === professionalLayoutId || storedId in executiveThemes || storedId === 'preset-blank' || storedId === 'preset-reliability' || savedLayouts.some(item => item.id === storedId)) return storedId
   if (storedId === 'preset-compact' || storedId === 'preset-operations') return professionalLayoutId
   const current = readInitialLayout(widgets)
   return sameLayout(current, createDefaultLayout(widgets)) ? professionalLayoutId : ''
@@ -1553,7 +1570,13 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
   function applyBuiltInLayout(id: string) {
     if (unsaved && !window.confirm('As alterações atuais ainda não foram salvas. Trocar de layout mesmo assim?')) return
     let nextLayout: CanvasLayout
-    if (id === 'preset-blank') {
+    if (id in executiveThemes) {
+      const theme = executiveThemes[id as keyof typeof executiveThemes]
+      nextLayout = createExecutiveLayout(widgets, theme)
+      setDashboardTheme(theme)
+      setAreaBackground('')
+      setPanelAppearance({ background: 'transparent', border: 'transparent', width: 0 })
+    } else if (id === 'preset-blank') {
       nextLayout = {
         ...layout,
         groupOrder: [boardGroup.id],
@@ -1970,7 +1993,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
           <summary className={`pcm-canvas__icon-button pcm-canvas__toolbar-icon${selectedLayoutId ? ' is-active' : ''}`} title="Escolher layout" aria-label="Escolher layout"><LayoutTemplate size={15} aria-hidden="true" /></summary>
           <div className="pcm-canvas__layout-options" role="menu" aria-label="Layouts disponíveis">
             <div className="pcm-canvas__layout-actions" role="group" aria-label="Ações do layout"><button type="button" title="Salvar como novo layout" aria-label="Salvar como novo layout" onClick={event => { setSavingNamedLayout(true); event.currentTarget.closest('details')?.removeAttribute('open') }}><Save size={15} aria-hidden="true" /></button><button type="button" title="Exportar layout" aria-label="Exportar layout" onClick={exportCurrentLayout}><Download size={15} aria-hidden="true" /></button><button type="button" title="Importar layout" aria-label="Importar layout" onClick={() => layoutImportRef.current?.click()}><Upload size={15} aria-hidden="true" /></button><input ref={layoutImportRef} type="file" accept="application/json,.json" onChange={importLayout} tabIndex={-1} aria-label="Importar layout JSON" /></div><strong>Layouts padrão</strong>
-            {[[professionalLayoutId, 'Padrão profissional'], ['preset-reliability', 'Confiabilidade'], ['preset-blank', 'Em branco · limpar lousa']].map(([id, label]) => <button key={id} type="button" role="menuitemradio" aria-checked={selectedLayoutId === id} className={selectedLayoutId === id ? 'is-active' : ''} onClick={event => { applyBuiltInLayout(id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{label}</span>{selectedLayoutId === id ? <Check size={14} aria-label="Layout ativo" /> : null}</button>)}
+            {[['preset-executive-light', 'Executivo Light'], ['preset-executive-ice', 'Executivo Ice'], ['preset-executive-dark', 'Executivo Dark'], [professionalLayoutId, 'Padrão profissional'], ['preset-reliability', 'Confiabilidade'], ['preset-blank', 'Em branco · limpar lousa']].map(([id, label]) => <button key={id} type="button" role="menuitemradio" aria-checked={selectedLayoutId === id} className={selectedLayoutId === id ? 'is-active' : ''} onClick={event => { applyBuiltInLayout(id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{label}</span>{selectedLayoutId === id ? <Check size={14} aria-label="Layout ativo" /> : null}</button>)}
             {savedLayouts.length ? <><strong>Meus layouts</strong>{savedLayouts.map(item => <div className="pcm-canvas__saved-layout-row" key={item.id}><button type="button" role="menuitemradio" aria-checked={selectedLayoutId === item.id} className={selectedLayoutId === item.id ? 'is-active' : ''} onClick={event => { selectSavedLayout(item.id); event.currentTarget.closest('details')?.removeAttribute('open') }}><span>{item.name}</span>{selectedLayoutId === item.id ? <Check size={14} aria-label="Layout ativo" /> : null}</button><button type="button" className="pcm-canvas__saved-layout-delete" aria-label={`Excluir layout ${item.name}`} title={`Excluir layout ${item.name}`} onClick={event => { event.stopPropagation(); deleteSavedLayout(item.id, item.name) }}><Trash2 size={13} aria-hidden="true" /></button></div>)}</> : null}
           </div>
         </details>
