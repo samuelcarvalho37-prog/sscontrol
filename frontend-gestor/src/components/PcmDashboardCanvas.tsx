@@ -232,6 +232,33 @@ function createExecutiveLayout(widgets: PcmCanvasWidget[], theme: 'light' | 'ice
     if (id === 'mttr-mtbf-comparison') Object.assign(placement, { span: 24, height: 120, showTitle: false, linkTimeMetricColors: true })
   }
   next.customGroups = next.customGroups.map(group => ({ ...group, background: 'transparent', border: 'none', titleColor: text, titleSize: 14 }))
+  next.groupOrder = ['board', 'group-prioridades', 'group-confiabilidade', 'group-carga', 'group-ativos', 'group-planejamento', 'group-resultados', 'group-materiais']
+  for (const placement of Object.values(next.placements)) Object.assign(placement, { height: 112, titleSize: 12, contentSize: 26, cardEffect: 'flat', accentPosition: 'none', iconSize: 22 })
+  const position = (id: string, span: number, left: number, top: number, height: number, extra: Partial<CanvasPlacement> = {}) => {
+    if (next.placements[id]) Object.assign(next.placements[id], { span, left, top, height, ...extra })
+  }
+  ;['attention-stopped', 'attention-critical', 'attention-overdue', 'preventives-next'].forEach((id, index) => position(id, 6, index * 25, 0, 100, { accentPosition: 'left', accentColor: ['#db5d72', '#df942d', '#c3a13a', '#21aa91'][index], iconColor: ['#db5d72', '#df942d', '#c3a13a', '#21aa91'][index] }))
+  position('reliability-availability', 10, 0, 0, 196, { contentSize: 42, iconSize: 30, accentPosition: 'left', accentColor: '#24b393' })
+  position('reliability-failures', 13, 42.5, 0, 90, { accentPosition: 'left', accentColor: '#d98935' })
+  position('reliability-recurrence', 13, 42.5, 106, 90, { accentPosition: 'left', accentColor: '#9a7dd9' })
+  position('mttr-mtbf-comparison', 24, 0, 212, 110, { showTitle: false, metricNameSize: 20, metricValueSize: 20, metricBarHeight: 4, customColors: [dark ? '#50c8b3' : '#128872', dark ? '#79baff' : '#216eb7'] })
+  position('monthly-mttr', 24, 0, 338, 330, { mode: 'area', chartStyle: 'smooth', titleSize: 18, customSubtitle: 'Evolução mensal · selecione MTTR ou MTBF', subtitleSize: 11, dataLabelMode: 'value', dataLabelSize: 12, legendVisible: false })
+  ;['operational-backlog', 'operational-open-orders', 'operational-active-technicians', 'operational-unestimated'].forEach((id, index) => position(id, 6, index * 25, 0, 112))
+  position('sector-failures', 14, 0, 0, 310, { contentSize: 14 })
+  position('asset-failures', 9, 62.5, 0, 310, { mode: 'donut', chartDiameter: 155, legendSize: 11, legendPosition: 'right', dataLabelMode: 'none', pieCallouts: false })
+  position('result-preventives-on-time', 12, 0, 0, 112)
+  position('result-preventives-late', 11, 54.1667, 0, 112)
+  for (const [leftId, rightId, top, height] of [['result-orders-open', 'result-orders-closed', 0, 108], ['report-orders-type', 'report-orders-priority', 124, 230], ['team-executions', 'result-team-hours', 370, 250], ['result-export-csv', 'result-print-pdf', 898, 44], ['result-material-cost', 'result-low-stock', 0, 112], ['result-stock-items', 'result-material-cost-assets', 128, 250]] as const) {
+    position(leftId, 11, 0, top, height)
+    position(rightId, 12, 50, top, height)
+  }
+  position('result-executions', 24, 0, 636, 246, { contentSize: 14 })
+  next.groupHeights = {}
+  for (const group of next.customGroups) {
+    const members = Object.values(next.placements).filter(placement => placement.groupId === group.id)
+    next.groupHeights[group.id] = Math.max(0, ...members.map(placement => (placement.top ?? 0) + (placement.height ?? 112))) + 48
+  }
+  next.widgetOrder = next.widgetOrder.filter(id => id !== 'attention-preventives').sort((a, b) => next.groupOrder.indexOf(next.placements[a].groupId) - next.groupOrder.indexOf(next.placements[b].groupId) || (next.placements[a].top ?? 0) - (next.placements[b].top ?? 0) || (next.placements[a].left ?? 0) - (next.placements[b].left ?? 0))
   return next
 }
 const storageKey = 'vorqix.pcm.dashboard-canvas.v4'
