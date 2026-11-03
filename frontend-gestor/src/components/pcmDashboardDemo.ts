@@ -31,18 +31,22 @@ export function createPcmDemoSnapshot() {
     data: {
       atualizado_em: now,
       atual: { ativos_parados: 2, ordens_abertas: 5, ordens_criticas: 1, ordens_atrasadas: 2, preventivas_proximas: 3, backlog_horas_estimadas: 54, ordens_sem_estimativa: 1, tecnicos_em_atividade: 3 },
-      confiabilidade: { ativos_considerados: 12, falhas: 7, mttr_segundos: 13800, mtbf_segundos: 312000, disponibilidade_percentual: 97.4, reincidencias: 2, ativos_reincidentes: 2 },
+      confiabilidade: { ativos_considerados: 48, falhas: 34, mttr_segundos: 13800, mtbf_segundos: 312000, disponibilidade_percentual: 97.4, reincidencias: 8, ativos_reincidentes: 5 },
       confiabilidade_mensal: [
         { mes: '2026-05', mttr_segundos: 18600 }, { mes: '2026-06', mttr_segundos: 16200 },
         { mes: '2026-07', mttr_segundos: 17400 }, { mes: '2026-08', mttr_segundos: 14400 },
         { mes: '2026-09', mttr_segundos: 15600 }, { mes: '2026-10', mttr_segundos: 13800 },
       ],
       falhas_por_ativo: [
+        ...Array.from({ length: 9 }, (_, index) => ({ ativo_id: `demo-extra-${index}`, ativo_tag: `EQ-AUX-${String(index + 1).padStart(2, '0')}`, ativo_nome: ['Compressor de ar industrial', 'Esteira transportadora de embalagem', 'Sistema de refrigeração central', 'Homogeneizador de alta pressão', 'Caldeira de vapor', 'Bomba de circulação CIP', 'Painel elétrico de distribuição', 'Torre de resfriamento', 'Separadora centrífuga'][index], setor_nome: ['Utilidades', 'Embalagem', 'Refrigeração'][index % 3], falhas: 4 - index % 3 })),
         { ativo_id: 'demo-ativo-001', ativo_tag: 'EQ-PA-01', ativo_nome: 'Pasteurizador contínuo', setor_nome: 'Pasteurização', falhas: 3 },
         { ativo_id: 'demo-ativo-002', ativo_tag: 'EQ-TR-02', ativo_nome: 'Bomba sanitária', setor_nome: 'Processo', falhas: 2 },
         { ativo_id: 'demo-ativo-004', ativo_tag: 'EQ-EM-01', ativo_nome: 'Envasadora automática', setor_nome: 'Envase', falhas: 2 },
       ],
       falhas_por_setor: [
+        { setor_id: 'demo-setor-04', setor_nome: 'Utilidades', falhas: 9 },
+        { setor_id: 'demo-setor-05', setor_nome: 'Embalagem', falhas: 9 },
+        { setor_id: 'demo-setor-06', setor_nome: 'Refrigeração', falhas: 9 },
         { setor_id: 'demo-setor-01', setor_nome: 'Pasteurização', falhas: 3 },
         { setor_id: 'demo-setor-02', setor_nome: 'Processo', falhas: 2 },
         { setor_id: 'demo-setor-03', setor_nome: 'Envase', falhas: 2 },
@@ -57,11 +61,17 @@ export function createPcmDemoSnapshot() {
         { id: 'demo-prev-003', codigo: 'PM-TQ-060', ativo_tag: 'EQ-TQ-01', programada_para: dateOffset(6) },
       ],
       tecnicos: [
+        ...Array.from({ length: 5 }, (_, index) => ({ id: `demo-tec-extra-${index}`, nome: ['Ana Oliveira', 'Bruno Santos', 'Carolina Ribeiro', 'Eduardo Lima', 'Fernanda Costa'][index], execucoes: 1 + index % 3 })),
         { id: 'demo-tec-001', nome: 'Diego Martins', execucoes: 2 },
         { id: 'demo-tec-002', nome: 'Camila Duarte', execucoes: 1 },
         { id: 'demo-tec-003', nome: 'Rafael Martins', execucoes: 1 },
       ],
       relatorios: {
+        mtbf_mensal: [
+          { mes: '2026-05', mtbf_segundos: 244800 }, { mes: '2026-06', mtbf_segundos: 270000 },
+          { mes: '2026-07', mtbf_segundos: 259200 }, { mes: '2026-08', mtbf_segundos: 295200 },
+          { mes: '2026-09', mtbf_segundos: 306000 }, { mes: '2026-10', mtbf_segundos: 312120 },
+        ],
         mttr_mensal: [
           { mes: '2026-05', mttr_segundos: 18600 }, { mes: '2026-06', mttr_segundos: 16200 },
           { mes: '2026-07', mttr_segundos: 17400 }, { mes: '2026-08', mttr_segundos: 14400 },
