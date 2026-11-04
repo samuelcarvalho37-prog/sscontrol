@@ -1792,6 +1792,15 @@ html body .pcm-canvas .pcm-canvas__widget { box-sizing: border-box; padding: var
 .pcm-canvas__visual-style-grid button[aria-pressed="true"] { border-color: #399dcc; background: #399dcc20; box-shadow: inset 0 0 0 1px #399dcc; }
 .pcm-canvas__visual-style-grid button:focus-visible { outline: 2px solid #399dcc; outline-offset: 2px; }
 .pcm-canvas__visual-style-grid [data-preview-style="luminous"] svg { filter: drop-shadow(0 0 3px #399dcc88); }
+html body .pcm-canvas__widget[data-chart-design="capsule"] :is(.pcm-bar-chart__track, .pcm-monthly-progress__track, .pcm-time-comparison__track),
+html body .pcm-canvas__widget[data-chart-design="capsule"] :is(.pcm-bar-chart__track > span, .pcm-monthly-progress__track > span, .pcm-time-comparison__track > i, .pcm-monthly-chart__bar) { border-radius: 999px !important; }
+html body .pcm-canvas__widget[data-chart-design="technical"] :is(.pcm-bar-chart__track > span, .pcm-monthly-progress__track > span, .pcm-time-comparison__track > i, .pcm-monthly-chart__bar) { border-radius: 0 !important; box-shadow: none; }
+html body .pcm-canvas__widget[data-chart-design="striped"] :is(.pcm-bar-chart__track > span, .pcm-monthly-progress__track > span, .pcm-time-comparison__track > i, .pcm-monthly-chart__bar) { background-image: repeating-linear-gradient(135deg, #ffffff3d 0 4px, transparent 4px 9px) !important; border-radius: 2px !important; }
+html body .pcm-canvas__widget[data-chart-design="luminous"] :is(.pcm-monthly-progress__track > span, .pcm-time-comparison__track > i) { background-image: linear-gradient(90deg, var(--pcm-widget-chart), var(--pcm-gradient-end)) !important; }
+html body .pcm-canvas__widget[data-chart-design="luminous"] :is(.pcm-bar-chart__track > span, .pcm-monthly-progress__track > span, .pcm-time-comparison__track > i, .pcm-monthly-chart__bar) { box-shadow: inset 0 2px 0 #ffffff66, 0 2px 6px #0a203d25; }
+html body .pcm-canvas__widget[data-chart-design="editorial"] :is(.pcm-bar-chart__track, .pcm-monthly-progress__track, .pcm-time-comparison__track) { background: transparent !important; }
+html body .pcm-canvas__widget[data-chart-design="editorial"] .pcm-pie-chart__svg { filter: none !important; }
+html body .pcm-canvas__widget[data-chart-design="volume"] :is(.pcm-monthly-progress__track > span, .pcm-time-comparison__track > i) { box-shadow: inset 0 2px 0 #ffffff55, 0 3px 0 color-mix(in srgb, var(--pcm-widget-chart) 60%, #000), 0 5px 7px #0003; }
 html body .pcm-canvas__widget .pcm-monthly-line-chart[data-visual-style="technical"] path.pcm-monthly-data-line { stroke-dasharray: 7 3; }
 html body .pcm-canvas__widget .pcm-monthly-line-chart[data-visual-style="luminous"] path.pcm-monthly-data-line { filter: drop-shadow(0 0 4px var(--pcm-widget-chart, #399dcc)); }
 html body .pcm-canvas__widget .pcm-monthly-line-chart:is([data-visual-style="luminous"], [data-visual-style="fluid"]) .pcm-monthly-line-chart__point > circle { fill: var(--pcm-point-color, var(--pcm-widget-chart)) !important; }

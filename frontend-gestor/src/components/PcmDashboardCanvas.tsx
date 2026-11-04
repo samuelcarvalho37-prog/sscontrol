@@ -262,7 +262,42 @@ const chartVisualStyles = [
   { id: 'editorial', label: 'Editorial', description: 'Linha fina, marcadores discretos e leitura sem excesso de guias.', path: 'M 5 23 C 20 23 20 6 35 10 S 60 23 74 7 S 88 10 95 12' },
 ] as const
 
+type ChartVisualDesign = { id: NonNullable<PcmChartPresentation['chartVisualStyle']>; label: string; description: string; path?: string }
+const radialVisualStyles: readonly ChartVisualDesign[] = [
+  { id: 'technical', label: 'Preciso', description: 'Fatias chapadas com separações nítidas.' },
+  { id: 'separated', label: 'Fatias separadas', description: 'Pequenos espaços entre as fatias, mantendo a proporção dos dados.' },
+  { id: 'luminous', label: 'Cristal', description: 'Degradê nas fatias e realce luminoso na interação.' },
+  { id: 'volume', label: 'Volume', description: 'Inclinação suave e extrusão para dar profundidade.' },
+  { id: 'editorial', label: 'Editorial', description: 'Acabamento plano, contorno discreto e sem animação de foco.' },
+]
+const barVisualStyles: readonly ChartVisualDesign[] = [
+  { id: 'technical', label: 'Técnico', description: 'Barras retas e trilhas discretas.' },
+  { id: 'capsule', label: 'Cápsula', description: 'Extremidades arredondadas e trilhas contínuas.' },
+  { id: 'luminous', label: 'Acetinado', description: 'Degradê com brilho interno nas barras.' },
+  { id: 'striped', label: 'Segmentado', description: 'Textura diagonal para diferenciar o acabamento das barras.' },
+  { id: 'volume', label: 'Volume', description: 'Barras com relevo, sombra e profundidade.' },
+  { id: 'editorial', label: 'Editorial', description: 'Trilhas ocultas e barras mais finas para uma apresentação leve.' },
+]
+function getChartVisualStyles(mode: PcmCanvasMode): readonly ChartVisualDesign[] {
+  return mode === 'pie' || mode === 'donut' ? radialVisualStyles : ['bar', 'progress', 'comparison'].includes(mode) ? barVisualStyles : ['line', 'area'].includes(mode) ? chartVisualStyles : []
+}
+
 function chartVisualStyleProperties(id: NonNullable<PcmChartPresentation['chartVisualStyle']>, mode: PcmCanvasMode): CanvasStyleValues {
+  if (!['line', 'area'].includes(mode)) {
+    const radial = mode === 'pie' || mode === 'donut'
+    return {
+      chartVisualStyle: id,
+      chartStyle: id === 'volume' ? radial ? 'depth' : 'bar-depth' : id === 'separated' ? 'exploded' : id === 'capsule' ? 'rounded' : id === 'luminous' ? 'gradient' : id === 'editorial' ? 'minimal' : 'default',
+      chartBorderWidth: radial && id === 'technical' ? 1 : 0,
+      chartLineWidth: id === 'editorial' ? 2 : id === 'capsule' ? 6 : 4,
+      metricBarHeight: id === 'editorial' ? 3 : id === 'capsule' ? 10 : 7,
+      chartVolumeEnabled: id === 'volume', chartVolume: id === 'volume' ? 6 : 0,
+      chartDepth: id === 'volume' ? 16 : 0, chartVolumeDirection: 90,
+      chartFocusEffect: id === 'luminous' ? 'reflection' : id === 'volume' ? 'lift' : 'none',
+      chartFocusTarget: 'chart', chartFocusIntensity: 40, chartFocusDuration: 450,
+      chartGridStyle: 'solid', chartGridWidth: id === 'editorial' ? 0 : .75,
+    }
+  }
   return {
     chartVisualStyle: id, smoothLine: !['technical', 'stepped'].includes(id),
     chartStyle: id === 'luminous' ? 'gradient' : id === 'editorial' ? 'minimal' : 'default',
@@ -279,7 +314,8 @@ function chartVisualStyleProperties(id: NonNullable<PcmChartPresentation['chartV
 }
 
 function ChartVisualStyles({ mode, value, onChange }: { mode: PcmCanvasMode; value?: PcmChartPresentation['chartVisualStyle']; onChange: (patch: CanvasStyleValues) => void }) {
-  return <details className="pcm-canvas__property-section"><summary>Design do gráfico</summary><p className="pcm-canvas__editor-hint">Muda o desenho e o acabamento, mantendo o tipo de gráfico e as cores escolhidas.</p><div className="pcm-canvas__visual-style-grid">{chartVisualStyles.map(style => <button key={style.id} type="button" aria-pressed={value === style.id} title={style.description} data-preview-style={style.id} onClick={() => onChange(chartVisualStyleProperties(style.id, mode))}><svg viewBox="0 0 100 34" aria-hidden="true">{mode === 'area' ? <path d={`${style.path} L 95 32 L 5 32 Z`} fill="currentColor" opacity=".18" /> : null}<path d={style.path} fill="none" stroke="currentColor" strokeWidth={style.id === 'luminous' ? 3 : 1.8} strokeLinecap="round" /></svg><strong>{style.label}</strong></button>)}</div></details>
+  const radial = mode === 'pie' || mode === 'donut'
+  return <details className="pcm-canvas__property-section"><summary>Design do gráfico</summary><p className="pcm-canvas__editor-hint">Muda o desenho e o acabamento, mantendo o tipo de gráfico e as cores escolhidas.</p><div className="pcm-canvas__visual-style-grid">{getChartVisualStyles(mode).map(style => <button key={style.id} type="button" aria-pressed={value === style.id} title={style.description} data-preview-style={style.id} onClick={() => onChange(chartVisualStyleProperties(style.id, mode))}><svg viewBox="0 0 100 34" aria-hidden="true">{radial ? <g transform={style.id === 'volume' ? 'translate(0 4) scale(1 .8)' : undefined}><circle cx="50" cy="17" r="12" fill={mode === 'pie' ? 'currentColor' : 'none'} fillOpacity=".3" stroke="currentColor" strokeWidth={mode === 'donut' ? 7 : 1} /><path d="M 50 5 L 50 17 L 61 23" fill="none" stroke="currentColor" strokeWidth={style.id === 'separated' ? 4 : 1.5} /></g> : style.path ? <>{mode === 'area' ? <path d={`${style.path} L 95 32 L 5 32 Z`} fill="currentColor" opacity=".18" /> : null}<path d={style.path} fill="none" stroke="currentColor" strokeWidth={style.id === 'luminous' ? 3 : 1.8} strokeLinecap="round" /></> : mode === 'bar' ? [12, 21, 16, 27].map((height, index) => <rect key={index} x={15 + index * 19} y={31 - height} width="12" height={height} rx={style.id === 'capsule' ? 6 : 1} fill="currentColor" opacity={.5 + index * .15} />) : [70, 48, 60].map((width, index) => <rect key={index} x="10" y={3 + index * 11} width={width} height={style.id === 'editorial' ? 3 : 7} rx={style.id === 'capsule' ? 4 : 0} fill="currentColor" opacity={1 - index * .2} />)}</svg><strong>{style.label}</strong></button>)}</div></details>
 }
 
 function chartPresetProperties(id: string, mode: PcmCanvasMode): CanvasStyleValues {
@@ -362,7 +398,7 @@ function LibraryStyleEditor({ style, category, chartModes = [], onChange }: { st
       {select('cardFocusEffect', 'Animação do card', 'none', [['none', 'Sem animação'], ['lift', 'Elevação'], ['glow', 'Luz'], ['pulse', 'Pulso'], ['reflection', 'Reflexo']])}{range('cardFocusDuration', 'Duração', 450, 200, 1600, 'ms')}
     </>) : null}
     {category === 'chart' ? <>
-      {chartModes.some(mode => ['line', 'area'].includes(mode)) ? <ChartVisualStyles mode={chartModes.includes('area') ? 'area' : 'line'} value={properties.chartVisualStyle} onChange={patch => onChange({ ...style, properties: { ...properties, ...patch } })} /> : null}
+      {chartModes.some(mode => getChartVisualStyles(mode).length) ? <ChartVisualStyles mode={chartModes.find(mode => getChartVisualStyles(mode).length) ?? 'line'} value={properties.chartVisualStyle} onChange={patch => onChange({ ...style, properties: { ...properties, ...patch } })} /> : null}
       {chartModes.some(mode => ['line', 'area'].includes(mode)) ? <ChartAreaFields options={properties} mode={chartModes.includes('area') ? 'area' : 'line'} baseColor={style.chartColors[0] ?? '#176fc1'} onChange={patch => onChange({ ...style, properties: { ...properties, ...patch } })} /> : null}
       {section('Cores e representação do gráfico', <>
         {style.chartColors.map((value, index) => <label key={index}>Cor {index + 1}<PcmColorInput value={value} onChange={event => { const value = event.currentTarget.value; onChange({ ...style, chartColors: style.chartColors.map((current, position) => index === position ? value : current) }) }} /></label>)}
@@ -717,7 +753,7 @@ function readLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
       if (stored?.chartAreaFill && ['none', 'solid', 'gradient'].includes(stored.chartAreaFill)) placement.chartAreaFill = stored.chartAreaFill
       if (stored?.chartAreaDirection && ['vertical', 'horizontal'].includes(stored.chartAreaDirection)) placement.chartAreaDirection = stored.chartAreaDirection
       if (typeof stored?.chartUseOwnColors === 'boolean') placement.chartUseOwnColors = stored.chartUseOwnColors
-      if (stored?.chartVisualStyle && chartVisualStyles.some(style => style.id === stored.chartVisualStyle)) placement.chartVisualStyle = stored.chartVisualStyle
+      if (stored?.chartVisualStyle && [...chartVisualStyles, ...radialVisualStyles, ...barVisualStyles].some(style => style.id === stored.chartVisualStyle)) placement.chartVisualStyle = stored.chartVisualStyle
       if (typeof stored?.cornerCut === 'number' && Number.isFinite(stored.cornerCut)) placement.cornerCut = Math.max(0, Math.min(40, stored.cornerCut))
       const savedRadius = parseCornerRadius(stored?.cardRadius)
       if (savedRadius !== undefined) placement.cardRadius = savedRadius
@@ -1178,7 +1214,11 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
   const libraryCompatibleCount = libraryScopedIds.filter(id => {
     const widget = widgetById.get(id)
     if (styleLibraryCategory === 'button') return Boolean(widget?.action)
-    if (styleLibraryCategory === 'chart' || (styleLibraryCategory === 'effects' && (editingLibraryStyle ?? libraryChoice)?.properties?.chartFocusTarget === 'chart')) return !widget?.action && ['line', 'area', 'bar', 'pie', 'donut', 'comparison', 'progress'].includes(layout.placements[id].mode)
+    if (styleLibraryCategory === 'chart' || (styleLibraryCategory === 'effects' && (editingLibraryStyle ?? libraryChoice)?.properties?.chartFocusTarget === 'chart')) {
+      const mode = layout.placements[id].mode
+      const design = styleLibraryCategory === 'chart' ? (editingLibraryStyle ?? libraryChoice)?.properties?.chartVisualStyle : undefined
+      return !widget?.action && getChartVisualStyles(mode).length > 0 && (!design || getChartVisualStyles(mode).some(style => style.id === design))
+    }
     return !widget?.action
   }).length
 
@@ -1193,7 +1233,8 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
       ? scopedIds.filter(id => {
         const widget = widgetById.get(id)
         const placement = layout.placements[id]
-        return Boolean(widget && placement && chartModes.includes(placement.mode) && widget.modes.some(mode => chartModes.includes(mode.id)))
+        const design = styleLibraryCategory === 'chart' ? style.properties?.chartVisualStyle : undefined
+        return Boolean(widget && placement && chartModes.includes(placement.mode) && widget.modes.some(mode => chartModes.includes(mode.id)) && (!design || getChartVisualStyles(placement.mode).some(item => item.id === design)))
       })
       : scopedIds.filter(id => !widgetById.get(id)?.action)
     if (!targetIds.length) { setSaveMessage('Selecione itens compatíveis ou escolha Todos os cards.'); return }
@@ -1219,7 +1260,12 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         if (styleLibraryCategory === 'text') placements[id] = { ...placement, ...properties, titleColor: style.titleColor, contentColor: style.contentColor }
         if (styleLibraryCategory === 'border') placements[id] = { ...placement, ...properties, cardBorder: style.border === 'transparent' ? 'none' : style.border, cardBorderStyle: properties.cardBorderStyle ?? ((('line' in style && style.line !== 'none') ? style.line : 'solid') as CanvasPlacement['cardBorderStyle']) }
         if (styleLibraryCategory === 'content') placements[id] = { ...placement, contentColor: style.contentColor, iconColor: style.chartColors[0], ...properties }
-        if (styleLibraryCategory === 'chart') placements[id] = { ...placement, ...(style.id.startsWith('chart-') ? chartPresetProperties(style.id.slice(6), placement.mode) : {}), chartUseOwnColors: true, customColors: [...style.chartColors], customColor: undefined, chartOpacity: 100, ...properties }
+        if (styleLibraryCategory === 'chart') {
+          const design = properties.chartVisualStyle
+          const designProperties = design ? chartVisualStyleProperties(design, placement.mode) : {}
+          placements[id] = { ...placement, ...(style.id.startsWith('chart-') ? chartPresetProperties(style.id.slice(6), placement.mode) : {}), ...designProperties, chartUseOwnColors: true, customColors: [...style.chartColors], customColor: undefined, chartOpacity: 100, ...properties }
+          if (design && placement.mode === 'line') placements[id].chartAreaFill = 'none'
+        }
       }
       return { ...current, placements }
     })
@@ -2140,7 +2186,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
           Object.assign(cardStyle, { '--pcm-grid-style': placement.chartGridStyle ?? 'solid', '--pcm-grid-border-width': `${placement.chartGridWidth === 0 ? 0 : placement.chartGridStyle === 'double' ? Math.max(3, (placement.chartGridWidth ?? 1) * 3) : placement.chartGridWidth ?? 1}px` })
           Object.assign(cardStyle, { '--pcm-focus-cut': `${(placement.chartFocusIntensity ?? 60) * .6}%`, '--pcm-focus-scale': 1 + (placement.chartFocusIntensity ?? 60) / 1600, '--pcm-focus-alpha': (placement.chartFocusIntensity ?? 60) / 100, '--pcm-focus-duration': `${placement.chartFocusDuration ?? 650}ms`, '--pcm-focus-brightness': 1 + (placement.chartFocusIntensity ?? 60) / 160, '--pcm-focus-shift': `${(placement.chartFocusIntensity ?? 60) / 35}px`, '--pcm-focus-radius': `${(placement.chartFocusIntensity ?? 60) / 8}px`, '--pcm-focus-color': placement.chartFocusColor ?? '#ffffff', '--pcm-focus-dim': 1 - (placement.chartFocusDim ?? 70) / 100 })
           Object.assign(cardStyle, { '--pcm-circle-diameter': `${placement.chartDiameter ?? 112}px`, '--pcm-label-value': placement.chartLabels === 'value' ? 'block' : 'none', '--pcm-label-percent': placement.chartLabels === 'percent' ? 'block' : 'none', '--pcm-legend-display': placement.legendPosition === 'hidden' ? 'none' : 'grid', '--pcm-pie-columns': placement.legendPosition === 'bottom' || placement.legendPosition === 'top' ? '1fr' : 'auto minmax(0, 1fr)', '--pcm-legend-order': placement.legendPosition === 'top' ? -1 : 1 })
-          return <article data-content-aligned={mode === 'number' && (placement.contentAlign !== undefined || placement.contentVerticalAlign !== undefined)} data-show-content={placement.showContent !== false} data-show-icon={placement.showIcon !== false} data-card-focus={placement.cardFocusEffect ?? 'none'} data-focus-target={placement.chartFocusTarget ?? 'chart'} data-chart-volume={volume.enabled} data-chart-focus={placement.chartFocusIntensity === 0 ? 'none' : placement.chartFocusEffect ?? 'none'} data-chart-focus-trigger={placement.chartFocusTrigger ?? 'both'} key={widget.id} data-widget-id={widget.id} data-card-transparent={isTransparent ? 'true' : 'false'} data-chart-style={placement.chartStyle ?? 'default'} data-icon-position={placement.iconPosition ?? 'inline'} data-show-title={placement.showTitle === false || (widget.action && placement.showTitle === undefined) ? 'false' : 'true'} data-action-card={widget.action ? 'true' : 'false'} data-show-action-label={placement.showActionLabel === false ? 'false' : 'true'} data-button-style={placement.buttonStyle ?? (widget.action ? 'minimal' : 'outline')} data-button-radius={placement.buttonRadius ?? 'soft'} data-card-effect={placement.cardEffect ?? 'flat'} data-card-shape={placement.shape ?? 'free'} data-card-tone={isDarkColor(backgroundColor === 'transparent' ? undefined : backgroundColor, dashboardTheme) ? 'dark' : 'light'} className={`pcm-canvas__widget${isFreePositioned ? ' is-free-positioned' : ''}${dragging === `widget:${widget.id}` ? ' is-dragging' : ''}${selectedIds.includes(widget.id) ? ' is-selected' : ''}${paletteWidgetId === widget.id ? ' has-palette-open' : ''}${movingActionWidgetId === widget.id ? ' is-move-armed' : ''}`} style={{ ...cardStyle, fontFamily: placement.fontFamily === 'system' || !placement.fontFamily ? undefined : placement.fontFamily, '--pcm-card-focus-duration': `${placement.cardFocusDuration ?? 450}ms` } as CSSProperties} onPointerDown={!widget.action ? event => startWidgetMove(event, widget.id, group.id) : widget.action && movingActionWidgetId === widget.id ? event => startWidgetMove(event, widget.id, group.id, true) : undefined} onPointerMove={!widget.action ? moveWidgetPointer : widget.action && movingActionWidgetId === widget.id ? moveWidgetPointer : undefined} onPointerUp={!widget.action ? finishWidgetMove : widget.action && movingActionWidgetId === widget.id ? finishWidgetMove : undefined} onPointerCancel={!widget.action ? finishWidgetMove : widget.action && movingActionWidgetId === widget.id ? finishWidgetMove : undefined} onClickCapture={widget.action ? event => { if (suppressActionClick.current === widget.id) { event.preventDefault(); event.stopPropagation(); suppressActionClick.current = null } } : undefined} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ kind: 'widget', id: widget.id, x: event.clientX, y: event.clientY }) }}>
+          return <article data-chart-design={placement.chartVisualStyle ?? 'custom'} data-content-aligned={mode === 'number' && (placement.contentAlign !== undefined || placement.contentVerticalAlign !== undefined)} data-show-content={placement.showContent !== false} data-show-icon={placement.showIcon !== false} data-card-focus={placement.cardFocusEffect ?? 'none'} data-focus-target={placement.chartFocusTarget ?? 'chart'} data-chart-volume={volume.enabled} data-chart-focus={placement.chartFocusIntensity === 0 ? 'none' : placement.chartFocusEffect ?? 'none'} data-chart-focus-trigger={placement.chartFocusTrigger ?? 'both'} key={widget.id} data-widget-id={widget.id} data-card-transparent={isTransparent ? 'true' : 'false'} data-chart-style={placement.chartStyle ?? 'default'} data-icon-position={placement.iconPosition ?? 'inline'} data-show-title={placement.showTitle === false || (widget.action && placement.showTitle === undefined) ? 'false' : 'true'} data-action-card={widget.action ? 'true' : 'false'} data-show-action-label={placement.showActionLabel === false ? 'false' : 'true'} data-button-style={placement.buttonStyle ?? (widget.action ? 'minimal' : 'outline')} data-button-radius={placement.buttonRadius ?? 'soft'} data-card-effect={placement.cardEffect ?? 'flat'} data-card-shape={placement.shape ?? 'free'} data-card-tone={isDarkColor(backgroundColor === 'transparent' ? undefined : backgroundColor, dashboardTheme) ? 'dark' : 'light'} className={`pcm-canvas__widget${isFreePositioned ? ' is-free-positioned' : ''}${dragging === `widget:${widget.id}` ? ' is-dragging' : ''}${selectedIds.includes(widget.id) ? ' is-selected' : ''}${paletteWidgetId === widget.id ? ' has-palette-open' : ''}${movingActionWidgetId === widget.id ? ' is-move-armed' : ''}`} style={{ ...cardStyle, fontFamily: placement.fontFamily === 'system' || !placement.fontFamily ? undefined : placement.fontFamily, '--pcm-card-focus-duration': `${placement.cardFocusDuration ?? 450}ms` } as CSSProperties} onPointerDown={!widget.action ? event => startWidgetMove(event, widget.id, group.id) : widget.action && movingActionWidgetId === widget.id ? event => startWidgetMove(event, widget.id, group.id, true) : undefined} onPointerMove={!widget.action ? moveWidgetPointer : widget.action && movingActionWidgetId === widget.id ? moveWidgetPointer : undefined} onPointerUp={!widget.action ? finishWidgetMove : widget.action && movingActionWidgetId === widget.id ? finishWidgetMove : undefined} onPointerCancel={!widget.action ? finishWidgetMove : widget.action && movingActionWidgetId === widget.id ? finishWidgetMove : undefined} onClickCapture={widget.action ? event => { if (suppressActionClick.current === widget.id) { event.preventDefault(); event.stopPropagation(); suppressActionClick.current = null } } : undefined} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ kind: 'widget', id: widget.id, x: event.clientX, y: event.clientY }) }}>
             {placement.ornament && placement.ornament !== 'none' && placement.ornament !== 'notch' ? <span aria-hidden="true" className={`pcm-canvas__ornament is-${placement.ornament}`} /> : null}
             {placement.ornament === 'notch' && placement.cardBorder !== 'none' ? <svg aria-hidden="true" className="pcm-canvas__notch-border" viewBox="0 0 24 24"><path d="M 21 0 A 21 21 0 0 1 0 21" fill="none" stroke="var(--pcm-widget-border)" strokeWidth={placement.cardBorderStyle === 'double' ? 4 : 2} /></svg> : null}
             <header className="pcm-canvas__widget-heading">
@@ -2358,7 +2404,8 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
       </details> : null}
       {['line', 'area', 'bar', 'pie', 'donut', 'comparison', 'progress'].includes(paletteMode) ? <details data-editor-domain="chart" className="pcm-canvas__editor-section"><summary>Séries e apresentação</summary>
         {paletteWidget.id === 'monthly-mttr' ? <label className="pcm-canvas__palette-toggle"><span>Usar cores próprias do gráfico</span><input type="checkbox" checked={palettePlacement.chartUseOwnColors === true} onChange={event => { const chartUseOwnColors = event.currentTarget.checked; setPlacement(paletteWidget.id, value => ({ ...value, chartUseOwnColors })) }} /></label> : null}
-        {['line', 'area'].includes(paletteMode) ? <><ChartVisualStyles mode={paletteMode} value={palettePlacement.chartVisualStyle} onChange={patch => setPlacement(paletteWidget.id, value => ({ ...value, ...patch }))} /><ChartAreaFields options={palettePlacement} mode={paletteMode} baseColor={paletteColors[0] ?? '#176fc1'} onChange={patch => setPlacement(paletteWidget.id, value => ({ ...value, ...patch }))} /></> : null}
+        <ChartVisualStyles mode={paletteMode} value={palettePlacement.chartVisualStyle} onChange={patch => setPlacement(paletteWidget.id, value => ({ ...value, ...patch }))} />
+        {['line', 'area'].includes(paletteMode) ? <ChartAreaFields options={palettePlacement} mode={paletteMode} baseColor={paletteColors[0] ?? '#176fc1'} onChange={patch => setPlacement(paletteWidget.id, value => ({ ...value, ...patch }))} /> : null}
         <p className="pcm-canvas__editor-hint">Estilos completos do gráfico: um clique aplica cores, linha, pontos, preenchimento e realce. Depois, ajuste cada propriedade.</p>
         {['line', 'area'].includes(paletteMode) ? <fieldset><legend>Interação com o mouse</legend><label className="pcm-canvas__palette-toggle"><span>Bolinha que acompanha o mouse</span><input type="checkbox" checked={palettePlacement.showTrackingMarker === true} onChange={event => { const showTrackingMarker = event.currentTarget.checked; setPlacement(paletteWidget.id, value => ({ ...value, showTrackingMarker })) }} /></label><small>Acompanha a curva ao passar o mouse, sem precisar clicar.</small></fieldset> : null}
         <details className="pcm-canvas__editor-section"><summary>Efeitos de foco</summary>

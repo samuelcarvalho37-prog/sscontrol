@@ -1,7 +1,7 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
 
 export type PcmChartPresentation = {
-  chartVisualStyle?: 'technical' | 'fluid' | 'luminous' | 'stepped' | 'editorial'
+  chartVisualStyle?: 'technical' | 'fluid' | 'luminous' | 'stepped' | 'editorial' | 'separated' | 'volume' | 'capsule' | 'striped'
   gradientEnd?: string
   chartUseOwnColors?: boolean
   chartAreaFill?: 'none' | 'solid' | 'gradient'
