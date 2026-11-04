@@ -276,6 +276,17 @@ html body .pcm-canvas .pcm-canvas__widget::after { clip-path: var(--pcm-accent-c
 html body .pcm-canvas .pcm-canvas__widget-title small { font-size: var(--pcm-widget-subtitle-size, 12px); line-height: 1.4; }
 html body .pcm-canvas .pcm-canvas__widget { box-shadow: var(--pcm-card-shadow, none), inset var(--pcm-card-inset, 0px) var(--pcm-card-inset, 0px) calc(var(--pcm-card-inset, 0px) * 2) #10223440 !important; }
 html body .pcm-canvas .pcm-canvas__widget::after { content: ''; position: absolute; pointer-events: none; display: var(--pcm-accent-display, block); inset: var(--pcm-accent-inset, 0 auto 0 0); width: var(--pcm-accent-width, 3px); height: var(--pcm-accent-height, 100%); background: var(--pcm-widget-accent, #176fc1); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="double"]:not([data-accent-position="corners"])::after { background: linear-gradient(90deg, var(--pcm-widget-accent) 30%, transparent 30% 65%, var(--pcm-widget-accent) 65%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="double"]:is([data-accent-position="top"], [data-accent-position="bottom"])::after { background: linear-gradient(0deg, var(--pcm-widget-accent) 30%, transparent 30% 65%, var(--pcm-widget-accent) 65%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="diagonal"]:not([data-accent-position="corners"])::after { background: repeating-linear-gradient(135deg, var(--pcm-widget-accent) 0 4px, transparent 4px 7px); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="triangle"][data-accent-position="left"]::after { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="triangle"][data-accent-position="right"]::after { clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="triangle"][data-accent-position="top"]::after { clip-path: polygon(0 0, 50% 100%, 100% 0); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="triangle"][data-accent-position="bottom"]::after { clip-path: polygon(0 100%, 50% 0, 100% 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="cone"][data-accent-position="left"]::after { clip-path: polygon(0 0, 100% 0, 0 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="cone"][data-accent-position="right"]::after { clip-path: polygon(0 0, 100% 0, 100% 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="cone"][data-accent-position="top"]::after { clip-path: polygon(0 0, 100% 0, 0 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-accent-style="cone"][data-accent-position="bottom"]::after { clip-path: polygon(0 100%, 100% 100%, 100% 0); }
 html body .pcm-canvas .pcm-canvas__widget-body > .pcm-metric::before { display: none; }
 .pcm-canvas__style-library > header { order: -2; }
 .pcm-canvas__style-library > .pcm-canvas__panel-editor { order: -1; }
@@ -2061,3 +2072,28 @@ html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas_
   width: min(78%, 100%);
   align-self: center;
 }
+
+/* A margem pertence ao conteúdo; a rolagem pertence ao corpo do card. */
+html body .pcm-canvas .pcm-canvas__widget { padding: 0; }
+html body .pcm-canvas .pcm-canvas__widget:not([data-action-card="true"]) .pcm-canvas__widget-heading {
+  box-sizing: border-box;
+  padding: var(--pcm-card-padding-top, var(--pcm-card-padding, 5px)) var(--pcm-card-padding-right, var(--pcm-card-padding, 5px)) 0 var(--pcm-card-padding-left, var(--pcm-card-padding, 5px));
+}
+html body .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body {
+  box-sizing: border-box; width: 100%; max-width: 100%;
+  padding: 0 var(--pcm-card-padding-right, var(--pcm-card-padding, 5px)) var(--pcm-card-padding-bottom, var(--pcm-card-padding, 5px)) var(--pcm-card-padding-left, var(--pcm-card-padding, 5px));
+  overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain;
+}
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas__widget-body { width: min(78%, 100%); }
+html body .pcm-canvas .pcm-canvas__widget[data-action-card="true"] .pcm-canvas__widget-body { padding-top: var(--pcm-card-padding-top, var(--pcm-card-padding, 5px)); }
+html body .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body :is(.pcm-pie-chart, .pcm-pie-chart > ul, .pcm-bar-chart, .pcm-monthly-progress) { overflow: visible; max-height: none; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart { height: auto; min-height: min-content; flex: 1 0 auto; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul { align-self: center; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body :is(.pcm-bar-chart, .pcm-monthly-progress) { flex-shrink: 0; }
+html body .pcm-canvas .pcm-canvas__widget[data-theme-adaptive="true"][data-card-effect^="glass"] { background-color: var(--pcm-widget-background) !important; background-image: linear-gradient(135deg, #ffffff66, transparent 55%, color-mix(in srgb, var(--pcm-widget-accent) 12%, transparent)) !important; }
+html[data-pcm-dashboard-theme="dark"] body .pcm-canvas .pcm-canvas__widget[data-theme-adaptive="true"][data-card-effect^="glass"] { background-image: linear-gradient(135deg, #ffffff12, transparent 55%, color-mix(in srgb, var(--pcm-widget-accent) 12%, transparent)) !important; }
+html body .pcm-canvas .pcm-canvas__widget[data-theme-adaptive="true"][data-card-effect="gradient"] { background-image: linear-gradient(135deg, var(--pcm-widget-background), color-mix(in srgb, var(--pcm-widget-background) 78%, var(--pcm-gradient-end))) !important; }
+html body .pcm-canvas .pcm-canvas__widget[data-theme-adaptive="true"] .pcm-canvas__widget-body > * { background-color: transparent !important; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style]::after { background: transparent !important; clip-path: none !important; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style="double"]::after { border-style: double; border-width: 6px; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style="diagonal"]::after { border-style: dashed; }
