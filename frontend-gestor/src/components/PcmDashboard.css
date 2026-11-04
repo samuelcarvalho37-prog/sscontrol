@@ -2819,3 +2819,37 @@
   .pcm-dashboard--desktop .pcm-dashboard-overview { grid-template-columns: 1fr; }
   .pcm-dashboard--desktop .pcm-technical-groups { grid-template-columns: 1fr; }
 }
+
+/* Hierarquia e legibilidade do painel PCM. */
+html body .pcm-dashboard > .pcm-heading {
+  display:flex; align-items:center; justify-content:space-between; gap:24px;
+  min-height:124px; padding:24px 28px; border:1px solid #d5e3ec;
+  border-left:4px solid #0d7d89; border-radius:16px;
+  background:var(--pcm-panel, #fff); color:var(--pcm-ink, #14324a);
+  box-shadow:0 4px 18px #163b5610;
+}
+html body .pcm-dashboard .pcm-heading h1 { margin:0; font-size:26px; line-height:1.2; color:var(--pcm-ink, #14324a); }
+html body .pcm-dashboard .pcm-heading p { margin:8px 0; font-size:13px; line-height:1.5; color:var(--pcm-muted, #506a7e); }
+html body .pcm-dashboard .pcm-heading__updated { display:block; color:var(--pcm-muted, #506a7e); font-size:11px; line-height:1.5; }
+html body .pcm-dashboard .pcm-heading .pcm-demo-toggle { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:auto; height:auto; min-height:38px; padding:8px 12px; border:1px solid #c5d9e7; border-radius:9px; background:var(--pcm-panel, #fff); color:var(--pcm-ink, #14324a); font-size:12px; }
+html body .pcm-dashboard .pcm-operational-alerts { padding:10px 0; gap:10px; }
+html body .pcm-dashboard .pcm-operational-alerts__category { min-height:34px; padding:7px 10px; font-size:12px; border-radius:8px; }
+html body .pcm-dashboard .pcm-operational-actions { gap:10px; margin:12px 0 20px; flex-wrap:wrap; }
+html body .pcm-dashboard .pcm-operational-actions > button { min-height:42px; padding:10px 16px; border-radius:10px; }
+html body .pcm-dashboard .pcm-canvas > .pcm-canvas__toolbar { display:flex; flex-wrap:wrap; gap:14px; padding:16px; border:1px solid #d5e3ec; border-radius:12px; }
+html body .pcm-dashboard .pcm-canvas__toolbar-title { flex:1 1 220px; gap:10px; }
+html body .pcm-dashboard .pcm-canvas__toolbar-title h2 { font-size:18px; }
+html body .pcm-dashboard .pcm-canvas__toolbar-tools { flex:1 1 100%; justify-content:flex-start; gap:8px; }
+html body .pcm-dashboard .pcm-canvas__toolbar-tools button,
+html body .pcm-dashboard .pcm-canvas__toolbar-tools select,
+html body .pcm-dashboard .pcm-canvas__search { min-height:34px; height:auto; font-size:11px; border-radius:7px; }
+html body .pcm-dashboard .pcm-canvas__toolbar-tools .pcm-canvas__toolbar-icon { min-width:34px; }
+html body .pcm-dashboard .pcm-canvas__search input { width:160px; font-size:12px; }
+html body .pcm-dashboard button:focus-visible, html body .pcm-dashboard select:focus-visible { outline:3px solid #3089ca; outline-offset:3px; }
+@media(max-width:700px) {
+  html body .pcm-dashboard > .pcm-heading { align-items:flex-start; flex-direction:column; padding:20px; gap:16px; }
+  html body .pcm-dashboard .pcm-heading h1 { font-size:23px; }
+  html body .pcm-dashboard .pcm-canvas__toolbar-tools { gap:7px; }
+  html body .pcm-dashboard .pcm-canvas__search { flex:1 1 160px; }
+  html body .pcm-dashboard .pcm-canvas__search input { width:100%; }
+}

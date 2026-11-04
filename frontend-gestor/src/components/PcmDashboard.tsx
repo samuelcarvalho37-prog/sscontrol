@@ -1975,11 +1975,14 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     <section className={`pcm-dashboard pcm-dashboard--desktop${insight ? ' pcm-dashboard--focus' : ''}`} aria-label="Dashboard do PCM" aria-busy={loading}>
       <header className="pcm-heading">
         <div className="pcm-heading__meta">
+          <h1>Central de manutenção</h1>
+          <p>Planeje as ordens, acompanhe a equipe e organize sua lousa.</p>
           {displayData?.atualizado_em && !demoMode ? <small className="pcm-heading__updated" title="Atualização automática dos dados.">Atualizado {formatDateTime(displayData.atualizado_em)}</small> : <span className="pcm-heading__updated">Dados de demonstração</span>}
         </div>
         <div className="pcm-heading__tools">
           <button type="button" className="pcm-demo-toggle pcm-demo-toggle--icon" aria-label={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} title={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} aria-pressed={demoMode} disabled={createOrderOpen} onClick={() => { setDemoMode(value => !value); setInsight(null) }}>
             <ChartNoAxesCombined size={15} aria-hidden="true" />
+            <span>{demoMode ? 'Dados reais' : 'Demonstração'}</span>
           </button>
           {maintenanceStatus ? <span className={`pcm-dashboard-condition pcm-dashboard-condition--${maintenanceStatus.toLowerCase()}`} title={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`} aria-label={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`}>
             <i aria-hidden="true" /><span className="pcm-sr-only">{maintenanceStatusLabel(maintenanceStatus)}</span>
