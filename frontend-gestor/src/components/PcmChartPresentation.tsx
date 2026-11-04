@@ -27,6 +27,8 @@ export type PcmChartPresentation = {
   cardRadiusBottomRight?: number
   cardRadiusBottomLeft?: number
   pointColors?: Record<string, string>
+  pointGradientEnds?: Record<string, string>
+  onPointAppearanceChange?: (id: string, color?: string, gradientEnd?: string) => void
   onPointColorChange?: (id: string, color: string | undefined) => void
   smoothLine?: boolean
   missingDataMode?: 'gap' | 'connect' | 'zero'

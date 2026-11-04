@@ -2082,7 +2082,7 @@ html body .pcm-canvas .pcm-canvas__widget:not([data-action-card="true"]) .pcm-ca
 html body .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body {
   box-sizing: border-box; width: 100%; max-width: 100%;
   padding: 0 var(--pcm-card-padding-right, var(--pcm-card-padding, 5px)) var(--pcm-card-padding-bottom, var(--pcm-card-padding, 5px)) var(--pcm-card-padding-left, var(--pcm-card-padding, 5px));
-  overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain;
+  overflow: hidden; scrollbar-gutter: stable; overscroll-behavior: auto;
 }
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas__widget-body { width: min(78%, 100%); }
 html body .pcm-canvas .pcm-canvas__widget[data-action-card="true"] .pcm-canvas__widget-body { padding-top: var(--pcm-card-padding-top, var(--pcm-card-padding, 5px)); }
@@ -2097,3 +2097,35 @@ html body .pcm-canvas .pcm-canvas__widget[data-theme-adaptive="true"] .pcm-canva
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style]::after { background: transparent !important; clip-path: none !important; }
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style="double"]::after { border-style: double; border-width: 6px; }
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"][data-accent-style="diagonal"]::after { border-style: dashed; }
+html body .pcm-canvas .pcm-canvas__widget[data-scroll-active="true"] .pcm-canvas__widget-body { overflow: auto; }
+.pcm-point-appearance { flex: 0 0 auto; align-self: stretch; display: grid; gap: 10px; width: min(320px, 100%); box-sizing: border-box; padding: 12px; margin: 8px auto; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 8px; background: var(--pcm-widget-background, #fff); color: var(--pcm-widget-content, inherit); font-size: 12px; line-height: 1.4; }
+.pcm-point-appearance header, .pcm-point-appearance footer, .pcm-point-appearance__modes, .pcm-point-appearance__colors { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.pcm-point-appearance header div { display: grid; gap: 3px; min-width: 0; }
+.pcm-point-appearance header strong { overflow-wrap: anywhere; font-size: 13px; }
+.pcm-point-appearance header small { font-size: 9px; letter-spacing: .06em; opacity: .7; }
+.pcm-point-appearance button { border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 5px; padding: 6px 10px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.pcm-point-appearance button[aria-pressed="true"], .pcm-point-appearance footer button:last-child { background: #176fc1; border-color: #176fc1; color: white; }
+.pcm-point-appearance__preview { height: 22px; border-radius: 4px; }
+.pcm-point-appearance__colors label { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.pcm-point-appearance__colors input { width: 100%; height: 30px; box-sizing: border-box; border: 1px solid color-mix(in srgb, currentColor 24%, transparent); border-radius: 4px; background: transparent; padding: 3px; cursor: pointer; }
+html body .pcm-canvas .pcm-bar-chart__track > span[data-point-custom="true"] { background: var(--pcm-point-paint) !important; }
+html body .pcm-canvas .pcm-pie-chart__slice[data-point-custom="true"] > path,
+html body .pcm-canvas .pcm-pie-chart__svg.is-pie .pcm-pie-chart__slice[data-point-custom="true"] > circle { fill: var(--pcm-point-paint) !important; }
+html body .pcm-canvas .pcm-pie-chart__svg.is-donut .pcm-pie-chart__slice[data-point-custom="true"] > circle { stroke: var(--pcm-point-paint) !important; }
+html body .pcm-canvas .pcm-canvas__card-style-gallery .pcm-canvas__card-style-preview { background-image: none !important; }
+html body .pcm-canvas .pcm-canvas__card-style-gallery .pcm-canvas__card-style-preview:is(.is-glass, .is-glass-blue, .is-glass-mint) { background-image: linear-gradient(135deg, #ffffff22, transparent 48%, #ffffff15) !important; }
+html body .pcm-canvas .pcm-canvas__card-style-gallery .pcm-canvas__card-style-preview.is-gradient { background-image: linear-gradient(135deg, var(--pcm-preview-surface), color-mix(in srgb, var(--pcm-preview-surface) 80%, #63a2df)) !important; }
+.pcm-point-appearance { max-height: calc(100vh - 24px); overflow-y: auto; box-shadow: 0 12px 32px #0003; }
+/* As ferramentas ficam no menu de contexto, fora da composição do card. */
+html body .pcm-canvas .pcm-canvas__widget[data-show-title="false"] > .pcm-canvas__widget-heading { display: none; }
+html body .pcm-canvas .pcm-canvas__widget-heading .pcm-canvas__widget-title { width: 100%; padding-right: 0; }
+html body .pcm-canvas .pcm-canvas__widget[data-mode="number"][data-show-content="false"][data-show-icon="true"] .pcm-canvas__widget-body { display: flex; align-items: center; justify-content: center; }
+html body .pcm-canvas .pcm-canvas__widget[data-mode="number"][data-show-content="false"] .pcm-metric :is(strong, small, p) { display: none; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] { border-radius: 50% !important; clip-path: inset(0 round 50%); container-type: inline-size; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas__widget-heading { padding: 0; margin: 0 0 4px; width: 72%; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas__widget-title strong { white-space: normal; overflow: visible; text-overflow: clip; display: block; overflow-wrap: anywhere; font-size: min(var(--pcm-widget-title-size, 12px), 13cqi); line-height: 1.15; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-canvas__widget-body { padding: 0; scrollbar-gutter: auto; width: 72%; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric { padding: 0; min-height: 0; gap: 5px; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric strong { font-size: min(var(--pcm-widget-metric-size, 25px), 26cqi) !important; }
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric .pcm-metric__icon,
+html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric .pcm-metric__icon svg { width: min(var(--pcm-widget-icon-size, 22px), 24cqi) !important; height: min(var(--pcm-widget-icon-size, 22px), 24cqi) !important; }

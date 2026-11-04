@@ -9,6 +9,8 @@ type Appearance = {
   accentColor?: string
   iconColor?: string
   customColors?: string[]
+  pointColors?: Record<string, string>
+  pointGradientEnds?: Record<string, string>
 }
 
 const validColor = (value: unknown): value is string => typeof value === 'string' && /^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value)
@@ -47,6 +49,10 @@ export function adaptPcmAppearance<T extends Appearance>(source: T, theme: PcmAp
   for (const key of detailKeys) if (validColor(result[key])) result[key] = readable(result[key], surface, 3)
   if (validColor(next.cardBorder)) next.cardBorder = readable(next.cardBorder, surface, 1.5)
   if (source.customColors) next.customColors = source.customColors.map(color => validColor(color) ? readable(color, surface, 3) : color)
+  for (const key of ['pointColors', 'pointGradientEnds'] as const) {
+    const colors = source[key]
+    if (colors) next[key] = Object.fromEntries(Object.entries(colors).map(([id, color]) => [id, validColor(color) ? readable(color, surface, 3) : color]))
+  }
   let buttonSurface = surface
   if (validColor(result.buttonBackground)) {
     buttonSurface = result.buttonBackground
