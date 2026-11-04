@@ -9,6 +9,7 @@ import type { ImprovementRequestSummary } from '../services/api/interventions'
 import { releaseMaintenanceWorkOrder } from '../services/api/maintenanceAssignments'
 import { PcmPartShortagesPanel } from './PcmPartShortagesPanel'
 import { PcmDashboardCanvas } from './PcmDashboardCanvas'
+import { formatChartTime, resolveTimeUnit, getChartVolume, getHourlyChartScale, PcmChartColumnGrid, PcmChartDataLabel, PcmChartGridLine, PcmChartLegend, PcmChartPointLabel, usePcmChartPresentation } from './PcmChartPresentation'
 import type { PcmCanvasCategory, PcmCanvasMode, PcmCanvasPalette, PcmCanvasSegmentFilter, PcmCanvasSegments, PcmCanvasWidget } from './PcmDashboardCanvas'
 import type { AdminIntervention } from '../types/interventions'
 import { listAdminEntity } from '../services/api/catalog'
@@ -50,6 +51,7 @@ interface PcmData {
   confiabilidade_mensal?: {
     mes: string
     mttr_segundos: number | null
+    mtbf_segundos?: number | null
   }[]
   falhas_por_ativo: {
     ativo_id: string
@@ -124,6 +126,7 @@ interface PcmData {
       itens_materiais: number
     }[]
     mttr_mensal?: { mes: string; mttr_segundos: number | null }[]
+    mtbf_mensal?: { mes: string; mtbf_segundos: number | null }[]
   }
 }
 
@@ -254,15 +257,18 @@ function HorizontalBarChart({
   palette?: PcmCanvasPalette
 }) {
   const maxValue = Math.max(...items.map(item => item.value), 1)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const presentation = usePcmChartPresentation()
+  const total = items.reduce((sum, item) => sum + item.value, 0)
   if (items.length === 0) return <EmptyState>{emptyMessage}</EmptyState>
 
-  return <div className="pcm-bar-chart" role="img" aria-label={`${valueLabel}: ${items.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
-    {items.map(item => <div className="pcm-bar-chart__row" key={item.id}>
+  return <><div className="pcm-bar-chart" data-label-position={presentation.dataLabelPosition ?? 'right'} role="img" aria-label={`${valueLabel}: ${items.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
+    {items.map(item => <div className="pcm-bar-chart__row" key={item.id} data-active={selectedId === item.id} role="button" tabIndex={0} aria-pressed={selectedId === item.id} aria-label={`${item.label}: ${item.value}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setSelectedId(current => current === item.id ? null : item.id) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setSelectedId(current => current === item.id ? null : item.id) } }}>
       <div className="pcm-bar-chart__label"><strong>{item.label}</strong>{item.detail ? <small>{item.detail}</small> : null}</div>
-      <div className="pcm-bar-chart__track"><span style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%`, background: palette?.[0] ?? '#176fc1' }} /></div>
-      <strong className="pcm-bar-chart__value">{item.value}</strong>
+      <div className="pcm-bar-chart__track"><span style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%`, background: palette?.[items.indexOf(item) % palette.length] ?? '#176fc1' }} /></div>
+      <strong className="pcm-bar-chart__value"><PcmChartDataLabel value={item.value} percent={total ? item.value / total * 100 : 0} /></strong>
     </div>)}
-  </div>
+  </div><PcmChartLegend items={items.map((item, index) => ({ ...item, percent: total ? item.value / total * 100 : 0, color: palette?.[index % palette.length] ?? '#176fc1' }))} /></>
 }
 
 function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donut' }: {
@@ -273,8 +279,14 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
   variant?: 'pie' | 'donut'
 }) {
   const [hiddenIds, setHiddenIds] = useState<string[]>([])
+  const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null)
+  const presentation = usePcmChartPresentation()
+  const gradientId = `pcm-slices-${useId().replace(/:/g, '')}`
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const positiveItems = items.filter(item => item.value > 0)
+  const [showAllItems, setShowAllItems] = useState(false)
+  const rankedItems = items.filter(item => item.value > 0).sort((a, b) => b.value - a.value)
+  const compactItems = rankedItems.length > 6 && !showAllItems
+  const positiveItems = compactItems ? [...rankedItems.slice(0, 5), { id: 'pcm-aggregated-others', label: `Outros (${rankedItems.length - 5} ativos)`, value: rankedItems.slice(5).reduce((sum, item) => sum + item.value, 0) }] : rankedItems
   const colors = palette ?? ['#176fc1', '#63a2df', '#a9cbea', '#0b4b84', '#82b7dc', '#416d98']
   const visibleItems = positiveItems.filter(item => !hiddenIds.includes(item.id))
   const total = visibleItems.reduce((sum, item) => sum + item.value, 0)
@@ -299,25 +311,56 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
     return `M ${outerStart.x} ${outerStart.y} A 46 46 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A 27 27 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y} Z`
   }
   const hovered = slices.find(item => item.id === hoveredId)
+  const extrusion = getChartVolume(presentation)
+  const volume = Math.ceil(extrusion.amount)
   const toggle = (id: string) => setHiddenIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
-  return <div className="pcm-pie-chart" role="group" aria-label={valueLabel}>
-    <div className="pcm-pie-chart__visual">
+  const legendLabel = (label: string) => {
+    const [code, ...name] = label.split(' · ')
+    if (presentation.legendLabelFormat === 'code') return code
+    if (presentation.legendLabelFormat === 'name') return name.join(' · ') || code
+    return label
+  }
+  const centerPosition = presentation.chartCenterPosition ?? 'center'
+  const centerFormat = presentation.chartCenterFormat ?? 'total'
+  const centerText = hovered && centerFormat === 'name' ? hovered.label.split(' · ').slice(1).join(' · ') || hovered.label : hovered && centerFormat === 'code' ? hovered.label.split(' · ')[0] : 'Total'
+  const calloutRadius = 48 + (presentation.pieCalloutDistance ?? 8)
+  const externalLabels = presentation.dataLabelPosition !== 'center' && Boolean(presentation.pieCallouts || presentation.dataLabelPosition === 'left' || presentation.dataLabelPosition === 'right')
+  const centerStyle = { '--pcm-center-text-size': `${presentation.chartCenterTextSize ?? 11}px`, '--pcm-center-gap': `${presentation.chartCenterGap ?? 4}px` } as React.CSSProperties
+  return <div className="pcm-pie-chart" data-legend-hidden={presentation.legendVisible === false || presentation.legendPosition === 'hidden'} role="group" aria-label={valueLabel}>
+    <div className="pcm-pie-chart__visual" style={centerStyle}>
+      <div className="pcm-pie-chart__plot">
       <svg className={`pcm-pie-chart__svg${variant === 'pie' ? ' is-pie' : ' is-donut'}`} viewBox="0 0 100 100" role="img" aria-label={`${valueLabel}: ${positiveItems.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
-      {total === 0 ? <circle cx="50" cy="50" r={variant === 'donut' ? 36 : 46} fill={variant === 'donut' ? 'none' : '#e5ebf0'} stroke={variant === 'donut' ? '#e5ebf0' : 'none'} strokeWidth="18" /> : slices.map(item => <g key={item.id} tabIndex={0} role="button" aria-label={`${item.label}: ${item.value}, ${number(item.percentage)} por cento. Clique para ocultar ou mostrar.`} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(item.id) } }}><title>{item.label}: {item.value} ({number(item.percentage)}%)</title>{Math.abs(item.end - item.start) >= 359.99 ? variant === 'donut' ? <circle cx="50" cy="50" r="36" fill="none" stroke={item.color} strokeWidth="var(--pcm-chart-line-width, 18)" /> : <circle cx="50" cy="50" r="46" fill={item.color} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" /> : <path d={slicePath(item.start, item.end)} fill={item.color} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" />}</g>)}
+      {volume > 0 ? <g className="pcm-pie-chart__volume" aria-hidden="true" pointerEvents="none">{Array.from({ length: volume }, (_, layer) => <g key={layer} transform={`translate(${extrusion.x * (volume - layer) / volume} ${extrusion.y * (volume - layer) / volume})`} style={{ filter: `brightness(${.52 + layer / volume * .2})` }}>{slices.map(item => <g className="pcm-pie-chart__volume-slice" key={item.id}>{Math.abs(item.end - item.start) >= 359.99 ? <circle cx="50" cy="50" r={variant === 'donut' ? 36 : 46} fill={variant === 'donut' ? 'none' : item.color} stroke={variant === 'donut' ? item.color : 'none'} strokeWidth={variant === 'donut' ? 19 : 0} /> : <path d={slicePath(item.start, item.end)} fill={item.color} />}</g>)}</g>)}</g> : null}
+      <defs>{slices.map((item, index) => <linearGradient key={item.id} id={`${gradientId}-${index}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor={item.color} /><stop offset="100%" stopColor="var(--pcm-gradient-end, #63a2df)" /></linearGradient>)}</defs>
+      {presentation.pieCallouts && externalLabels ? <g className="pcm-pie-chart__callouts" aria-hidden="true">{slices.map(item => {
+        const angle = (item.start + item.end) / 2
+        const start = polar(43, angle)
+        const end = polar(calloutRadius, angle)
+        const edgeX = end.x < 50 ? end.x - 8 : end.x + 8
+        return <polyline key={`callout-${item.id}`} points={`${start.x},${start.y} ${end.x},${end.y} ${edgeX},${end.y}`} fill="none" />
+      })}</g> : null}
+      {total === 0 ? <circle cx="50" cy="50" r={variant === 'donut' ? 36 : 46} fill={variant === 'donut' ? 'none' : '#e5ebf0'} stroke={variant === 'donut' ? '#e5ebf0' : 'none'} strokeWidth="18" /> : slices.map(item => <g className="pcm-pie-chart__slice" data-active={selectedSliceId === item.id} data-hovered={hoveredId === item.id} key={item.id} tabIndex={0} role="button" aria-label={`${item.label}: ${item.value}, ${number(item.percentage)} por cento. Clique para destacar.`} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)} onClick={event => { event.stopPropagation(); setSelectedSliceId(current => current === item.id ? null : item.id) }} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSliceId(current => current === item.id ? null : item.id) } }}><title>{`${item.label}: ${item.value} (${number(item.percentage)}%)`}</title>{Math.abs(item.end - item.start) >= 359.99 ? variant === 'donut' ? <circle cx="50" cy="50" r="36" fill="none" stroke={item.color} style={{ '--pcm-slice-gradient': `url(#${gradientId}-${slices.indexOf(item)})` } as React.CSSProperties} strokeWidth="19" /> : <circle cx="50" cy="50" r="46" fill={item.color} style={{ '--pcm-slice-gradient': `url(#${gradientId}-${slices.indexOf(item)})` } as React.CSSProperties} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" /> : <path d={slicePath(item.start, item.end)} fill={item.color} style={{ '--pcm-slice-gradient': `url(#${gradientId}-${slices.indexOf(item)})` } as React.CSSProperties} stroke="var(--pcm-widget-chart, transparent)" strokeWidth="var(--pcm-chart-border-width, 0)" />}{Math.abs(item.end - item.start) >= 359.99 ? <circle className="pcm-chart-svg-sheen" cx="50" cy="50" r={variant === 'donut' ? 36 : 46} fill={variant === 'donut' ? 'none' : 'var(--pcm-focus-color, white)'} stroke={variant === 'donut' ? 'var(--pcm-focus-color, white)' : 'none'} strokeWidth={variant === 'donut' ? 19 : 0} /> : <path className="pcm-chart-svg-sheen" d={slicePath(item.start, item.end)} fill="var(--pcm-focus-color, white)" />}</g>)}
       </svg>
       {slices.map(item => {
-        const point = polar(variant === 'donut' ? 36 : 29, (item.start + item.end) / 2)
+        if (presentation.dataLabelMode === 'none') return null
+        const external = externalLabels
+        const point = polar(external ? calloutRadius : variant === 'donut' ? 36 : 29, (item.start + item.end) / 2)
+        if (external) { point.x += point.x < 50 ? -8 : 8; point.y = Math.max(4, Math.min(96, point.y)) }
+        if (presentation.pieLabelContent && presentation.pieLabelContent !== 'default') return <span key={`label-${item.id}`} className="pcm-pie-chart__slice-label" style={{ left: `${point.x}%`, top: `${point.y}%`, fontSize: `${presentation.dataLabelSize ?? 11}px` }}>{presentation.pieLabelContent === 'name' ? legendLabel(item.label) : presentation.pieLabelContent === 'percent' ? `${number(item.percentage)}%` : number(item.value)}</span>
+        if (presentation.dataLabelMode && presentation.dataLabelMode !== 'default') return <span key={`label-${item.id}`} className="pcm-pie-chart__slice-label" style={{ left: `${point.x}%`, top: `${point.y}%` }}><PcmChartDataLabel value={number(item.value)} percent={item.percentage} /></span>
         return <span key={`label-${item.id}`} className="pcm-pie-chart__slice-label" style={{ left: `${point.x}%`, top: `${point.y}%` }}><span className="pcm-pie-chart__slice-value">{number(item.value)}</span><span className="pcm-pie-chart__slice-percent">{number(item.percentage)}%</span></span>
       })}
-      {variant === 'donut' ? <span className="pcm-pie-chart__center"><strong>{hovered ? hovered.value : total}</strong><small>{hovered ? hovered.label : total ? 'Total' : 'Sem dados'}</small></span> : null}
+      </div>
+      {variant === 'donut' ? <span className="pcm-pie-chart__center" data-position={centerPosition} title={centerText} style={{ color: presentation.chartCenterColor, fontSize: `${presentation.chartCenterSize ?? 13}px` }}><strong>{hovered && centerFormat !== 'total' ? hovered.value : total}</strong>{presentation.chartCenterLabel !== false && centerFormat !== 'value' ? <small>{total ? centerText : 'Sem dados'}</small> : null}</span> : null}
     </div>
-    <ul>{positiveItems.map((item, index) => {
+    <ul data-legend-visible={presentation.legendVisible} style={{ display: presentation.legendVisible === false ? 'none' : undefined }} data-legend-name={presentation.legendName} data-legend-value={presentation.legendValue} data-legend-percent={presentation.legendPercent} data-legend-swatch={presentation.legendSwatch}>{positiveItems.map((item, index) => {
       const active = slices.find(slice => slice.id === item.id)
       const percentage = total > 0 && active ? active.percentage : 0
       return <li key={item.id} className={`${active ? '' : 'is-hidden'}${hoveredId === item.id ? ' is-hovered' : ''}`}>
-        <button type="button" aria-pressed={Boolean(active)} title={`${active ? 'Ocultar' : 'Mostrar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: colors[index % colors.length] }} aria-hidden="true" /><span>{item.label}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
+        <button type="button" aria-pressed={Boolean(active)} title={`${active ? 'Ocultar' : 'Mostrar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: colors[index % colors.length] }} aria-hidden="true" /><span>{legendLabel(item.label)}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
       </li>
     })}</ul>
+    {rankedItems.length > 6 ? <button type="button" className="pcm-pie-chart__expand" onClick={event => { event.stopPropagation(); setHiddenIds([]); setShowAllItems(current => !current) }}>{showAllItems ? 'Resumir distribuição' : `Ver todos os ${rankedItems.length} itens`}</button> : null}
     {positiveItems.length === 0 ? <p className="pcm-pie-chart__empty">{emptyMessage}</p> : null}
   </div>
 }
@@ -328,17 +371,23 @@ function ReliabilityComparison({
   items,
   mode = 'comparison',
   palette,
+  onSelectMetric,
 }: {
   title: string
   description: string
+  onSelectMetric?: (metric: 'MTTR' | 'MTBF') => void
   items: ReadonlyArray<{ label: string; value: number | null; displayValue: string; detail: string }>
   mode?: 'comparison' | 'number'
   palette?: PcmCanvasPalette
 }) {
   const availableItems = items.filter((item): item is { label: string; value: number; displayValue: string; detail: string } => item.value !== null)
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null)
+  const setSelectedMetric = (update: React.SetStateAction<string | null>) => { const next = typeof update === 'function' ? update(selectedLabel) : update; const metric = next === 'MTBF' ? 'MTBF' : 'MTTR'; setSelectedLabel(metric); onSelectMetric?.(metric) }
   const maximum = Math.max(1, ...availableItems.map(item => item.value))
+  const total = availableItems.reduce((sum, item) => sum + item.value, 0)
+  const presentation = usePcmChartPresentation()
   return (
-    <div className="pcm-time-comparison-widget">
+    <div className="pcm-time-comparison-widget" style={{ '--pcm-metric-name-size': `${presentation.metricNameSize ?? 24}px`, '--pcm-metric-value-size': `${presentation.metricValueSize ?? 18}px`, '--pcm-metric-bar-width': `${presentation.metricBarWidth ?? 100}%`, '--pcm-metric-bar-height': `${presentation.metricBarHeight ?? 5}px` } as React.CSSProperties} data-label-position={presentation.dataLabelPosition ?? 'above'}>
       <div className="pcm-indicator-chart__heading">
         <div>
           <span>INDICADORES DE TEMPO</span>
@@ -350,13 +399,14 @@ function ReliabilityComparison({
       {availableItems.length === 0 ? <EmptyState>Sem falhas concluídas no período para calcular os tempos.</EmptyState> : (
         <div className={`pcm-time-comparison${mode === 'comparison' ? ' pcm-time-comparison--bars' : ''}`} role="group" aria-label={`${title}: ${availableItems.map((item) => `${item.label} ${item.displayValue}`).join('; ')}`}>
           {availableItems.map((item) => (
-            <div className="pcm-time-comparison__item" key={item.label}>
-              <div className="pcm-time-comparison__data" title={item.detail}><span>{item.label}</span><strong>{item.displayValue}</strong></div>
+            <div className="pcm-time-comparison__item" key={item.label} data-active={selectedLabel === item.label} role="button" tabIndex={0} aria-pressed={selectedLabel === item.label} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setSelectedMetric(current => current === item.label ? null : item.label) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setSelectedMetric(current => current === item.label ? null : item.label) } }}>
+              <div className="pcm-time-comparison__data" title={item.detail}><span>{item.label}</span><strong><PcmChartDataLabel value={formatChartTime(item.value, item.label === 'MTBF' ? presentation.mtbfUnit ?? 'h' : presentation.mttrUnit ?? 'h')} percent={total ? item.value / total * 100 : 0} /></strong></div>
               {mode === 'comparison' ? <div className="pcm-time-comparison__track" aria-hidden="true"><i style={{ width: `${Math.max(4, (item.value / maximum) * 100)}%`, background: palette?.[item.label === 'MTBF' ? 1 : 0] ?? palette?.[0] ?? '#176fc1' }} /></div> : null}
             </div>
           ))}
         </div>
       )}
+      <PcmChartLegend items={availableItems.map((item, index) => ({ id: item.label, label: item.label, value: item.displayValue, percent: total ? item.value / total * 100 : 0, color: palette?.[index % palette.length] ?? '#176fc1' }))} />
     </div>
   )
 }
@@ -493,7 +543,10 @@ function maintenanceStatusLabel(value: MaintenanceStatus) {
 }
 
 function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 'default' }: { items: MonthlyMttrPoint[]; loading: boolean; mode?: 'line' | 'area' | 'bar' | 'progress'; palette?: PcmCanvasPalette; chartStyle?: 'default' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth' | 'oval' | 'exploded' | 'depth' }) {
+  const presentation = usePcmChartPresentation()
+  const total = items.reduce((sum, item) => sum + (item.mttrSeconds ?? 0), 0)
   const areaGradientId = `pcm-mttr-area-${useId().replace(/:/g, '')}`
+  const [trackingPoint, setTrackingPoint] = useState<{ x: number; y: number } | null>(null)
   const [focusedMonth, setFocusedMonth] = useState<string | null>(null)
   const [interval, setInterval] = useState<{ start: string; end: string; fixed: boolean } | null>(null)
   const [previewX, setPreviewX] = useState<number | null>(null)
@@ -506,28 +559,45 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
   const chartColor = palette?.[0] ?? '#176fc1'
   const chartTint = palette?.[0] ?? '#176fc1'
   const maximum = Math.max(1, ...items.map(item => item.mttrSeconds ?? 0))
+  const columnScale = getHourlyChartScale(maximum)
   const hasSample = items.some(item => item.mttrSeconds !== null)
   const points = items.flatMap((item, index) => item.mttrSeconds === null ? [] : [{
     ...item,
-    x: items.length < 2 ? 300 : 28 + index * (544 / (items.length - 1)),
+    x: items.length < 2 ? 300 : 68 + index * (504 / (items.length - 1)),
     y: 152 - (item.mttrSeconds / maximum) * 126,
   }])
-  const linePath = chartStyle === 'smooth' && points.length > 2
-    ? points.reduce((path, point, index) => {
+  const buildSeriesPath = (series: typeof points) => chartStyle === 'smooth' && series.length > 2
+    ? series.reduce((path, point, index) => {
       if (index === 0) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
-      const previous = points[index - 1]
-      const beforePrevious = points[index - 2] ?? previous
-      const next = points[index + 1] ?? point
+      const previous = series[index - 1]
+      const beforePrevious = series[index - 2] ?? previous
+      const next = series[index + 1] ?? point
       const controlOneX = previous.x + (point.x - beforePrevious.x) / 6
       const controlOneY = previous.y + (point.y - beforePrevious.y) / 6
       const controlTwoX = point.x - (next.x - previous.x) / 6
       const controlTwoY = point.y - (next.y - previous.y) / 6
       return `${path} C ${controlOneX.toFixed(1)} ${controlOneY.toFixed(1)}, ${controlTwoX.toFixed(1)} ${controlTwoY.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
     }, '')
-    : points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+    : series.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+  const linePath = buildSeriesPath(points)
+  const areaPath = points.length > 1 ? `${linePath} L ${points[points.length - 1]?.x ?? 572} 152 L ${points[0]?.x ?? 28} 152 Z` : ''
+  const selectedPoints = interval ? points.slice(Math.min(points.findIndex(point => point.month === interval.start), points.findIndex(point => point.month === interval.end)), Math.max(points.findIndex(point => point.month === interval.start), points.findIndex(point => point.month === interval.end)) + 1) : []
+  const selectedLinePath = buildSeriesPath(selectedPoints)
+  const selectedAreaPath = selectedPoints.length > 1 ? `${selectedLinePath} L ${selectedPoints[selectedPoints.length - 1]?.x ?? 572} 152 L ${selectedPoints[0]?.x ?? 28} 152 Z` : ''
+  const selectionAnchorX = points.find(point => point.month === interval?.start)?.x
+  const selectionEndX = previewX ?? points.find(point => point.month === interval?.end)?.x
+  const selectionLeft = Math.min(selectionAnchorX ?? 0, selectionEndX ?? 0)
+  const selectionWidth = Math.abs((selectionEndX ?? 0) - (selectionAnchorX ?? 0))
+  const selectNearestPoint = (event: React.MouseEvent<SVGSVGElement>) => {
+    if (points.length === 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const cursorX = Math.max(points[0].x, Math.min(points[points.length - 1].x, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 600))
+    const nearest = points.reduce((closest, point) => Math.abs(point.x - cursorX) < Math.abs(closest.x - cursorX) ? point : closest)
+    selectPoint(nearest.month)
+  }
 
   return (
-    <div className="pcm-indicator-chart pcm-indicator-chart--monthly">
+    <div className="pcm-indicator-chart pcm-indicator-chart--monthly" data-label-position={presentation.dataLabelPosition ?? 'above'}>
       <div className="pcm-indicator-chart__heading">
         <div>
           <span>INDICADOR DE TEMPO</span>
@@ -539,7 +609,26 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
         <p className="pcm-indicator-chart__empty">Ainda não há dados mensais de MTTR.</p>
       ) : (
         mode === 'line' || mode === 'area' ? <div className={`pcm-monthly-line-chart${mode === 'area' ? ' is-area' : ''}`} role="img" aria-label={`Tendência mensal do MTTR: ${points.map(point => `${point.label} ${duration(point.mttrSeconds)}`).join('; ')}`}>
-          <svg viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true" onMouseMove={event => {
+          <svg viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true" onPointerLeave={() => setTrackingPoint(null)} onClick={selectNearestPoint} onPointerMoveCapture={event => {
+            if (presentation.showTrackingMarker) {
+              const svg = event.currentTarget
+              const path = svg.querySelector<SVGPathElement>('.pcm-monthly-data-line')
+              if (path && points.length) {
+                const bounds = svg.getBoundingClientRect()
+                const x = Math.max(points[0].x, Math.min(points[points.length - 1].x, (event.clientX - bounds.left) / Math.max(1, bounds.width) * 600))
+                if (interval) setPreviewX(x)
+                let low = 0
+                let high = path.getTotalLength()
+                for (let iteration = 0; iteration < 18; iteration++) { const middle = (low + high) / 2; if (path.getPointAtLength(middle).x < x) low = middle; else high = middle }
+                const point = path.getPointAtLength((low + high) / 2)
+                const matrix = svg.getScreenCTM()
+                const parentBounds = svg.parentElement?.getBoundingClientRect()
+                if (matrix && parentBounds) {
+                  const screen = new DOMPoint(point.x, point.y).matrixTransform(matrix)
+                  setTrackingPoint({ x: screen.x - parentBounds.left, y: screen.y - parentBounds.top })
+                }
+              }
+            }
             if (!interval || interval.fixed || points.length === 0) return
             const rect = event.currentTarget.getBoundingClientRect()
             const x = Math.max(points[0].x, Math.min(points[points.length - 1].x, ((event.clientX - rect.left) / Math.max(1, rect.width)) * 600))
@@ -547,41 +636,45 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
             const nearest = points.reduce((closest, point) => Math.abs(point.x - x) < Math.abs(closest.x - x) ? point : closest)
             setInterval(current => current && !current.fixed ? { ...current, end: nearest.month } : current)
           }}>
-            <defs><linearGradient id={areaGradientId} x1="0" x2={chartStyle === 'gradient' ? '1' : '0'} y1="0" y2={chartStyle === 'gradient' ? '0' : '1'}><stop offset="0%" stopColor={chartTint} stopOpacity={mode === 'area' ? '.48' : '.08'} /><stop offset="100%" stopColor={chartStyle === 'gradient' ? 'var(--pcm-gradient-end, #63a2df)' : chartTint} stopOpacity={chartStyle === 'gradient' ? '.3' : '0'} /></linearGradient></defs>
-            {[26, 68, 110, 152].map(y => <line key={y} x1="20" x2="580" y1={y} y2={y} stroke="var(--pcm-chart-grid, #e7edf2)" strokeWidth="1" />)}
-            <defs><linearGradient id={`${areaGradientId}-line`} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor={chartColor} /><stop offset="100%" stopColor="var(--pcm-gradient-end, #63a2df)" /></linearGradient></defs>
-            {interval ? (() => {
-              const first = points.find(point => point.month === interval.start)
-              const last = points.find(point => point.month === interval.end)
-              const edge = !interval.fixed && previewX !== null ? previewX : last?.x
-              return first && edge !== undefined ? <defs><clipPath id={`${areaGradientId}-selection`}><rect x={Math.min(first.x, edge)} y="0" width={Math.max(1, Math.abs(edge - first.x))} height="180" /></clipPath></defs> : null
-            })() : null}
-            {mode === 'area' && points.length > 1 ? <path d={`${linePath} L ${points[points.length - 1]?.x ?? 572} 152 L ${points[0]?.x ?? 28} 152 Z`} fill={`url(#${areaGradientId})`} clipPath={interval ? `url(#${areaGradientId}-selection)` : undefined} /> : null}
-            {points.length > 0 ? <path className="pcm-monthly-data-line" style={{ '--pcm-line-paint': chartStyle === 'gradient' ? `url(#${areaGradientId}-line)` : chartColor } as React.CSSProperties} d={linePath} fill="none" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /> : null}
+            <defs><linearGradient id={areaGradientId} x1="0" x2={chartStyle === 'gradient' ? '1' : '0'} y1="0" y2={chartStyle === 'gradient' ? '0' : '1'}><stop offset="0%" stopColor={chartTint} stopOpacity={mode === 'area' ? '.26' : '.08'} /><stop offset="100%" stopColor={chartStyle === 'gradient' ? 'var(--pcm-gradient-end, #63a2df)' : chartTint} stopOpacity={chartStyle === 'gradient' ? '.16' : '0'} /></linearGradient><linearGradient id={`${areaGradientId}-selected`} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor={chartTint} stopOpacity=".34" /><stop offset="100%" stopColor={chartTint} stopOpacity=".04" /></linearGradient></defs>
+            {[26, 68, 110, 152].map(y => <PcmChartGridLine key={y} x1={60} x2={580} y1={y} y2={y} />)}
+            {points.map(point => <PcmChartGridLine key={`guide-${point.month}`} x1={point.x} x2={point.x} y1={26} y2={152} opacity={.45} />)}
+            <g className="pcm-chart-axes" aria-hidden="true"><PcmChartGridLine x1={60} y1={20} x2={60} y2={152} /><PcmChartGridLine x1={60} y1={152} x2={580} y2={152} />{[0, 1 / 3, 2 / 3, 1].map(ratio => <text key={ratio} x="52" y={156 - ratio * 126} textAnchor="end" fill="var(--pcm-widget-content, #60798e)" fontSize="10">{duration(maximum * ratio)}</text>)}</g>
+            <defs><linearGradient id={`${areaGradientId}-line`} x1="0" y1="0" x2="1" y2="0">{chartStyle === 'gradient' ? <><stop offset="0%" stopColor={chartColor} /><stop offset="100%" stopColor="var(--pcm-gradient-end, #63a2df)" /></> : (palette?.length ? palette : [chartColor]).map((color, index, colors) => <stop key={index} offset={`${index / Math.max(colors.length - 1, 1) * 100}%`} stopColor={color} />)}</linearGradient></defs>
+            {mode === 'area' && points.length > 1 && !interval ? <path className="pcm-monthly-area-fill" d={areaPath} fill={`url(#${areaGradientId})`} stroke="none" /> : null}
+            <defs><clipPath id={`${areaGradientId}-selection`}><rect x={selectionLeft} y="0" width={selectionWidth} height="152" /></clipPath></defs>
+            {mode === 'area' && interval && selectionAnchorX !== undefined && selectionEndX !== undefined ? <path className="pcm-monthly-area-fill pcm-monthly-area-fill--selected" d={areaPath} clipPath={`url(#${areaGradientId}-selection)`} fill={`url(#${areaGradientId}-selected)`} stroke="none" /> : null}
+            {points.length > 0 ? <path className="pcm-monthly-line-chart__hit-area" d={linePath} fill="none" stroke="transparent" strokeWidth="30" strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="stroke" /> : null}
+            {points.length > 0 ? <path className="pcm-monthly-data-line" style={{ '--pcm-line-paint': `url(#${areaGradientId}-line)` } as React.CSSProperties} d={linePath} fill="none" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /> : null}
             {interval ? (() => {
               const firstIndex = points.findIndex(point => point.month === interval.start)
               const lastIndex = points.findIndex(point => point.month === interval.end)
               if (firstIndex < 0 || lastIndex < 0) return null
               const selected = points.slice(Math.min(firstIndex, lastIndex), Math.max(firstIndex, lastIndex) + 1)
-              const path = selected.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ')
-              return <g className="pcm-monthly-line-chart__interval" pointerEvents="none"><path d={path} fill="none" stroke={chartColor} strokeWidth="7" strokeOpacity=".4" strokeLinecap="round" vectorEffect="non-scaling-stroke" />{[selected[0], selected[selected.length - 1]].filter((point, index) => point && (index === 0 || selected.length > 1)).map(point => <circle key={point.month} cx={point.x} cy={point.y} r="9" fill="none" stroke={chartColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}</g>
+              return <g className="pcm-monthly-line-chart__interval" pointerEvents="none"><path d={linePath} clipPath={`url(#${areaGradientId}-selection)`} fill="none" stroke={chartColor} strokeWidth="7" strokeOpacity=".4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />{[selected[0], selected[selected.length - 1]].filter((point, index) => point && (index === 0 || selected.length > 1)).map(point => <circle key={point.month} cx={point.x} cy={point.y} r="9" fill="none" stroke={chartColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}</g>
             })() : null}
-            {points.map(point => <g key={point.month} role="button" tabIndex={0} aria-label={`Selecionar ${point.label}: ${duration(point.mttrSeconds)}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); selectPoint(point.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); selectPoint(point.month) } }} onMouseEnter={() => setInterval(current => current && !current.fixed ? { ...current, end: point.month } : current)} className="pcm-monthly-line-chart__point"><circle cx={point.x} cy={point.y} r="var(--pcm-chart-point-size, 5)" fill="var(--pcm-chart-surface, #fff)" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" vectorEffect="non-scaling-stroke" /><title>{point.label}: {duration(point.mttrSeconds)}</title><text x={point.x} y="173" textAnchor="middle" fill="var(--pcm-widget-content, #60798e)" fontSize="11">{point.label}</text></g>)}
+            {points.map(point => <g data-active={interval?.start === point.month || interval?.end === point.month} key={point.month} style={{ '--pcm-point-color': palette?.[points.indexOf(point) % palette.length] ?? chartColor } as React.CSSProperties} role="button" tabIndex={0} aria-label={`Selecionar ${point.label}: ${duration(point.mttrSeconds)}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); selectPoint(point.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); selectPoint(point.month) } }} onMouseEnter={() => setInterval(current => current && !current.fixed ? { ...current, end: point.month } : current)} className="pcm-monthly-line-chart__point"><circle cx={point.x} cy={point.y} r="var(--pcm-chart-point-size, 5)" fill="var(--pcm-chart-surface, #fff)" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" vectorEffect="non-scaling-stroke" /><circle className="pcm-chart-svg-sheen" cx={point.x} cy={point.y} r="var(--pcm-chart-point-size, 5)" fill="var(--pcm-focus-color, white)" stroke="none" /><title>{`${point.label}: ${duration(point.mttrSeconds)}`}</title><text x={point.x} y="173" textAnchor="middle" fill="var(--pcm-widget-content, #60798e)" fontSize="11">{point.label}</text></g>)}
           </svg>
+          {presentation.showTrackingMarker && trackingPoint ? <span className="pcm-chart-tracking-marker" aria-hidden="true" style={{ left: `${trackingPoint.x}px`, top: `${trackingPoint.y}px`, borderColor: chartColor }} /> : null}
+          <div className="pcm-chart-label-layer" aria-hidden="true">{points.map(point => <PcmChartPointLabel key={point.month} x={point.x / 600} y={point.y / 180} value={duration(point.mttrSeconds)} percent={total ? (point.mttrSeconds ?? 0) / total * 100 : 0} />)}</div>
         </div> : mode === 'progress' ? <div className="pcm-monthly-progress" role="img" aria-label={`Progresso mensal relativo do MTTR: ${items.map(item => `${item.label} ${item.mttrSeconds === null ? 'sem amostra' : duration(item.mttrSeconds)}`).join('; ')}`}>
           {items.map(item => <div className="pcm-monthly-progress__item" key={item.month} data-active={focusedMonth === item.month ? 'true' : 'false'} role="button" tabIndex={0} aria-pressed={focusedMonth === item.month} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) } }} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
             <span className="pcm-monthly-progress__month">{item.label}</span>
-            <div className="pcm-monthly-progress__track"><span style={{ width: `${item.mttrSeconds === null ? 0 : Math.max(4, (item.mttrSeconds / maximum) * 100)}%`, background: chartColor }} /></div>
-            <strong>{item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)}</strong>
+            <div className="pcm-monthly-progress__track"><span style={{ width: `${item.mttrSeconds === null ? 0 : Math.max(4, (item.mttrSeconds / maximum) * 100)}%`, background: palette?.[items.indexOf(item) % palette.length] ?? chartColor }} /></div>
+            <strong className="pcm-monthly-progress__value"><PcmChartDataLabel value={item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)} percent={total ? (item.mttrSeconds ?? 0) / total * 100 : 0} /></strong>
           </div>)}
-        </div> : <div className="pcm-monthly-chart" role="img" aria-label="Comparação mensal do MTTR">
+        </div> : <div className="pcm-monthly-chart" data-show-scale={presentation.showChartAxes !== false} style={{ '--pcm-column-grid-step': `${100 / (columnScale.ticks.length - 1)}%` } as React.CSSProperties} role="img" aria-label="Comparação mensal do MTTR">
           {items.map(item => {
-            const height = item.mttrSeconds === null ? 0 : Math.max(0, (item.mttrSeconds / (maximum * 1.15)) * 100)
+            const height = item.mttrSeconds === null ? 0 : Math.max(0, (item.mttrSeconds / columnScale.maximumSeconds) * 100)
             return (
-              <div className="pcm-monthly-chart__column" key={item.month} data-active={focusedMonth === item.month ? 'true' : 'false'} role="button" tabIndex={0} aria-pressed={focusedMonth === item.month} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) } }} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
-                <span className="pcm-monthly-chart__value">{item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)}</span>
+              <div className="pcm-monthly-chart__column" style={{ '--pcm-column-height': `${height}%` } as React.CSSProperties} key={item.month} data-active={focusedMonth === item.month ? 'true' : 'false'} role="button" tabIndex={0} aria-pressed={focusedMonth === item.month} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setFocusedMonth(current => current === item.month ? null : item.month) } }} title={`${item.label}: ${item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}`}>
                 <div className="pcm-monthly-chart__track">
-                  <span className="pcm-monthly-chart__bar" style={{ height: `${height}%`, background: chartColor }} />
+                  <PcmChartColumnGrid ticks={columnScale.ticks} />
+                  {item === items[0] ? <div className="pcm-monthly-chart__axis" aria-hidden="true">{columnScale.ticks.map(tick => <span key={tick.ratio} style={{ bottom: `${tick.ratio * 100}%` }}>{duration(tick.hours * 3600)}</span>)}</div> : null}
+                  <div className="pcm-monthly-chart__bar-anchor" style={{ height: `${height}%`, '--pcm-label-offset': `${presentation.dataLabelOffset ?? 8}px` } as React.CSSProperties}>
+                    <span className="pcm-monthly-chart__bar" style={{ background: palette?.[items.indexOf(item) % palette.length] ?? chartColor }} />
+                    <span className="pcm-monthly-chart__value" title={item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds)}><PcmChartDataLabel value={item.mttrSeconds === null ? '—' : duration(item.mttrSeconds)} percent={total ? (item.mttrSeconds ?? 0) / total * 100 : 0} /></span>
+                  </div>
                 </div>
                 <span className="pcm-monthly-chart__label">{item.label}</span>
               </div>
@@ -589,8 +682,9 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
           })}
         </div>
       )}
+      <PcmChartLegend items={items.map((item, index) => ({ id: item.month, label: item.label, value: item.mttrSeconds === null ? '—' : duration(item.mttrSeconds), percent: total ? (item.mttrSeconds ?? 0) / total * 100 : 0, color: palette?.[index % palette.length] ?? chartColor }))} />
       <p className="pcm-indicator-chart__note">Para calcular o MTTR, registre o início e o término da falha.</p>
-      {(mode === 'line' || mode === 'area') ? <div className="pcm-chart-interval" aria-live="polite">{startPoint && endPoint ? <><span>{startPoint.label} → {endPoint.label}: {duration(startPoint.mttrSeconds)} → {duration(endPoint.mttrSeconds)}</span><button type="button" onClick={() => setInterval(null)}>Limpar intervalo</button></> : <span>Clique em um ponto para iniciar; passe pelos demais e clique para fixar o intervalo.</span>}</div> : null}
+      {(mode === 'line' || mode === 'area') && startPoint ? <div className="pcm-chart-interval" aria-live="polite">{endPoint ? <><span>{startPoint.label} → {endPoint.label}: {duration(startPoint.mttrSeconds)} → {duration(endPoint.mttrSeconds)}</span><button type="button" onClick={() => setInterval(null)}>Limpar intervalo</button></> : <span>Intervalo iniciado em {startPoint.label}. Clique em outro mês para concluir.</span>}</div> : null}
     </div>
   )
 }
@@ -699,6 +793,7 @@ interface ExecutablePlan {
 }
 
 export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void }) {
+  const [timeMetric, setTimeMetric] = useState<'MTTR' | 'MTBF'>('MTTR')
   const [days, setDays] = useState('30')
   const [demoMode, setDemoMode] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -1361,16 +1456,16 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
         { id: 'report-mttr', title: `MTTR · ${duration(reliability?.mttr_segundos ?? null)}`, detail: 'Tempo médio para restaurar um ativo após uma falha.' },
         { id: 'report-mtbf', title: `MTBF · ${duration(reliability?.mtbf_segundos ?? null)}`, detail: 'Tempo médio de operação entre falhas.' },
       ]),
-      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette) => <ReliabilityComparison title="MTTR × MTBF" description="Tempo de reparo e intervalo entre falhas" mode={mode === 'number' ? 'number' : 'comparison'} palette={palette} items={[
+      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette) => <ReliabilityComparison onSelectMetric={setTimeMetric} title="MTTR × MTBF" description="Tempo de reparo e intervalo entre falhas" mode={mode === 'number' ? 'number' : 'comparison'} palette={palette} items={[
         { label: 'MTTR', value: reliability?.mttr_segundos ?? null, displayValue: duration(reliability?.mttr_segundos ?? null), detail: 'Tempo médio para restaurar' },
         { label: 'MTBF', value: reliability?.mtbf_segundos ?? null, displayValue: duration(reliability?.mtbf_segundos ?? null), detail: 'Tempo médio entre falhas' },
       ]} />,
     },
     {
-      id: 'monthly-mttr', title: 'MTTR mensal', categoryId: 'time', note: 'Tendência de tempo médio para reparar falhas.',
+      id: 'monthly-mttr', title: `${timeMetric} mensal`, categoryId: 'time', note: 'Tendência de tempo médio para reparar falhas.',
       modes: [{ id: 'line', label: 'Linha' }, { id: 'area', label: 'Área' }, { id: 'bar', label: 'Colunas' }, { id: 'progress', label: 'Barras de progresso' }], defaultMode: 'line',
       onActivate: () => openInsight('MTTR mensal', 'Média mensal do tempo para reparo.', monthlyMttr.map(item => ({ id: `report-month:${item.month}`, title: item.label, detail: item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds) }))),
-      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, _segments?: PcmCanvasSegments, chartStyle?: 'default' | 'oval' | 'exploded' | 'depth' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth') => <MonthlyMttrChart items={monthlyMttr} loading={loading} mode={mode === 'bar' || mode === 'progress' || mode === 'area' ? mode : 'line'} palette={palette} chartStyle={chartStyle} />,
+      render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, _segments?: PcmCanvasSegments, chartStyle?: 'default' | 'oval' | 'exploded' | 'depth' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth') => <MonthlyMttrChart key={timeMetric} items={timeMetric === 'MTTR' ? monthlyMttr : monthlyMttr.map(item => ({ ...item, mttrSeconds: displayData?.relatorios?.mtbf_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? displayData?.confiabilidade_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? null }))} loading={loading} mode={mode === 'bar' || mode === 'progress' || mode === 'area' ? mode : 'line'} palette={palette} chartStyle={chartStyle} />,
     },
     {
       id: 'sector-failures', title: 'Falhas por setor', categoryId: 'assets', note: 'Setores com registros de falha no período.',
