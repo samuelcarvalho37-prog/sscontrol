@@ -1,6 +1,34 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
 
 export type PcmChartPresentation = {
+  chartVisualStyle?: 'technical' | 'fluid' | 'luminous' | 'stepped' | 'editorial'
+  gradientEnd?: string
+  chartUseOwnColors?: boolean
+  chartAreaFill?: 'none' | 'solid' | 'gradient'
+  chartAreaColor?: string
+  chartAreaEndColor?: string
+  chartAreaOpacity?: number
+  chartAreaDirection?: 'vertical' | 'horizontal'
+  chartSelectionColor?: string
+  chartSelectionOpacity?: number
+  cardPadding?: number
+  cardPaddingTop?: number
+  cardPaddingRight?: number
+  cardPaddingBottom?: number
+  cardPaddingLeft?: number
+  contentAlign?: 'start' | 'center' | 'end'
+  contentVerticalAlign?: 'start' | 'center' | 'end'
+  showContent?: boolean
+  showIcon?: boolean
+  cardRadiusTopLeft?: number
+  cardRadiusTopRight?: number
+  cardRadiusBottomRight?: number
+  cardRadiusBottomLeft?: number
+  pointColors?: Record<string, string>
+  onPointColorChange?: (id: string, color: string | undefined) => void
+  smoothLine?: boolean
+  missingDataMode?: 'gap' | 'connect' | 'zero'
+  fontFamily?: 'system' | 'Arial' | 'Verdana' | 'Georgia'
   showTrackingMarker?: boolean
   cardFocusEffect?: 'none' | 'lift' | 'glow' | 'pulse' | 'reflection'
   cardFocusDuration?: number

@@ -262,10 +262,10 @@ function HorizontalBarChart({
   return <><div className="pcm-bar-chart" data-label-position={presentation.dataLabelPosition ?? 'right'} role="img" aria-label={`${valueLabel}: ${items.map(item => `${item.label}, ${item.value}`).join('; ')}`}>
     {items.map(item => <div className="pcm-bar-chart__row" key={item.id} data-active={selectedId === item.id} role="button" tabIndex={0} aria-pressed={selectedId === item.id} aria-label={`${item.label}: ${item.value}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setSelectedId(current => current === item.id ? null : item.id) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setSelectedId(current => current === item.id ? null : item.id) } }}>
       <div className="pcm-bar-chart__label"><strong>{item.label}</strong>{item.detail ? <small>{item.detail}</small> : null}</div>
-      <div className="pcm-bar-chart__track"><span style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%`, background: palette?.[items.indexOf(item) % palette.length] ?? '#176fc1' }} /></div>
+      <div className="pcm-bar-chart__track"><span style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%`, background: presentation.pointColors?.[item.id] ?? palette?.[items.indexOf(item) % palette.length] ?? '#176fc1' }} /></div>
       <strong className="pcm-bar-chart__value"><PcmChartDataLabel value={item.value} percent={total ? item.value / total * 100 : 0} /></strong>
     </div>)}
-  </div><PcmChartLegend items={items.map((item, index) => ({ ...item, percent: total ? item.value / total * 100 : 0, color: palette?.[index % palette.length] ?? '#176fc1' }))} /></>
+  </div>{selectedId && presentation.onPointColorChange ? <div className="pcm-point-color-editor" onPointerDown={event => event.stopPropagation()}><label>Cor de {items.find(item => item.id === selectedId)?.label}<input type="color" value={presentation.pointColors?.[selectedId] ?? '#176fc1'} onChange={event => presentation.onPointColorChange?.(selectedId, event.currentTarget.value)} /></label><button type="button" onClick={() => presentation.onPointColorChange?.(selectedId, undefined)}>Restaurar cor</button></div> : null}<PcmChartLegend items={items.map((item, index) => ({ ...item, percent: total ? item.value / total * 100 : 0, color: presentation.pointColors?.[item.id] ?? palette?.[index % palette.length] ?? '#176fc1' }))} /></>
 }
 
 function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donut' }: {
@@ -292,7 +292,7 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
     const index = positiveItems.findIndex(candidate => candidate.id === item.id)
     const start = offset
     offset += item.value / Math.max(total, 1) * 360
-    return { ...item, color: colors[index % colors.length], start, end: offset, percentage: item.value / Math.max(total, 1) * 100 }
+    return { ...item, color: presentation.pointColors?.[item.id] ?? colors[index % colors.length], start, end: offset, percentage: item.value / Math.max(total, 1) * 100 }
   })
   const polar = (radius: number, angle: number) => {
     const radians = angle * Math.PI / 180
@@ -354,10 +354,11 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
       const active = slices.find(slice => slice.id === item.id)
       const percentage = total > 0 && active ? active.percentage : 0
       return <li key={item.id} className={`${active ? '' : 'is-hidden'}${hoveredId === item.id ? ' is-hovered' : ''}`}>
-        <button type="button" aria-pressed={Boolean(active)} title={`${active ? 'Ocultar' : 'Mostrar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: colors[index % colors.length] }} aria-hidden="true" /><span>{legendLabel(item.label)}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
+        <button type="button" aria-pressed={Boolean(active)} title={`${active ? 'Ocultar' : 'Mostrar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: presentation.pointColors?.[item.id] ?? colors[index % colors.length] }} aria-hidden="true" /><span>{legendLabel(item.label)}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
       </li>
     })}</ul>
     {rankedItems.length > 6 ? <button type="button" className="pcm-pie-chart__expand" onClick={event => { event.stopPropagation(); setHiddenIds([]); setShowAllItems(current => !current) }}>{showAllItems ? 'Resumir distribuição' : `Ver todos os ${rankedItems.length} itens`}</button> : null}
+    {selectedSliceId && presentation.onPointColorChange ? <div className="pcm-point-color-editor" onPointerDown={event => event.stopPropagation()}><label>Cor de {positiveItems.find(item => item.id === selectedSliceId)?.label}<input type="color" value={slices.find(item => item.id === selectedSliceId)?.color ?? "#176fc1"} onChange={event => presentation.onPointColorChange?.(selectedSliceId, event.currentTarget.value)} /></label><button type="button" onClick={() => presentation.onPointColorChange?.(selectedSliceId, undefined)}>Restaurar cor</button><button type="button" onClick={() => setSelectedSliceId(null)}>Concluir</button></div> : null}
     {positiveItems.length === 0 ? <p className="pcm-pie-chart__empty">{emptyMessage}</p> : null}
   </div>
 }
@@ -552,16 +553,24 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
     setInterval(current => !current || current.fixed ? { start: month, end: month, fixed: false } : { ...current, end: month, fixed: true })
   }
   const chartColor = palette?.[0] ?? '#176fc1'
-  const chartTint = palette?.[0] ?? '#176fc1'
+  const areaFill = presentation.chartAreaFill ?? (mode === 'area' ? 'gradient' : 'none')
+  const areaColor = presentation.chartAreaColor ?? chartColor
+  const areaEndColor = presentation.chartAreaEndColor ?? presentation.gradientEnd ?? areaColor
+  const areaOpacity = Math.max(0, Math.min(100, presentation.chartAreaOpacity ?? 26)) / 100
+  const selectionColor = presentation.chartSelectionColor ?? areaColor
+  const selectionOpacity = Math.max(0, Math.min(100, presentation.chartSelectionOpacity ?? 34)) / 100
   const maximum = Math.max(1, ...items.map(item => item.mttrSeconds ?? 0))
   const columnScale = getHourlyChartScale(maximum)
   const hasSample = items.some(item => item.mttrSeconds !== null)
-  const points = items.flatMap((item, index) => item.mttrSeconds === null ? [] : [{
+  const points = items.flatMap((item, index) => item.mttrSeconds === null && presentation.missingDataMode !== 'zero' ? [] : [{
     ...item,
+    sourceIndex: index,
     x: items.length < 2 ? 300 : 68 + index * (504 / (items.length - 1)),
-    y: 152 - (item.mttrSeconds / maximum) * 126,
+    y: 152 - ((item.mttrSeconds ?? 0) / maximum) * 126,
   }])
-  const buildSeriesPath = (series: typeof points) => chartStyle === 'smooth' && series.length > 2
+  const buildSeriesPath = (series: typeof points) => presentation.chartVisualStyle === 'stepped'
+    ? series.map((point, index) => index === 0 ? `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}` : `H ${point.x.toFixed(1)} V ${point.y.toFixed(1)}`).join(' ')
+    : (presentation.smoothLine ?? chartStyle === 'smooth') && series.length > 2
     ? series.reduce((path, point, index) => {
       if (index === 0) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
       const previous = series[index - 1]
@@ -574,8 +583,14 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
       return `${path} C ${controlOneX.toFixed(1)} ${controlOneY.toFixed(1)}, ${controlTwoX.toFixed(1)} ${controlTwoY.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`
     }, '')
     : series.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
-  const linePath = buildSeriesPath(points)
-  const areaPath = points.length > 1 ? `${linePath} L ${points[points.length - 1]?.x ?? 572} 152 L ${points[0]?.x ?? 28} 152 Z` : ''
+  const seriesSegments: Array<typeof points> = []
+  for (const point of points) {
+    const segment = seriesSegments[seriesSegments.length - 1]
+    if (!segment || ((presentation.missingDataMode ?? 'gap') === 'gap' && point.sourceIndex > segment[segment.length - 1].sourceIndex + 1)) seriesSegments.push([point])
+    else segment.push(point)
+  }
+  const linePath = seriesSegments.map(buildSeriesPath).join(' ')
+  const areaPath = seriesSegments.filter(segment => segment.length > 1).map(segment => `${buildSeriesPath(segment)} L ${segment[segment.length - 1].x} 152 L ${segment[0].x} 152 Z`).join(' ')
   const selectedPoints = interval ? points.slice(Math.min(points.findIndex(point => point.month === interval.start), points.findIndex(point => point.month === interval.end)), Math.max(points.findIndex(point => point.month === interval.start), points.findIndex(point => point.month === interval.end)) + 1) : []
   const selectedLinePath = buildSeriesPath(selectedPoints)
   const selectedAreaPath = selectedPoints.length > 1 ? `${selectedLinePath} L ${selectedPoints[selectedPoints.length - 1]?.x ?? 572} 152 L ${selectedPoints[0]?.x ?? 28} 152 Z` : ''
@@ -603,7 +618,7 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
       {loading ? <p className="pcm-indicator-chart__empty">Carregando comparação mensal…</p> : !hasSample ? (
         <p className="pcm-indicator-chart__empty">Ainda não há dados mensais de MTTR.</p>
       ) : (
-        mode === 'line' || mode === 'area' ? <div className={`pcm-monthly-line-chart${mode === 'area' ? ' is-area' : ''}`} role="img" aria-label={`Tendência mensal do MTTR: ${points.map(point => `${point.label} ${duration(point.mttrSeconds)}`).join('; ')}`}>
+        mode === 'line' || mode === 'area' ? <div data-visual-style={presentation.chartVisualStyle ?? 'custom'} className={`pcm-monthly-line-chart${mode === 'area' ? ' is-area' : ''}`} role="img" aria-label={`Tendência mensal do MTTR: ${points.map(point => `${point.label} ${duration(point.mttrSeconds)}`).join('; ')}`}>
           <svg viewBox="0 0 600 180" preserveAspectRatio="none" aria-hidden="true" onPointerLeave={() => setTrackingPoint(null)} onClick={selectNearestPoint} onPointerMoveCapture={event => {
             if (presentation.showTrackingMarker) {
               const svg = event.currentTarget
@@ -611,6 +626,7 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
               if (path && points.length) {
                 const bounds = svg.getBoundingClientRect()
                 const x = Math.max(points[0].x, Math.min(points[points.length - 1].x, (event.clientX - bounds.left) / Math.max(1, bounds.width) * 600))
+                if ((presentation.missingDataMode ?? 'gap') === 'gap' && !seriesSegments.some(segment => x >= segment[0].x && x <= segment[segment.length - 1].x)) { setTrackingPoint(null); return }
                 if (interval) setPreviewX(x)
                 let low = 0
                 let high = path.getTotalLength()
@@ -631,14 +647,14 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
             const nearest = points.reduce((closest, point) => Math.abs(point.x - x) < Math.abs(closest.x - x) ? point : closest)
             setInterval(current => current && !current.fixed ? { ...current, end: nearest.month } : current)
           }}>
-            <defs><linearGradient id={areaGradientId} x1="0" x2={chartStyle === 'gradient' ? '1' : '0'} y1="0" y2={chartStyle === 'gradient' ? '0' : '1'}><stop offset="0%" stopColor={chartTint} stopOpacity={mode === 'area' ? '.26' : '.08'} /><stop offset="100%" stopColor={chartStyle === 'gradient' ? 'var(--pcm-gradient-end, #63a2df)' : chartTint} stopOpacity={chartStyle === 'gradient' ? '.16' : '0'} /></linearGradient><linearGradient id={`${areaGradientId}-selected`} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor={chartTint} stopOpacity=".34" /><stop offset="100%" stopColor={chartTint} stopOpacity=".04" /></linearGradient></defs>
+            <defs><linearGradient id={areaGradientId} x1="0" x2={presentation.chartAreaDirection === 'horizontal' ? '1' : '0'} y1="0" y2={presentation.chartAreaDirection === 'horizontal' ? '0' : '1'}><stop offset="0%" stopColor={areaColor} /><stop offset="100%" stopColor={areaEndColor} stopOpacity=".15" /></linearGradient><linearGradient id={`${areaGradientId}-selected`} x1="0" x2={presentation.chartAreaDirection === 'horizontal' ? '1' : '0'} y1="0" y2={presentation.chartAreaDirection === 'horizontal' ? '0' : '1'}><stop offset="0%" stopColor={selectionColor} /><stop offset="100%" stopColor={presentation.chartAreaEndColor ?? selectionColor} stopOpacity=".15" /></linearGradient></defs>
             {[26, 68, 110, 152].map(y => <PcmChartGridLine key={y} x1={60} x2={580} y1={y} y2={y} />)}
             {points.map(point => <PcmChartGridLine key={`guide-${point.month}`} x1={point.x} x2={point.x} y1={26} y2={152} opacity={.45} />)}
             <g className="pcm-chart-axes" aria-hidden="true"><PcmChartGridLine x1={60} y1={20} x2={60} y2={152} /><PcmChartGridLine x1={60} y1={152} x2={580} y2={152} />{[0, 1 / 3, 2 / 3, 1].map(ratio => <text key={ratio} x="52" y={156 - ratio * 126} textAnchor="end" fill="var(--pcm-widget-content, #60798e)" fontSize="10">{duration(maximum * ratio)}</text>)}</g>
             <defs><linearGradient id={`${areaGradientId}-line`} x1="0" y1="0" x2="1" y2="0">{chartStyle === 'gradient' ? <><stop offset="0%" stopColor={chartColor} /><stop offset="100%" stopColor="var(--pcm-gradient-end, #63a2df)" /></> : (palette?.length ? palette : [chartColor]).map((color, index, colors) => <stop key={index} offset={`${index / Math.max(colors.length - 1, 1) * 100}%`} stopColor={color} />)}</linearGradient></defs>
-            {mode === 'area' && points.length > 1 && !interval ? <path className="pcm-monthly-area-fill" d={areaPath} fill={`url(#${areaGradientId})`} stroke="none" /> : null}
+            {areaFill !== 'none' && points.length > 1 && !interval ? <path className="pcm-monthly-area-fill" d={areaPath} fill={areaFill === 'solid' ? areaColor : `url(#${areaGradientId})`} fillOpacity={areaOpacity} stroke="none" /> : null}
             <defs><clipPath id={`${areaGradientId}-selection`}><rect x={selectionLeft} y="0" width={selectionWidth} height="152" /></clipPath></defs>
-            {mode === 'area' && interval && selectionAnchorX !== undefined && selectionEndX !== undefined ? <path className="pcm-monthly-area-fill pcm-monthly-area-fill--selected" d={areaPath} clipPath={`url(#${areaGradientId}-selection)`} fill={`url(#${areaGradientId}-selected)`} stroke="none" /> : null}
+            {areaFill !== 'none' && interval && selectionAnchorX !== undefined && selectionEndX !== undefined ? <path className="pcm-monthly-area-fill pcm-monthly-area-fill--selected" d={areaPath} clipPath={`url(#${areaGradientId}-selection)`} fill={areaFill === 'solid' ? selectionColor : `url(#${areaGradientId}-selected)`} fillOpacity={selectionOpacity} stroke="none" /> : null}
             {points.length > 0 ? <path className="pcm-monthly-line-chart__hit-area" d={linePath} fill="none" stroke="transparent" strokeWidth="30" strokeLinecap="round" vectorEffect="non-scaling-stroke" pointerEvents="stroke" /> : null}
             {points.length > 0 ? <path className="pcm-monthly-data-line" style={{ '--pcm-line-paint': `url(#${areaGradientId}-line)` } as React.CSSProperties} d={linePath} fill="none" stroke={chartColor} strokeWidth="var(--pcm-chart-line-width, 3)" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" /> : null}
             {interval ? (() => {
