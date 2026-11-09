@@ -2129,3 +2129,15 @@ html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric 
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric strong { font-size: min(var(--pcm-widget-metric-size, 25px), 26cqi) !important; }
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric .pcm-metric__icon,
 html body .pcm-canvas .pcm-canvas__widget[data-card-shape="circle"] .pcm-metric .pcm-metric__icon svg { width: min(var(--pcm-widget-icon-size, 22px), 24cqi) !important; height: min(var(--pcm-widget-icon-size, 22px), 24cqi) !important; }
+/* O efeito pertence à superfície externa; o conteúdo só recebe fundo explícito. */
+html body .app-shell--manager .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body { background: transparent !important; backdrop-filter: none !important; }
+html body .app-shell--manager .pcm-canvas .pcm-canvas__widget .pcm-canvas__widget-body > :is(.pcm-metric, .pcm-time-comparison, .pcm-monthly-line-chart, .pcm-bar-chart, .pcm-pie-chart) { background: var(--pcm-content-surface, transparent) !important; }
+html body .app-shell--manager .pcm-canvas .pcm-canvas__widget .pcm-time-comparison__item { background: transparent !important; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart { align-content: start; align-items: start; row-gap: 12px; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul { display: grid; grid-auto-rows: minmax(34px, auto); align-content: start; gap: var(--pcm-legend-gap, 6px); padding: 0; margin: 0; width: 100%; min-width: 0; align-self: center; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul > li { margin: 0; min-width: 0; list-style: none; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul > li > button { display: grid; grid-template-columns: 10px minmax(0, 1fr) max-content; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 6px 8px; text-align: left; border: 0; border-radius: 4px; background: transparent; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul > li > button > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul > li > button > strong { display: grid; gap: 2px; justify-items: end; white-space: nowrap; min-width: 40px; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > .pcm-pie-chart__expand { position: static; grid-column: 1 / -1; order: 3; width: auto; justify-self: center; margin: 0; }
+html body .pcm-canvas .pcm-canvas__widget .pcm-pie-chart > ul > li.is-selected > button { background: color-mix(in srgb, var(--pcm-widget-accent) 15%, transparent); }

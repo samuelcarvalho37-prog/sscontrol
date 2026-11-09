@@ -1,3 +1,6 @@
+import { adaptPcmAppearance } from '../components/pcmAppearance'
+import type { CSSProperties } from 'react'
+import '../styles/pcm-workspace-shell.css'
 import { useCallback, useEffect, useState } from 'react'
 import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
@@ -135,6 +138,27 @@ function TenantApp() {
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
   const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
+  useEffect(() => {
+    if (canViewPcmDashboard) setSection(current => current === 'home' ? 'validations' : current)
+  }, [canViewPcmDashboard])
+  const [pcmSurface, setPcmSurface] = useState<{ cardBackground?: string; contentColor?: string; titleColor?: string; cardEffect?: string }>(() => { try { const saved = JSON.parse(localStorage.getItem('vorqix.pcm.workspace-style.v1') ?? '{}'); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {} } catch { return {} } })
+  const [pcmTheme, setPcmTheme] = useState<'light' | 'dark' | 'ice'>(() => {
+    try { const saved = window.localStorage.getItem('vorqix.pcm.dashboard-theme.v1'); return saved === 'dark' || saved === 'ice' ? saved : 'light' } catch { return 'light' }
+  })
+  useEffect(() => {
+    if (!canViewPcmDashboard) return
+    const update = (event: Event) => {
+      const value = (event as CustomEvent).detail
+      if (value === 'light' || value === 'dark' || value === 'ice') setPcmTheme(value)
+    }
+    const updateStyle = (event: Event) => { const style = (event as CustomEvent).detail; if (style && typeof style === 'object') setPcmSurface(style) }
+    window.addEventListener('vorqix:pcm-style', updateStyle)
+    window.addEventListener('vorqix:pcm-theme', update)
+    document.documentElement.dataset.pcmDashboardTheme = pcmTheme
+    return () => { window.removeEventListener('vorqix:pcm-theme', update); window.removeEventListener('vorqix:pcm-style', updateStyle); delete document.documentElement.dataset.pcmDashboardTheme }
+  }, [canViewPcmDashboard, pcmTheme])
+
+  const pcmSurfaceAppearance = adaptPcmAppearance({ ...pcmSurface, themeAdaptive: true }, pcmTheme)
   const canManageMaintenance = ['PCM', 'GESTOR'].includes(normalizedProfile)
     && Boolean(session?.user.capacidades?.includes('maintenance.plans.manage'))
   const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
@@ -407,7 +431,7 @@ function TenantApp() {
 
   return (
     <div className="manager-app-stage">
-      <div className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
+      <div style={canViewPcmDashboard ? { '--pcm-shared-panel': pcmSurfaceAppearance.cardBackground === 'transparent' ? undefined : pcmSurfaceAppearance.cardBackground, '--pcm-shared-ink': pcmSurfaceAppearance.contentColor } as CSSProperties : undefined} data-pcm-surface-effect={canViewPcmDashboard ? pcmSurface.cardEffect : undefined} data-pcm-workspace={canViewPcmDashboard || undefined} data-pcm-theme={canViewPcmDashboard ? pcmTheme : undefined} className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
         <header className="topbar">
         <div className="topbar__identity topbar__identity--manager">
           <div>
@@ -462,6 +486,11 @@ function TenantApp() {
             {loggingOut ? 'Saindo…' : 'Sair'}
           </button>
         </div>
+        {canViewPcmDashboard ? <>
+          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
+          <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" />
+          <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
+        </> : null}
         </header>
 
         <div className="app-content">
@@ -556,7 +585,7 @@ function TenantApp() {
           ) : null}
         </div>
 
-        <AppNavigation
+        {!canViewPcmDashboard ? <AppNavigation
           active={section}
           validationCount={validationCount}
           showAdmin={false}
@@ -566,7 +595,7 @@ function TenantApp() {
           canManageMaintenance={canManageMaintenance}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}
-        />
+        /> : null}
 
         <NotificationCenter
           open={notificationOpen}

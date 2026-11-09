@@ -2,6 +2,8 @@ import { createContext, useContext, useLayoutEffect, useRef, useState } from 're
 
 export type PcmChartPresentation = {
   themeAdaptive?: boolean
+  contentSurfaceColor?: string
+  contentSurfaceOpacity?: number
   accentStyle?: 'solid' | 'double' | 'diagonal' | 'triangle' | 'cone'
   chartVisualStyle?: 'technical' | 'fluid' | 'luminous' | 'stepped' | 'editorial' | 'separated' | 'volume' | 'capsule' | 'striped'
   gradientEnd?: string
