@@ -28,3 +28,27 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(h
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(p, small, .eyebrow) { color: var(--pcm-shell-muted); }
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(button, summary) { color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line); }
 @media (max-width: 900px) { html body .app-shell[data-pcm-workspace="true"] > .topbar { padding-inline: 12px; } .pcm-header-navigation { margin-left: 0; } html body .app-shell[data-pcm-workspace="true"] > .app-content { padding-inline: 12px !important; } }
+html body .app-shell[data-pcm-workspace="true"] > .topbar { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'identity actions' 'alerts navigation' 'tools tools'; gap: 6px 16px; }
+.app-shell[data-pcm-workspace="true"] .topbar__identity { grid-area: identity; min-width: 0; }
+.app-shell[data-pcm-workspace="true"] .topbar__actions { grid-area: actions; margin-left: 0; justify-self: end; gap: 8px; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-navigation { grid-area: navigation; margin: 0; justify-self: center; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-alerts-slot { grid-area: alerts; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-toolbar-slot { grid-area: tools; }
+html body .app-shell[data-pcm-workspace="true"] .topbar__identity > div > span { display: block; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line b { color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line strong { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .user-badge[hidden] { display: none !important; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip { padding: 0; width: 12px; min-width: 12px; background: transparent; border: 0; font-size: 0; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip i { width: 7px; height: 7px; margin: 0; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip[data-online="false"] i { background: #d99b35; }
+html body .app-shell[data-pcm-workspace="true"] :is(.manager-notification-trigger, .logout-button) { min-width: 30px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--pcm-shell-line); background: transparent; color: var(--pcm-shell-ink); border-radius: 5px; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-trigger > svg { width: 16px; height: 16px; }
+html body .app-shell[data-pcm-workspace="true"] .vorqix-logo--compact { width: 112px; border-radius: 0; background: transparent; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-theme="dark"] .vorqix-logo--compact { filter: grayscale(1) invert(1); mix-blend-mode: screen; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search { background: var(--pcm-shell-panel) !important; border-color: var(--pcm-shell-line) !important; color: var(--pcm-shell-muted) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search input { background: transparent !important; color: var(--pcm-shell-ink) !important; box-shadow: none !important; border: 0 !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search input::placeholder { color: var(--pcm-shell-muted); opacity: 1; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-header-content :is(.pcm-operational-alerts__summary, .pcm-operational-alerts__category) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-header-content :is(.pcm-operational-alerts__summary, .pcm-operational-alerts__category) strong { background: color-mix(in srgb, var(--pcm-shell-ink) 10%, transparent); color: var(--pcm-shell-ink); }
+@media (max-width: 720px) { html body .app-shell[data-pcm-workspace="true"] > .topbar { grid-template-areas: 'identity actions' 'navigation navigation' 'alerts alerts' 'tools tools'; } }

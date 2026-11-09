@@ -1,3 +1,4 @@
+import { clonePcmPrintBoard } from './pcmPrintAppearance'
 import { PcmHeaderContent } from './PcmHeaderContent'
 import { PcmPointAppearanceEditor } from './PcmPointAppearanceEditor'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -1022,16 +1023,18 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       filters.textContent = activeFilters.length ? `Filtros aplicados: ${activeFilters.join(' · ')}` : 'Filtros: nenhum'
     }
 
-    const boardCopy = printDocument.importNode(board, true) as HTMLElement
-    boardCopy.removeAttribute('id')
-    boardCopy.classList.remove('is-selecting')
-    boardCopy.querySelectorAll('.pcm-canvas__group-controls, .pcm-canvas__resize-handle, .pcm-canvas__select-handle, .pcm-canvas__palette-control, .pcm-canvas__widget-tools, .pcm-canvas__context-menu').forEach(element => element.remove())
-    boardCopy.querySelectorAll('.is-dragging, .is-drop-target, .is-selected, .has-palette-open, .is-drop-left, .is-drop-right, .is-drop-top, .is-drop-bottom').forEach(element => element.classList.remove('is-dragging', 'is-drop-target', 'is-selected', 'has-palette-open', 'is-drop-left', 'is-drop-right', 'is-drop-top', 'is-drop-bottom'))
-    boardCopy.querySelectorAll<HTMLElement>('[draggable]').forEach(element => element.removeAttribute('draggable'))
+    const boardCopy = clonePcmPrintBoard(board, printDocument)
+    printDocument.querySelector('.pcm-canvas-print__board')?.classList.add('pcm-canvas')
     printDocument.querySelector('.pcm-canvas-print__board')?.appendChild(boardCopy)
 
     const printStyles = printDocument.createElement('style')
-    printStyles.textContent = `body{margin:0;padding:22px;background:#fff;color:#17324a;font:12px/1.4 Arial,sans-serif}.pcm-canvas-print__heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #173f5f}.pcm-canvas-print__heading h1{margin:0;font-size:20px}.pcm-canvas-print__heading p{margin:3px 0 0;color:#607688}.pcm-canvas-print__meta{color:#607688;text-align:right}.pcm-canvas-print__filters{margin:0 0 12px;color:#526b7d;font-size:10px}.pcm-canvas-print__board .pcm-canvas__board{grid-auto-rows:auto!important;grid-auto-flow:row!important;align-items:stretch!important;gap:8px!important}.pcm-canvas-print__board .pcm-canvas__group{grid-row:auto!important;height:auto!important;min-height:0!important;align-self:start!important;break-inside:avoid;padding:6px!important}.pcm-canvas-print__board .pcm-canvas__group-heading{cursor:default!important}.pcm-canvas-print__board .pcm-canvas__widgets{grid-auto-rows:auto!important;grid-auto-flow:row!important;align-items:stretch!important;gap:6px!important}.pcm-canvas-print__board .pcm-canvas__widget{grid-row:auto!important;height:auto!important;min-height:105px!important;max-height:none!important;overflow:visible!important;align-self:stretch!important;break-inside:avoid;box-shadow:none!important}.pcm-canvas-print__board .pcm-canvas__widget-body{overflow:visible!important}.pcm-canvas-print__board .pcm-canvas__widget:has(.pcm-canvas-list,.pcm-bar-chart,.pcm-pie-chart,.pcm-monthly-line-chart,.pcm-monthly-chart,.pcm-monthly-progress,.pcm-time-comparison-widget){min-height:190px!important}.pcm-canvas-print__board .pcm-canvas__group--board{padding:0!important;border:0!important}@page{size:landscape;margin:12mm}@media print{body{padding:0}.pcm-canvas-print__board{width:100%}}`
+    const theme = document.documentElement.dataset.pcmDashboardTheme ?? 'dark'
+    printDocument.documentElement.dataset.pcmDashboardTheme = theme
+    const surface = getComputedStyle(board.closest('.app-content') ?? board).backgroundColor
+    const ink = theme === 'dark' ? '#edf5fc' : '#17324a'
+    const width = Math.ceil(board.getBoundingClientRect().width)
+    const scale = Math.min(1, 1060 / Math.max(1, width))
+    printStyles.textContent = `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;padding:16px;background:${surface};color:${ink};font:12px/1.4 Arial,sans-serif}.pcm-canvas-print__heading{display:flex;justify-content:space-between;gap:20px;margin-bottom:12px}.pcm-canvas-print__heading h1{margin:0;font-size:20px}.pcm-canvas-print__heading p{margin:4px 0}.pcm-canvas-print__filters{margin-bottom:12px}.pcm-canvas-print__board{width:${width}px;zoom:${scale}}@page{size:landscape;margin:8mm}@media print{body{padding:0}}`
     printDocument.head.appendChild(printStyles)
 
     printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true })

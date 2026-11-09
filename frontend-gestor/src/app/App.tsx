@@ -138,12 +138,19 @@ function TenantApp() {
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
   const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
+  const [networkOnline, setNetworkOnline] = useState(() => navigator.onLine)
+  useEffect(() => {
+    const update = () => setNetworkOnline(navigator.onLine)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
+  }, [])
   useEffect(() => {
     if (canViewPcmDashboard) setSection(current => current === 'home' ? 'validations' : current)
   }, [canViewPcmDashboard])
   const [pcmSurface, setPcmSurface] = useState<{ cardBackground?: string; contentColor?: string; titleColor?: string; cardEffect?: string }>(() => { try { const saved = JSON.parse(localStorage.getItem('vorqix.pcm.workspace-style.v1') ?? '{}'); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {} } catch { return {} } })
   const [pcmTheme, setPcmTheme] = useState<'light' | 'dark' | 'ice'>(() => {
-    try { const saved = window.localStorage.getItem('vorqix.pcm.dashboard-theme.v1'); return saved === 'dark' || saved === 'ice' ? saved : 'light' } catch { return 'light' }
+    try { const saved = window.localStorage.getItem('vorqix.pcm.dashboard-theme.v1'); return saved === 'light' || saved === 'ice' ? saved : 'dark' } catch { return 'dark' }
   })
   useEffect(() => {
     if (!canViewPcmDashboard) return
@@ -437,7 +444,7 @@ function TenantApp() {
           <div>
             <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
             <span>
-              {technicalContext?.pode_validar
+              {canViewPcmDashboard ? <span className="pcm-identity-line"><b>PCM</b><strong title={session.user.nome}>{session.user.nome}</strong></span> : technicalContext?.pode_validar
                 ? `Validação técnica · ${technicalContext.identidade.area_nome || 'Qualidade e segurança'}`
                 : (() => {
                     const role = technicalContext?.identidade.cargo_nome || 'Acompanhamento técnico'
@@ -451,12 +458,12 @@ function TenantApp() {
         </div>
 
         <div className={`topbar__actions${isTechnician ? ' topbar__actions--technician' : ''}`}>
-          <span className="connection-chip">
+          <span className="connection-chip" data-online={networkOnline} role="status" aria-label={networkOnline ? 'Rede conectada' : 'Sem conexão de rede'} title={networkOnline ? 'Rede conectada' : 'Sem conexão de rede'}>
             <i aria-hidden="true" />
             Online
           </span>
 
-          <div className="user-badge">
+          <div className="user-badge" hidden={canViewPcmDashboard}>
             <strong>{session.user.nome}</strong>
             {!['PCM', 'GESTOR'].includes(normalizedProfile) ? <span>{session.user.perfil}</span> : null}
           </div>

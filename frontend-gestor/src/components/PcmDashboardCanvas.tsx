@@ -630,7 +630,7 @@ function createDefaultLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
 function readInitialLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
   const selectedId = readSelectedLayoutId()
   if (selectedId === professionalLayoutId) return createProfessionalLayout()
-  if (!window.localStorage.getItem(storageKey) && !selectedId) return { ...createDefaultLayout(widgets), widgetOrder: [], placements: {}, blankLayout: true }
+  if (!window.localStorage.getItem(storageKey) && !selectedId) return createProfessionalLayout()
   const selected = readSavedLayouts().find(item => item.id === selectedId)
   return selected?.layout ?? readLayout(widgets)
 }
@@ -2093,7 +2093,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
     if (!layout.placements[id]) return false
     const widget = widgetById.get(id)
     if (!widget) return false
-    const matchesCategory = filterCategory === 'all' || widget.categoryId === filterCategory
+    const matchesCategory = filterCategory === 'all' || (filterCategory.startsWith('indicator:') ? id.split('::copy::')[0] === filterCategory.slice(10) : widget.categoryId === filterCategory)
     const placement = layout.placements[id]
     const matchesSearch = !normalizedSearch || `${placement.customTitle ?? widget.title} ${placement.customSubtitle ?? ''} ${categoryById.get(widget.categoryId) ?? ''}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch)
     return matchesCategory && matchesSearch
@@ -2266,7 +2266,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         {toolbarContent}
         {onOpenHistory ? <button type="button" className="pcm-canvas__icon-button pcm-canvas__toolbar-icon" title="Abrir histórico e análise" aria-label="Abrir histórico e análise" onClick={onOpenHistory}><History size={15} aria-hidden="true" /></button> : null}
         <label className="pcm-canvas__search" title="Buscar indicador"><Search size={14} aria-hidden="true" /><input value={search} onChange={event => setSearch(event.target.value)} aria-label="Buscar indicador no painel" placeholder="Buscar" /></label>
-        <label className="pcm-canvas__filter" title="Filtrar por categoria"><Filter size={14} aria-hidden="true" /><select value={filterCategory} onChange={event => setFilterCategory(event.target.value)} aria-label="Filtrar por categoria"><option value="all">Todas</option>{categories.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
+        <label className="pcm-canvas__filter" title="Escolher o indicador e suas cópias"><Filter size={14} aria-hidden="true" /><select value={filterCategory} onChange={event => setFilterCategory(event.target.value)} aria-label="Filtrar por indicador"><option value="all">Todos os indicadores</option>{sourceWidgets.map(widget => <option key={widget.id} value={`indicator:${widget.id}`}>{widget.title}</option>)}</select></label>
         {segmentFilters.length ? <button type="button" className={`pcm-canvas__icon-button pcm-canvas__toolbar-icon${segmentFiltersOpen ? ' is-active' : ''}`} title="Segmentar os dados dos indicadores" aria-label="Mostrar filtros de segmentação" aria-expanded={segmentFiltersOpen} onClick={() => setSegmentFiltersOpen(value => !value)}><Filter size={14} aria-hidden="true" /></button> : null}
         {onPrintCanvas ? <button type="button" className="pcm-canvas__icon-button pcm-canvas__toolbar-icon" title="Imprimir lousa atual" aria-label="Imprimir lousa atual" onClick={() => { if (boardRef.current) onPrintCanvas(boardRef.current, segmentFilters.flatMap(filter => segments[filter.id] ? [`${filter.label}: ${segments[filter.id]}`] : [])) }}><Printer size={15} aria-hidden="true" /></button> : null}
         <details className="pcm-canvas__layout-menu">
