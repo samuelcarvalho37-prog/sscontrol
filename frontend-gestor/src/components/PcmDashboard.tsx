@@ -1,3 +1,4 @@
+import { PcmHeaderContent } from './PcmHeaderContent'
 import { PcmPointAppearanceEditor } from './PcmPointAppearanceEditor'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Activity, CalendarCheck2, ChartNoAxesCombined, CircleHelp, CirclePause, ClipboardList, ClockAlert, Download, FileQuestionMark, Printer, Repeat2, Siren, TimerReset, TriangleAlert, UsersRound, Wrench } from 'lucide-react'
@@ -279,7 +280,6 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
   palette?: PcmCanvasPalette
   variant?: 'pie' | 'donut'
 }) {
-  const [hiddenIds, setHiddenIds] = useState<string[]>([])
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null)
   const presentation = usePcmChartPresentation()
   const gradientId = `pcm-slices-${useId().replace(/:/g, '')}`
@@ -289,7 +289,7 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
   const compactItems = rankedItems.length > 6 && !showAllItems
   const positiveItems = compactItems ? [...rankedItems.slice(0, 5), { id: 'pcm-aggregated-others', label: `Outros (${rankedItems.length - 5} ativos)`, value: rankedItems.slice(5).reduce((sum, item) => sum + item.value, 0) }] : rankedItems
   const colors = palette ?? ['#176fc1', '#63a2df', '#a9cbea', '#0b4b84', '#82b7dc', '#416d98']
-  const visibleItems = positiveItems.filter(item => !hiddenIds.includes(item.id))
+  const visibleItems = positiveItems
   const total = visibleItems.reduce((sum, item) => sum + item.value, 0)
   let offset = -90
   const slices = visibleItems.map(item => {
@@ -314,7 +314,7 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
   const hovered = slices.find(item => item.id === hoveredId)
   const extrusion = getChartVolume(presentation)
   const volume = Math.ceil(extrusion.amount)
-  const toggle = (id: string) => setHiddenIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  const toggle = (id: string) => setSelectedSliceId(current => current === id ? null : id)
   const legendLabel = (label: string) => {
     const [code, ...name] = label.split(' · ')
     if (presentation.legendLabelFormat === 'code') return code
@@ -357,11 +357,11 @@ function PcmPieChart({ items, emptyMessage, valueLabel, palette, variant = 'donu
     <ul data-legend-visible={presentation.legendVisible} style={{ display: presentation.legendVisible === false ? 'none' : undefined }} data-legend-name={presentation.legendName} data-legend-value={presentation.legendValue} data-legend-percent={presentation.legendPercent} data-legend-swatch={presentation.legendSwatch}>{positiveItems.map((item, index) => {
       const active = slices.find(slice => slice.id === item.id)
       const percentage = total > 0 && active ? active.percentage : 0
-      return <li key={item.id} className={`${active ? '' : 'is-hidden'}${hoveredId === item.id ? ' is-hovered' : ''}`}>
-        <button type="button" aria-pressed={Boolean(active)} title={`${active ? 'Ocultar' : 'Mostrar'} ${item.label}`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: presentation.pointColors?.[item.id] ?? colors[index % colors.length] }} aria-hidden="true" /><span>{legendLabel(item.label)}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
+      return <li key={item.id} className={`${selectedSliceId === item.id ? 'is-selected' : ''}${hoveredId === item.id ? ' is-hovered' : ''}`}>
+        <button type="button" aria-pressed={selectedSliceId === item.id} title={`${item.label}: ${item.value} (${number(percentage)}%). Clique para destacar.`} onClick={event => { event.stopPropagation(); toggle(item.id) }} onKeyDown={event => event.stopPropagation()} onMouseEnter={() => setHoveredId(item.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(item.id)} onBlur={() => setHoveredId(null)}><i style={{ background: presentation.pointColors?.[item.id] ?? colors[index % colors.length] }} aria-hidden="true" /><span>{legendLabel(item.label)}</span><strong>{item.value}<small>{number(percentage)}%</small></strong></button>
       </li>
     })}</ul>
-    {rankedItems.length > 6 ? <button type="button" className="pcm-pie-chart__expand" onClick={event => { event.stopPropagation(); setHiddenIds([]); setShowAllItems(current => !current) }}>{showAllItems ? 'Resumir distribuição' : `Ver todos os ${rankedItems.length} itens`}</button> : null}
+    {rankedItems.length > 6 ? <button type="button" className="pcm-pie-chart__expand" onClick={event => { event.stopPropagation(); setSelectedSliceId(null); setShowAllItems(current => !current) }}>{showAllItems ? 'Resumir distribuição' : `Ver todos os ${rankedItems.length} itens`}</button> : null}
     {selectedSliceId ? <PcmPointAppearanceEditor key={selectedSliceId} id={selectedSliceId} label={positiveItems.find(item => item.id === selectedSliceId)?.label ?? ''} color={slices.find(item => item.id === selectedSliceId)?.color ?? '#176fc1'} onClose={() => setSelectedSliceId(null)} /> : null}
     {positiveItems.length === 0 ? <p className="pcm-pie-chart__empty">{emptyMessage}</p> : null}
   </div>
@@ -812,7 +812,7 @@ interface ExecutablePlan {
 export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void }) {
   const [timeMetric, setTimeMetric] = useState<'MTTR' | 'MTBF'>('MTTR')
   const [days, setDays] = useState('30')
-  const [demoMode, setDemoMode] = useState(false)
+  const [demoMode] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const [data, setData] = useState<PcmData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -2085,26 +2085,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
 
   return (
     <section className={`pcm-dashboard pcm-dashboard--desktop${insight ? ' pcm-dashboard--focus' : ''}`} aria-label="Dashboard do PCM" aria-busy={loading}>
-      <header className="pcm-heading">
-        <div className="pcm-heading__meta">
-          <h1>Central de manutenção</h1>
-          <p>Planeje as ordens, acompanhe a equipe e organize sua lousa.</p>
-          {displayData?.atualizado_em && !demoMode ? <small className="pcm-heading__updated" title="Atualização automática dos dados.">Atualizado {formatDateTime(displayData.atualizado_em)}</small> : <span className="pcm-heading__updated">Dados de demonstração</span>}
-        </div>
-        <div className="pcm-heading__tools">
-          <button type="button" className="pcm-demo-toggle pcm-demo-toggle--icon" aria-label={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} title={demoMode ? 'Voltar aos dados reais' : 'Ver demonstração'} aria-pressed={demoMode} disabled={createOrderOpen} onClick={() => { setDemoMode(value => !value); setInsight(null) }}>
-            <ChartNoAxesCombined size={15} aria-hidden="true" />
-            <span>{demoMode ? 'Dados reais' : 'Demonstração'}</span>
-          </button>
-          {maintenanceStatus ? <span className={`pcm-dashboard-condition pcm-dashboard-condition--${maintenanceStatus.toLowerCase()}`} title={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`} aria-label={`Estado da manutenção: ${maintenanceStatusLabel(maintenanceStatus)}`}>
-            <i aria-hidden="true" /><span className="pcm-sr-only">{maintenanceStatusLabel(maintenanceStatus)}</span>
-          </span> : null}
-        </div>
-      </header>
-
-      {demoMode ? <div className="pcm-demo-banner" role="status"><strong>Demonstração fictícia</strong><span>Exemplos locais para avaliar a tela. Nenhum dado será gravado na empresa.</span></div> : null}
-
-      <section className="pcm-operational-alerts" aria-labelledby="pcm-operational-alerts-title">
+      <PcmHeaderContent slot="pcm-alerts-slot"><section className="pcm-operational-alerts" aria-labelledby="pcm-operational-alerts-title">
         <div className="pcm-operational-alerts__summary">
           <span id="pcm-operational-alerts-title">Avisos</span>
           <strong>{operationalAlertCount}</strong>
@@ -2117,7 +2098,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
             </button>
           })}
         </div> : <span className="pcm-operational-alerts__empty">Nenhum aviso operacional</span>}
-      </section>
+      </section></PcmHeaderContent>
 
     {!demoMode && error && (
         <div className="dashboard-error" role="alert">
@@ -2145,7 +2126,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       {displayData && current && reliability && maintenanceStatus && (
         insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} /> : <>
       <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onOpenHistory={onOpenHistory} onPrintCanvas={printPcmCanvas} toolbarContent={<label className="pcm-canvas__period" title="Filtrar indicadores por período"><span>Período</span><select value={days} onChange={event => setDays(event.target.value)} aria-label="Período dos indicadores"><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">12 meses</option></select></label>} helpContent={<div className="pcm-canvas__help-content">
-            <p>Adicione indicadores pelo botão “+”, organize-os arrastando os cartões e use a paleta de cada cartão para definir visual, aparência e filtros próprios. Salve o layout para reutilizar sua organização.</p>
+            <p>Adicione indicadores pelo botão “+”, organize-os arrastando os cartões e use o botão direito em cada cartão para personalizar a aparência e os filtros próprios. Salve o layout para reutilizar sua organização.</p>
             <p>
               Os totais atuais incluem todos os registros abertos dos ativos ativos. O período selecionado
               filtra somente a confiabilidade e as falhas. As listas mostram até 10 registros; os totais não

@@ -1,3 +1,4 @@
+import { PcmHeaderContent } from './PcmHeaderContent'
 import { Children, isValidElement, Fragment as ReactFragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -222,7 +223,7 @@ type CanvasLayout = {
 type SavedCanvasLayout = { id: string; name: string; layout: CanvasLayout }
 
 const stylePlacementKeys = [
-  'themeAdaptive', 'accentStyle',
+  'themeAdaptive', 'accentStyle', 'contentSurfaceColor', 'contentSurfaceOpacity',
   'chartVisualStyle',
   'chartUseOwnColors', 'chartAreaFill', 'chartAreaColor', 'chartAreaEndColor', 'chartAreaOpacity', 'chartAreaDirection', 'chartSelectionColor', 'chartSelectionOpacity',
   'contentAlign', 'contentVerticalAlign', 'showContent', 'showIcon', 'cardRadiusTopLeft', 'cardRadiusTopRight', 'cardRadiusBottomRight', 'cardRadiusBottomLeft',
@@ -629,7 +630,7 @@ function createDefaultLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
 function readInitialLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
   const selectedId = readSelectedLayoutId()
   if (selectedId === professionalLayoutId) return createProfessionalLayout()
-  if (!window.localStorage.getItem(storageKey) && !selectedId) return createProfessionalLayout()
+  if (!window.localStorage.getItem(storageKey) && !selectedId) return { ...createDefaultLayout(widgets), widgetOrder: [], placements: {}, blankLayout: true }
   const selected = readSavedLayouts().find(item => item.id === selectedId)
   return selected?.layout ?? readLayout(widgets)
 }
@@ -757,6 +758,8 @@ function readLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
       if (stored?.chartAreaFill && ['none', 'solid', 'gradient'].includes(stored.chartAreaFill)) placement.chartAreaFill = stored.chartAreaFill
       if (stored?.chartAreaDirection && ['vertical', 'horizontal'].includes(stored.chartAreaDirection)) placement.chartAreaDirection = stored.chartAreaDirection
       if (typeof stored?.chartUseOwnColors === 'boolean') placement.chartUseOwnColors = stored.chartUseOwnColors
+      if (isHexColor(stored?.contentSurfaceColor)) placement.contentSurfaceColor = stored.contentSurfaceColor
+      if (typeof stored?.contentSurfaceOpacity === 'number' && Number.isFinite(stored.contentSurfaceOpacity)) placement.contentSurfaceOpacity = Math.max(0, Math.min(100, stored.contentSurfaceOpacity))
       if (typeof stored?.themeAdaptive === 'boolean') placement.themeAdaptive = stored.themeAdaptive
       if (stored?.accentStyle && ['solid', 'double', 'diagonal', 'triangle', 'cone'].includes(stored.accentStyle)) placement.accentStyle = stored.accentStyle
       if (stored?.chartVisualStyle && [...chartVisualStyles, ...radialVisualStyles, ...barVisualStyles].some(style => style.id === stored.chartVisualStyle)) placement.chartVisualStyle = stored.chartVisualStyle
@@ -1023,15 +1026,13 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
     document.documentElement.dataset.pcmDashboardTheme = dashboardTheme
     try {
       window.localStorage.setItem(dashboardThemeStorageKey, dashboardTheme)
+      window.dispatchEvent(new CustomEvent('vorqix:pcm-theme', { detail: dashboardTheme }))
     } catch {
       // O tema continua ativo nesta sessão se o armazenamento local estiver indisponível.
     }
     return () => {
       if (dashboard.dataset.pcmTheme === dashboardTheme) delete dashboard.dataset.pcmTheme
-      if (appShell?.dataset.pcmTheme === dashboardTheme) delete appShell.dataset.pcmTheme
-      if (document.documentElement.dataset.pcmDashboardTheme === dashboardTheme) {
-        delete document.documentElement.dataset.pcmDashboardTheme
-      }
+
     }
   }, [dashboardTheme])
 
@@ -1285,6 +1286,11 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
       }
       return { ...current, placements }
     })
+    if (styleLibraryCategory === 'card' && styleLibraryScope === 'all') {
+      const surface = { cardBackground: style.background, contentColor: style.contentColor, titleColor: style.titleColor, cardEffect: style.effect }
+      try { localStorage.setItem('vorqix.pcm.workspace-style.v1', JSON.stringify(surface)) } catch { /* Estilo disponível nesta sessão. */ }
+      window.dispatchEvent(new CustomEvent('vorqix:pcm-style', { detail: surface }))
+    }
     setSaveMessage(styleLibraryCategory === 'effects' ? `Efeito “${style.label}” aplicado a ${targetIds.length} card(s) compatíveis.` : styleLibraryCategory === 'chart'
       ? `Paleta “${style.label}” aplicada a ${targetIds.length === 1 ? '1 gráfico' : `${targetIds.length} gráficos`}.`
       : styleLibraryCategory === 'button'
@@ -2179,7 +2185,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
           })
           const backgroundColor = placement.cardBackground === 'transparent' ? 'transparent' : placement.cardBackground ?? 'transparent'
           const isFreePositioned = Number.isFinite(placement.left) && Number.isFinite(placement.top)
-          const cardStyle = { '--pcm-widget-span': currentSpan, '--pcm-widget-column': placement.column ?? 'auto', '--pcm-widget-row': placement.row ?? 'auto', '--pcm-widget-row-span': placement.rowSpan ?? 1, '--pcm-widget-free-left': `${placement.left ?? 0}%`, '--pcm-widget-free-top': `${placement.top ?? 0}px`, '--pcm-widget-free-width': `${(currentSpan / 24) * 100}%`, '--pcm-widget-height': placement.shape ? 'auto' : placement.height ? `${placement.height}px` : 'auto', '--pcm-widget-scale': placement.contentScale ?? 1, '--pcm-widget-background': backgroundColor === 'transparent' ? 'transparent' : `color-mix(in srgb, ${backgroundColor} ${placement.cardBackgroundOpacity ?? 100}%, transparent)`, '--pcm-widget-border': placement.cardBorder === 'none' ? 'transparent' : placement.cardBorder ?? 'transparent', '--pcm-widget-border-style': placement.cardBorderStyle ?? 'solid', '--pcm-widget-radius': cornerRadiusValue(placement.cardRadius), '--pcm-widget-title': placement.titleColor ?? (dashboardTheme === 'dark' ? '#d8e8f4' : '#375873'), '--pcm-widget-content': placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d'), '--pcm-widget-accent': placement.accentColor ?? '#176fc1', '--pcm-widget-icon-color': placement.iconColor ?? placement.accentColor ?? '#176fc1', '--pcm-widget-chart': rawPalette[0], '--pcm-chart-grid': `color-mix(in srgb, ${placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d')} ${dashboardTheme === 'dark' ? '23%' : '15%'}, transparent)`, '--pcm-chart-track': `color-mix(in srgb, ${placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d')} ${dashboardTheme === 'dark' ? '18%' : '10%'}, transparent)`, '--pcm-chart-surface': backgroundColor === 'transparent' ? 'transparent' : `color-mix(in srgb, ${backgroundColor} ${placement.cardBackgroundOpacity ?? 100}%, transparent)`, '--pcm-widget-title-size': `${placement.titleSize ?? 9}px`, '--pcm-widget-title-align': placement.titleAlign ?? 'left', '--pcm-widget-content-size': `${placement.contentSize ?? 25}px`, '--pcm-widget-metric-size': `${placement.contentSize ?? 25}px`, '--pcm-widget-icon-size': `${placement.iconSize ?? 22}px`, '--pcm-action-accent': placement.buttonColor ?? (dashboardTheme === 'dark' ? '#90caff' : '#174d75'), '--pcm-action-background': placement.buttonBackground ?? (dashboardTheme === 'dark' ? '#174b70' : '#e7f3fc'), '--pcm-action-border': placement.buttonBorder ?? (dashboardTheme === 'dark' ? '#4e83a5' : '#b8d5e8'), '--pcm-action-text': placement.buttonText ?? (dashboardTheme === 'dark' ? '#f2f8fc' : '#174d75') } as CSSProperties
+          const cardStyle = { '--pcm-content-surface': `color-mix(in srgb, ${placement.contentSurfaceColor ?? '#ffffff'} ${placement.contentSurfaceOpacity ?? 0}%, transparent)`, '--pcm-widget-span': currentSpan, '--pcm-widget-column': placement.column ?? 'auto', '--pcm-widget-row': placement.row ?? 'auto', '--pcm-widget-row-span': placement.rowSpan ?? 1, '--pcm-widget-free-left': `${placement.left ?? 0}%`, '--pcm-widget-free-top': `${placement.top ?? 0}px`, '--pcm-widget-free-width': `${(currentSpan / 24) * 100}%`, '--pcm-widget-height': placement.shape ? 'auto' : placement.height ? `${placement.height}px` : 'auto', '--pcm-widget-scale': placement.contentScale ?? 1, '--pcm-widget-background': backgroundColor === 'transparent' ? 'transparent' : `color-mix(in srgb, ${backgroundColor} ${placement.cardBackgroundOpacity ?? 100}%, transparent)`, '--pcm-widget-border': placement.cardBorder === 'none' ? 'transparent' : placement.cardBorder ?? 'transparent', '--pcm-widget-border-style': placement.cardBorderStyle ?? 'solid', '--pcm-widget-radius': cornerRadiusValue(placement.cardRadius), '--pcm-widget-title': placement.titleColor ?? (dashboardTheme === 'dark' ? '#d8e8f4' : '#375873'), '--pcm-widget-content': placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d'), '--pcm-widget-accent': placement.accentColor ?? '#176fc1', '--pcm-widget-icon-color': placement.iconColor ?? placement.accentColor ?? '#176fc1', '--pcm-widget-chart': rawPalette[0], '--pcm-chart-grid': `color-mix(in srgb, ${placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d')} ${dashboardTheme === 'dark' ? '23%' : '15%'}, transparent)`, '--pcm-chart-track': `color-mix(in srgb, ${placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d')} ${dashboardTheme === 'dark' ? '18%' : '10%'}, transparent)`, '--pcm-chart-surface': backgroundColor === 'transparent' ? 'transparent' : `color-mix(in srgb, ${backgroundColor} ${placement.cardBackgroundOpacity ?? 100}%, transparent)`, '--pcm-widget-title-size': `${placement.titleSize ?? 9}px`, '--pcm-widget-title-align': placement.titleAlign ?? 'left', '--pcm-widget-content-size': `${placement.contentSize ?? 25}px`, '--pcm-widget-metric-size': `${placement.contentSize ?? 25}px`, '--pcm-widget-icon-size': `${placement.iconSize ?? 22}px`, '--pcm-action-accent': placement.buttonColor ?? (dashboardTheme === 'dark' ? '#90caff' : '#174d75'), '--pcm-action-background': placement.buttonBackground ?? (dashboardTheme === 'dark' ? '#174b70' : '#e7f3fc'), '--pcm-action-border': placement.buttonBorder ?? (dashboardTheme === 'dark' ? '#4e83a5' : '#b8d5e8'), '--pcm-action-text': placement.buttonText ?? (dashboardTheme === 'dark' ? '#f2f8fc' : '#174d75') } as CSSProperties
           Object.assign(cardStyle, { '--pcm-chart-grid': placement.chartGridColor ?? (dashboardTheme === 'dark' ? '#52697a' : '#d3dfe8'), '--pcm-grid-width': placement.chartGridWidth ?? 1, '--pcm-axes-display': placement.showChartAxes === false ? 'none' : 'inline', '--pcm-chart-line-width': placement.chartLineWidth ?? 3, '--pcm-chart-point-size': placement.chartPointSize ?? 5, '--pcm-chart-border-width': placement.chartBorderWidth ?? 0, '--pcm-chart-depth': `${placement.chartDepth ?? 16}deg` })
           const isTransparent = backgroundColor === 'transparent' || (placement.cardBackgroundOpacity ?? 0) === 0
           Object.assign(cardStyle, { '--pcm-legend-text': placement.legendTextColor ?? 'var(--pcm-widget-content)', '--pcm-legend-value': placement.legendValueColor ?? 'var(--pcm-widget-content)', '--pcm-legend-percent': placement.legendPercentColor ?? 'var(--pcm-widget-content)', '--pcm-gradient-end': placement.gradientEnd ?? rawPalette[1] ?? rawPalette[0], '--pcm-center-display': placement.showChartCenter === false ? 'none' : 'flex', '--pcm-center-color': placement.chartCenterColor ?? placement.contentColor ?? 'var(--pcm-widget-content)', '--pcm-center-size': `${placement.chartCenterSize ?? 13}px`, '--pcm-chart-label-color': placement.chartLabelColor ?? '#ffffff', '--pcm-legend-gap': `${placement.legendGap ?? 12}px`, '--pcm-legend-size': `${placement.legendSize ?? placement.contentSize ?? 12}px` })
@@ -2237,7 +2243,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
 
   return <section style={{ backgroundColor: panelAppearance.background, boxShadow: `inset 0 0 0 ${panelAppearance.width}px ${panelAppearance.border}, 0 ${panelShadow}px ${panelShadow * 3}px #10223430`, padding: '10px', borderRadius: '8px' }} className={`pcm-canvas${layout.magnetEnabled ? ' is-magnetized' : ''}`} aria-label="Lousa configurável do PCM">
     <style>{toolbarFeatures.filter(feature => toolbarHidden.includes(feature.id)).map(feature => `.pcm-canvas > .pcm-canvas__toolbar ${feature.selector} { display: none !important; }`).join(' ')}</style>
-    <header className="pcm-canvas__toolbar">
+    <PcmHeaderContent slot="pcm-toolbar-slot" tools><header className="pcm-canvas__toolbar">
       <div className="pcm-canvas__toolbar-title">{helpContent ? <div className="pcm-canvas__help-placement"><button type="button" className="pcm-canvas__icon-button pcm-canvas__help-trigger" aria-label="Ajuda sobre a lousa" aria-expanded={helpOpen} onClick={() => setHelpOpen(value => !value)}><CircleHelp size={15} /></button>{helpOpen ? <div className="pcm-canvas__help-popover" role="dialog" aria-label="Ajuda sobre a lousa">{helpContent}</div> : null}</div> : null}<h2>Lousa do PCM</h2><span>{visibleWidgetIds.length}</span><button type="button" className="pcm-canvas__button pcm-canvas__select-mode" aria-pressed={selectionMode} onClick={() => setSelectionMode(value => !value)}><Check size={14} />{selectionMode ? `Concluir seleção · ${selectedIds.length}` : 'Selecionar cards'}</button>{selectionMode ? <button type="button" className="pcm-canvas__button" onClick={() => setSelectedIds([...visibleWidgetIds])}>Selecionar todos</button> : null}{selectedIds.length > 0 ? <><button type="button" className="pcm-canvas__button" onClick={() => { setStyleLibraryScope('selected'); setStyleLibraryOpen(true); setSelectionMode(false) }}>Estilo dos selecionados · {selectedIds.length}</button><button type="button" className="pcm-canvas__button" onClick={() => setSelectedIds([])}>Limpar seleção</button></> : null}</div>
 
       <div className="pcm-canvas__toolbar-tools">
@@ -2282,7 +2288,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         <button type="button" className={`pcm-canvas__icon-button pcm-canvas__toolbar-icon pcm-canvas__save-button${unsaved ? ' is-pending' : ''}`} title={saveMessage || (unsaved ? 'Salvar alterações do layout' : 'Layout salvo')} aria-label={saveMessage || (unsaved ? 'Salvar alterações do layout' : 'Layout salvo')} onClick={saveLayout} disabled={!unsaved}><Save size={15} /></button>
         <span className="pcm-canvas__visually-hidden" role="status">{saveMessage || (unsaved ? 'Alterações do layout não salvas' : 'Layout salvo')}</span>
       </div>
-    </header>
+    </header></PcmHeaderContent>
 
     {segmentFiltersOpen && segmentFilters.length ? <div className="pcm-canvas__segment-filters" aria-label="Filtros opcionais de segmentação">
       <span>Segmentar</span>
@@ -2314,12 +2320,12 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
       {pasteTarget ? createPortal(<div className="pcm-canvas__paste-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) setPasteTarget(null) }}><section className="pcm-canvas__paste-dialog" role="dialog" aria-modal="true" aria-label="Colar aparência"><strong>Colar aparência</strong><p>Escolha as propriedades para aplicar neste card.</p>{[['colors', 'Fundo e cores'], ['effects', 'Efeitos e decorações'], ['border', 'Bordas e formato'], ['text', 'Tipografia e ícones'], ['chart', 'Gráfico e legenda']].map(([id, label]) => <label key={id}><input type="checkbox" checked={pasteSections.includes(id)} onChange={event => setPasteSections(current => event.target.checked ? [...current, id] : current.filter(value => value !== id))} />{label}</label>)}<footer><button type="button" onClick={() => setPasteTarget(null)}>Cancelar</button><button type="button" disabled={!pasteSections.length} onClick={applyCopiedAppearance}>Aplicar propriedades</button></footer></section></div>, document.body) : null}
       {visibleWidgetIds.length === 0 ? <section className="pcm-canvas__empty-state" aria-live="polite">
         <div className="pcm-canvas__empty-state-copy">
-          <strong>{hasActiveCanvasSearch ? 'Nenhum indicador encontrado' : 'Sua lousa está vazia'}</strong>
+          <strong>{hasActiveCanvasSearch ? 'Nenhum indicador encontrado' : 'Você ainda não adicionou nenhum indicador'}</strong>
           <p>{hasActiveCanvasSearch
             ? 'Ajuste a busca ou a categoria para voltar a visualizar os indicadores.'
             : hasAnyPlacedWidgets
               ? 'Adicione indicadores pelo botão “+”. Depois, arraste os cartões para organizar a lousa, personalize cada um e salve o layout.'
-              : 'Adicione indicadores pelo botão “+”, arraste os cartões para organizar a lousa, personalize cada um e salve seu layout de trabalho.'}</p>
+              : 'Clique no botão + para adicionar indicadores.'}</p>
         </div>
         {hasActiveCanvasSearch
           ? <button type="button" onClick={() => { setSearch(''); setFilterCategory('all') }}>Limpar busca e categoria</button>
@@ -2492,6 +2498,9 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         </div>
       </details> : null}
       <details data-editor-order={40} className="pcm-canvas__editor-section"><summary>Aparência</summary>
+        <label>Fundo interno do conteúdo<PcmColorInput type="color" value={palettePlacement.contentSurfaceColor ?? '#ffffff'} onChange={event => { const contentSurfaceColor = event.currentTarget.value; setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceColor })) }} /></label>
+        <label className="pcm-canvas__range-field"><span>Opacidade do fundo interno · {palettePlacement.contentSurfaceOpacity ?? 0}%</span><input type="range" min={0} max={100} value={palettePlacement.contentSurfaceOpacity ?? 0} onChange={event => { const contentSurfaceOpacity = Number(event.currentTarget.value); setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceOpacity })) }} /></label>
+        <button type="button" onClick={() => setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceOpacity: 0 }))}>Sem fundo interno</button>
         <label className="pcm-canvas__palette-toggle"><span>Adaptar cores ao tema</span><input type="checkbox" checked={palettePlacement.themeAdaptive !== false} onChange={event => { const themeAdaptive = event.currentTarget.checked; setPlacement(paletteWidget.id, value => ({ ...value, themeAdaptive })) }} /></label><small>Preserva o estilo e ajusta superfície, textos e destaques ao tema atual.</small>
         <label>Cor ao passar o mouse<PcmColorInput type="color" value={palettePlacement?.hoverColor ?? '#176fc1'} onChange={event => { const hoverColor = event.currentTarget.value; if (paletteWidget) setPlacement(paletteWidget.id, value => ({ ...value, hoverColor })) }} /></label>
 
