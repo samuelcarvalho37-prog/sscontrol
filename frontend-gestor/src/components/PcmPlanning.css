@@ -1,0 +1,150 @@
+/* Apresentação exclusiva do planejamento PCM; não altera TI nem a lousa. */
+.pcm-maintenance-workspace .pcm-planning-page {
+  --pr-bg: var(--pcm-shell-bg, #f4f7fa);
+  --pr-ink: var(--pcm-shell-ink, #183b56);
+  --pr-muted: var(--pcm-shell-muted, #526e83);
+  --pr-line: var(--pcm-shell-line, #cedce7);
+  --pr-surface: color-mix(in srgb, var(--pr-bg) 94%, var(--pr-ink));
+  color: var(--pr-ink); font: 13px/1.5 system-ui, sans-serif; min-width: 0;
+}
+html body .pcm-maintenance-workspace .pcm-planning-heading { margin-bottom: 16px; padding-bottom: 12px; }
+html body .pcm-maintenance-workspace .pcm-planning-heading > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+html body .pcm-maintenance-workspace .pcm-planning-heading h1 { margin: 0; font-size: 19px; }
+html body .pcm-maintenance-workspace .pcm-planning-page :is(section, article, fieldset, header, footer, aside) {
+  background: transparent; color: var(--pr-ink); min-width: 0; box-sizing: border-box;
+}
+html body .pcm-maintenance-workspace .pcm-planning-page :is(h2, h3, p) { margin: 0; }
+html body .pcm-maintenance-workspace .pcm-planning-page h2 { font-size: 17px; line-height: 1.4; }
+html body .pcm-maintenance-workspace .pcm-planning-page h3 { font-size: 14px; }
+html body .pcm-maintenance-workspace .pcm-planning-page :is(small, .eyebrow) { color: var(--pr-muted); font-size: 11px; }
+html body .pcm-maintenance-workspace .pcm-planning-page svg { display: inline-block; width: 18px; height: 18px; min-width: 18px; max-width: 24px; max-height: 24px; flex: 0 0 18px; vertical-align: middle; }
+html body .pcm-maintenance-workspace .pcm-planning-page button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  width: auto; min-width: 0; min-height: 32px; padding: 6px 10px; margin: 0;
+  border: 1px solid var(--pr-line); border-radius: 5px; background: transparent !important;
+  color: var(--pr-ink) !important; font: inherit; line-height: 1.4; box-shadow: none; cursor: pointer;
+}
+html body .pcm-maintenance-workspace .pcm-planning-page button:hover:not(:disabled) { background: var(--pr-surface) !important; }
+html body .pcm-maintenance-workspace .pcm-planning-page button:focus-visible { outline: 2px solid var(--pr-ink); outline-offset: 2px; }
+html body .pcm-maintenance-workspace .pcm-planning-page button:disabled { opacity: .45; cursor: default; }
+html body .pcm-maintenance-workspace .pcm-planning-page button.primary-button { background: var(--pr-surface) !important; font-weight: 600; }
+html body .pcm-maintenance-workspace .pcm-planning-page :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-width: 0; min-height: 36px; box-sizing: border-box; padding: 7px 10px;
+  border: 1px solid var(--pr-line); border-radius: 5px; background: var(--pr-bg) !important;
+  color: var(--pr-ink) !important; font: inherit; box-shadow: none;
+}
+html body .pcm-maintenance-workspace .pcm-planning-page input::placeholder { color: var(--pr-muted); opacity: 1; }
+html body .pcm-maintenance-workspace .pcm-planning-page input[type="checkbox"] { accent-color: var(--pr-ink); width: 16px; height: 16px; }
+html body .pcm-maintenance-workspace .pcm-planning-page :is(.pcm-resource-catalog-search, .pcm-resource-technical-search, .pcm-resource-checklist-library > label) {
+  display: flex; align-items: center; gap: 8px; width: min(100%, 420px); margin: 12px 0;
+  background: transparent !important; border: 1px solid var(--pr-line); border-radius: 5px; padding: 0 10px;
+}
+html body .pcm-maintenance-workspace .pcm-planning-page :is(.pcm-resource-catalog-search, .pcm-resource-technical-search, .pcm-resource-checklist-library > label) input { border: 0; background: transparent !important; padding-inline: 0; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-summary { display: flex; align-items: center; gap: 6px; padding: 0 0 12px; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-summary > button { border: 0; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-summary > button.is-active { background: var(--pr-surface) !important; font-weight: 600; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-panel > header > div { display: flex; align-items: center; gap: 8px; }
+html body .pcm-maintenance-workspace .pcm-resource-help { width: 24px; height: 24px; min-height: 24px; min-width: 24px; padding: 0; border-radius: 50%; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-table { overflow: auto; border: 0; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-table table { width: 100%; border-collapse: collapse; table-layout: auto; font: inherit; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-table :is(th, td) { padding: 12px 10px; text-align: left; vertical-align: middle; border: 0; color: var(--pr-ink); background: transparent; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-table th { color: var(--pr-muted); font-size: 11px; font-weight: 500; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--pr-surface) 45%, transparent); }
+html body .pcm-maintenance-workspace .pcm-planning-page .pcm-asset-open { border: 0; padding: 0; text-align: left; justify-content: flex-start; background: transparent !important; text-decoration: none; }
+html body .pcm-maintenance-workspace .pcm-planning-page .pcm-asset-open:hover { text-decoration: underline; }
+.pcm-maintenance-workspace .pcm-resource-catalog-chip { display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--pr-surface); font-size: 11px; }
+.pcm-maintenance-workspace .pcm-resource-rule { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: var(--pr-muted); font-size: 12px; }
+.pcm-maintenance-workspace .pcm-resource-page { padding: 0; }
+.pcm-maintenance-workspace .pcm-resource-page > section > header, .pcm-maintenance-workspace .pcm-resource-page > section > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
+.pcm-maintenance-workspace .pcm-resource-page > section > footer { margin-top: 16px; border-top: 1px solid var(--pr-line); }
+.pcm-maintenance-workspace .pcm-resource-page footer > span { max-width: 65%; font-size: 12px; color: var(--pr-muted); }
+.pcm-maintenance-workspace .pcm-resource-page footer > div { display: flex; gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-catalog-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 0; padding: 16px 0; border: 0; }
+.pcm-maintenance-workspace .pcm-resource-catalog-form > label, .pcm-maintenance-workspace .pcm-resource-technical-form > label { display: grid; gap: 6px; align-content: start; }
+.pcm-maintenance-workspace .pcm-resource-catalog-form label > small { font-size: 11px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__identity { display: flex; align-items: center; gap: 12px; padding: 16px 0; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__identity > span { display: grid; gap: 4px; flex: 1; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__relations { display: flex; gap: 24px; padding: 8px 0 16px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__relations article { display: grid; gap: 3px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__commands { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 960px; }
+html body .pcm-maintenance-workspace .pcm-resource-entity-actions__commands > button { justify-content: flex-start; text-align: left; min-height: 66px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__commands > button > span { display: grid; gap: 4px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__delete-confirm { padding: 12px; border: 1px solid var(--pr-line); border-radius: 5px; display: grid; gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-entity-actions__delete-confirm > div { display: flex; gap: 8px; }
+/* Área selecionada abre sua própria lista de cargos. */
+.pcm-maintenance-workspace .pcm-resource-technical-layout-toolbar, .pcm-maintenance-workspace .pcm-resource-technical-splitter { display: none; }
+.pcm-maintenance-workspace .pcm-resource-technical-columns { display: block !important; }
+.pcm-maintenance-workspace .pcm-technical-structure[data-area-page="false"] .pcm-resource-technical-panel:has(.pcm-resource-technical-role-table),
+.pcm-maintenance-workspace .pcm-technical-structure[data-area-page="true"] .pcm-resource-technical-panel:has(.pcm-resource-technical-list) { display: none; }
+.pcm-maintenance-workspace .pcm-resource-technical-panel > header, .pcm-maintenance-workspace .pcm-resource-technical-editor > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
+.pcm-maintenance-workspace .pcm-resource-technical-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.pcm-maintenance-workspace .pcm-resource-technical-list article { display: flex; align-items: center; gap: 8px; border: 1px solid var(--pr-line); border-radius: 5px; padding: 12px; }
+html body .pcm-maintenance-workspace .pcm-resource-technical-select { flex: 1; text-align: left; justify-content: flex-start; border: 0; }
+.pcm-maintenance-workspace .pcm-resource-technical-select > span { display: flex; flex-direction: column-reverse; gap: 3px; }
+.pcm-maintenance-workspace .pcm-resource-technical-select b { color: var(--pr-muted); font-size: 10px; font-weight: 400; }
+.pcm-maintenance-workspace .pcm-resource-technical-list article > button.pcm-resource-user-status-control { font-size: 10px; padding: 3px 7px; min-height: 25px; }
+.pcm-maintenance-workspace .pcm-resource-technical-role-table > :is(div, article) { display: grid; grid-template-columns: minmax(0, 1fr) 120px 80px 40px; align-items: center; gap: 12px; padding: 12px 0; }
+.pcm-maintenance-workspace .pcm-resource-technical-role-table > div { font-size: 11px; color: var(--pr-muted); }
+.pcm-maintenance-workspace .pcm-resource-technical-role-table article > span:first-child { display: grid; gap: 3px; }
+.pcm-maintenance-workspace .pcm-resource-technical-role-table article b { font-size: 10px; color: var(--pr-muted); }
+.pcm-maintenance-workspace .pcm-resource-breadcrumb { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; }
+.pcm-maintenance-workspace .pcm-resource-technical-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-block: 16px; }
+.pcm-maintenance-workspace .pcm-resource-technical-extra { grid-column: 1 / -1; }
+.pcm-maintenance-workspace .pcm-resource-technical-editor footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
+/* Checklist: dimensões e estrutura independentes da biblioteca administrativa. */
+.pcm-maintenance-workspace .pcm-checklist-workspace { display: block; }
+.pcm-maintenance-workspace .pcm-checklist-workspace[data-view="home"] .pcm-resource-checklist-layout,
+.pcm-maintenance-workspace .pcm-checklist-workspace[data-view="library"] .pcm-resource-checklist-builder,
+.pcm-maintenance-workspace .pcm-checklist-workspace[data-view="editor"] .pcm-resource-checklist-library { display: none; }
+.pcm-maintenance-workspace .pcm-checklist-welcome { display: grid; justify-items: center; align-content: center; gap: 14px; min-height: 240px; padding: 24px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-builder > header { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-library > header { display: none; }
+.pcm-maintenance-workspace .pcm-resource-checklist-library .pcm-resource-checklist-new { display: none; }
+.pcm-maintenance-workspace .pcm-resource-checklist-models { display: grid; gap: 12px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-models > article { display: flex; gap: 12px; padding: 12px; border: 1px solid var(--pr-line); border-radius: 5px; }
+html body .pcm-maintenance-workspace .pcm-resource-checklist-model-open { display: grid; flex: 1; justify-content: stretch; text-align: left; border: 0; }
+.pcm-maintenance-workspace .pcm-resource-checklist-model-heading { display: flex; justify-content: space-between; gap: 16px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-model-actions { display: flex; align-items: center; gap: 6px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-quick-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+html body .pcm-maintenance-workspace .pcm-resource-checklist-quick-types > button { justify-content: flex-start; min-height: 62px; text-align: left; }
+.pcm-maintenance-workspace .pcm-resource-checklist-quick-types > button > span { display: grid; gap: 3px; flex: 1; }
+.pcm-maintenance-workspace .pcm-checklist-workspace:not([data-stage="0"]) .pcm-resource-checklist-quick-start,
+.pcm-maintenance-workspace .pcm-checklist-workspace:not([data-stage="1"]) .pcm-resource-checklist-plan-form,
+.pcm-maintenance-workspace .pcm-checklist-workspace:not([data-stage="2"]) .pcm-resource-checklist-items,
+.pcm-maintenance-workspace .pcm-checklist-workspace:not([data-stage="3"]) .pcm-resource-checklist-actions { display: none; }
+.pcm-maintenance-workspace .pcm-resource-checklist-plan-form, .pcm-maintenance-workspace .pcm-resource-checklist-item-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; margin: 0; padding: 16px 0; }
+.pcm-maintenance-workspace .pcm-resource-checklist-plan-form > label, .pcm-maintenance-workspace .pcm-resource-checklist-item-form > label { display: grid; gap: 6px; }
+.pcm-maintenance-workspace .is-wide { grid-column: 1 / -1; }
+.pcm-maintenance-workspace .pcm-resource-checklist-item { border: 1px solid var(--pr-line); border-radius: 5px; margin: 12px 0; padding: 12px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-item > header { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.pcm-maintenance-workspace .pcm-resource-checklist-item > header > span { flex: 1; display: grid; }
+.pcm-maintenance-workspace .pcm-resource-checklist-item > header > div { display: flex; gap: 6px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-item:not(.is-active) .pcm-resource-checklist-item-form { display: none; }
+.pcm-maintenance-workspace .pcm-resource-checklist-actions { position: static; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding-top: 16px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-actions > span { display: flex; align-items: center; gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-actions > div { display: flex; gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-empty-state { display: grid; justify-items: center; align-content: center; gap: 12px; min-height: 170px; padding: 24px; text-align: center; }
+.pcm-maintenance-workspace .pcm-resource-workflow-chip { font-size: 11px; color: var(--pr-muted); font-style: normal; }
+.pcm-maintenance-workspace .pcm-resource-checklist-modal { border: 1px solid var(--pr-line); padding: 16px; background: var(--pr-bg); }
+@container pcm-planning (max-width: 700px) {
+  .pcm-maintenance-workspace .pcm-resource-catalog-form,
+  .pcm-maintenance-workspace .pcm-resource-technical-form,
+  .pcm-maintenance-workspace .pcm-resource-checklist-plan-form,
+  .pcm-maintenance-workspace .pcm-resource-checklist-item-form { grid-template-columns: minmax(0, 1fr); }
+  .pcm-maintenance-workspace .pcm-resource-checklist-quick-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pcm-maintenance-workspace .pcm-resource-entity-actions__commands { grid-template-columns: minmax(0, 1fr); }
+}
+.pcm-maintenance-workspace .pcm-resource-catalog-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #0008; }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-dialog > section { width: min(720px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 20px; border: 1px solid var(--pr-line); border-radius: 8px; background: var(--pr-bg); }
+.pcm-maintenance-workspace .pcm-resource-catalog-dialog :is(header, footer) { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 12px; }
+.pcm-maintenance-workspace .pcm-resource-catalog-dialog footer > div { display: flex; gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-routing > div { display: grid; gap: 14px; }
+html body .pcm-maintenance-workspace .pcm-resource-checklist-routing .validation-policy-selector { background: transparent; color: var(--pr-ink); border-color: var(--pr-line); }
+html body .pcm-maintenance-workspace .pcm-resource-checklist-routing .validation-policy-selector__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-routing .validation-policy-selector__options button { text-align: left; justify-content: flex-start; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page :is(section, article, header, footer, aside, fieldset) { background: transparent; color: var(--pr-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page :is(.pcm-resource-technical-splitter, .pcm-resource-technical-layout-toolbar) { display: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-resource-catalog-dialog > section { background: var(--pr-bg); }
+html body .pcm-maintenance-workspace .pcm-resource-catalog-summary[data-single="true"] { display: none; }
+html body .pcm-maintenance-workspace .pcm-checklist-welcome { min-height: 160px; }

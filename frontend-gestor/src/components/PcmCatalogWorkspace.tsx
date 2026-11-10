@@ -734,54 +734,56 @@ export function PcmCatalogWorkspace({
   if (loading) return <div className="dashboard-loading">Carregando cadastros administrativos…</div>
 
   return (
-    <section className="admin-catalog-workspace pcm-catalog-workspace">
+    <section className="pcm-resource-catalog-workspace pcm-catalog-workspace">
       {error ? <div className="dashboard-error" role="alert"><strong>Cadastro não concluído.</strong><span>{error}</span></div> : null}
       {notice ? <div className="dashboard-notice" role="status">{notice}</div> : null}
 
-      <section className="admin-catalog-summary" aria-label="Listas disponíveis">
+      {editing === undefined && !actionRecord ? <>
+      <section className="pcm-resource-catalog-summary" data-single={scopeEntities.length === 1 && !showImports} aria-label="Listas disponíveis">
         {scopeEntities.map((entity) => {
           const item = ENTITY_DEFINITIONS[entity]
           return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setAssetContext(null); setSearch(''); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
         })}
         {showImports ? (
-          <button type="button" className="admin-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
+          <button type="button" className="pcm-resource-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
         ) : null}
       </section>
 
-      {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos'); setSearch('') }}>Voltar aos ativos</button></div> : null}
-      <section className="admin-catalog-panel">
+      {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos'); setSearch('') }}>Ativos</button></div> : null}
+      <section className="pcm-resource-catalog-panel">
         <header>
           <div><h2>{definition.label}</h2><button type="button" className="pcm-resource-help" aria-label="Ajuda desta lista" title={definition.description}>?</button></div>
           <div>{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
         </header>
-        {selectedEntity === 'planos' ? <div className="admin-plan-rule"><CheckIcon /><span><strong>Plano vinculado ao checklist</strong><small>O plano nasce em rascunho e só pode ser publicado com um checklist técnico já validado. A OS criada a partir dele seguirá para as assinaturas configuradas.</small></span></div> : null}
-        <label className="admin-catalog-search"><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Buscar em ${definition.label.toLowerCase()}`} /></label>
-        <div className="admin-catalog-table">
+        {selectedEntity === 'planos' ? <p className="pcm-resource-rule" title="O plano nasce em rascunho e só pode ser publicado com um checklist validado. As assinaturas configuradas continuam obrigatórias."><CheckIcon />Publicação vinculada a checklist validado</p> : null}
+        <label className="pcm-resource-catalog-search"><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Buscar em ${definition.label.toLowerCase()}`} /></label>
+        <div className="pcm-resource-catalog-table">
           <table>
             <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Ações</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setSearch(''); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `admin-catalog-chip admin-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="admin-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Gerenciar'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="admin-empty-state admin-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setSearch(''); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>
 
+      </> : null}
       {actionRecord ? (
-        <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !actionBusy) setActionRecord(null) }}>
-          <section className="admin-entity-actions" role="dialog" aria-modal="true" aria-labelledby="admin-entity-actions-title">
+        <div className="pcm-resource-page">
+          <section className="pcm-resource-entity-actions" role="region" aria-labelledby="pcm-resource-entity-actions-title">
             <header>
-              <div><span className="eyebrow">AÇÕES CONTROLADAS</span><h2 id="admin-entity-actions-title">Gerenciar {definition.singular}</h2></div>
-              <button type="button" disabled={actionBusy} onClick={() => setActionRecord(null)}>×</button>
+              <div><h2 id="pcm-resource-entity-actions-title">{valueText(actionRecord.nome || actionRecord.tag || definition.label)}</h2></div>
+              <button type="button" disabled={actionBusy} onClick={() => setActionRecord(null)}>Lista</button>
             </header>
-            <div className="admin-entity-actions__body">
-              <section className="admin-entity-actions__identity">
+            <div className="pcm-resource-entity-actions__body">
+              <section className="pcm-resource-entity-actions__identity">
                 <AssetIcon />
-                <span><strong>{valueText(actionRecord.tag || actionRecord.sku || actionRecord.nome)}</strong><small>{valueText(actionRecord.nome || actionRecord.id)} · {actionRecord.id}</small></span>
-                <i className={`admin-catalog-chip admin-catalog-chip--${String(actionRecord.workflow_status || actionRecord.status || '').toLowerCase()}`}>{statusLabel(actionRecord.workflow_status || actionRecord.status)}</i>
+                <span><strong>{valueText(actionRecord.tag || actionRecord.sku || actionRecord.nome)}</strong><small>{valueText(actionRecord.nome)}</small></span>
+                <i className={`pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(actionRecord.workflow_status || actionRecord.status || '').toLowerCase()}`}>{statusLabel(actionRecord.workflow_status || actionRecord.status)}</i>
               </section>
 
-              {selectedRelations.length ? <section className="admin-entity-actions__relations">{selectedRelations.map((relation) => <article key={relation.label}><strong>{relation.value}</strong><small>{relation.label}</small></article>)}</section> : null}
+              {selectedRelations.length ? <section className="pcm-resource-entity-actions__relations">{selectedRelations.map((relation) => <article key={relation.label}><strong>{relation.value}</strong><small>{relation.label}</small></article>)}</section> : null}
               {actionError ? <div className="dashboard-error" role="alert"><strong>Ação não concluída.</strong><span>{actionError}</span></div> : null}
 
-              <section className="admin-entity-actions__commands">
+              <section className="pcm-resource-entity-actions__commands">
                 <button type="button" disabled={actionBusy} onClick={() => { const record = actionRecord; setActionRecord(null); openEditor(record) }}>
                   <AssetIcon /><span><strong>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Visualizar cadastro' : 'Editar cadastro'}</strong><small>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Consulta sem edição operacional.' : 'Alterar dados técnicos e vínculos permitidos.'}</small></span>
                 </button>
@@ -800,7 +802,7 @@ export function PcmCatalogWorkspace({
                     : <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('INATIVO')}><StopIcon /><span><strong>Desativar cadastro</strong><small>Preserva histórico e vínculos existentes.</small></span></button>
                 ) : null}
 
-                {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="admin-entity-actions__guidance"><CheckIcon /><span><strong>{approvalOnly ? 'Plano já homologado' : 'Versão protegida'}</strong><small>{approvalOnly ? 'A consulta é somente leitura. O PCM administra revisões técnicas e checklists.' : 'Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.'}</small></span></div> : null}
+                {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="pcm-resource-entity-actions__guidance"><CheckIcon /><span><strong>{approvalOnly ? 'Plano já homologado' : 'Versão protegida'}</strong><small>{approvalOnly ? 'A consulta é somente leitura. O PCM administra revisões técnicas e checklists.' : 'Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.'}</small></span></div> : null}
 
                 {selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
                   <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO', 'PUBLICAR')}>
@@ -816,33 +818,33 @@ export function PcmCatalogWorkspace({
 
                 {!approvalOnly && canDeleteSelected ? (
                   confirmDelete
-                    ? <div className="admin-entity-actions__delete-confirm"><strong>{selectedEntity === 'planos' ? 'Arquivar este rascunho?' : 'Excluir definitivamente?'}</strong><span>{selectedEntity === 'planos' ? 'Ele deixará a biblioteca, mas continuará rastreável na auditoria.' : 'Esta ação só será aceita se o servidor confirmar que não existe qualquer vínculo operacional.'}</span><div><button type="button" disabled={actionBusy} onClick={() => setConfirmDelete(false)}>Voltar</button><button className="is-danger" type="button" disabled={actionBusy} onClick={() => void deleteRecord()}>{actionBusy ? 'Processando…' : selectedEntity === 'planos' ? 'Confirmar arquivamento' : 'Confirmar exclusão'}</button></div></div>
+                    ? <div className="pcm-resource-entity-actions__delete-confirm"><strong>{selectedEntity === 'planos' ? 'Arquivar este rascunho?' : 'Excluir definitivamente?'}</strong><span>{selectedEntity === 'planos' ? 'Ele deixará a biblioteca, mas continuará rastreável na auditoria.' : 'Esta ação só será aceita se o servidor confirmar que não existe qualquer vínculo operacional.'}</span><div><button type="button" disabled={actionBusy} onClick={() => setConfirmDelete(false)}>Cancelar exclusão</button><button className="is-danger" type="button" disabled={actionBusy} onClick={() => void deleteRecord()}>{actionBusy ? 'Processando…' : selectedEntity === 'planos' ? 'Confirmar arquivamento' : 'Confirmar exclusão'}</button></div></div>
                     : <button className="is-danger" type="button" disabled={actionBusy} onClick={() => setConfirmDelete(true)}><StopIcon /><span><strong>{selectedEntity === 'planos' ? 'Arquivar rascunho' : 'Excluir cadastro'}</strong><small>{selectedEntity === 'planos' ? 'Remove da operação sem apagar a trilha de auditoria.' : 'Disponível somente para registro nunca utilizado.'}</small></span></button>
                 ) : null}
               </section>
             </div>
-            <footer><span>Toda alteração é validada no servidor e registrada na auditoria.</span><div><button type="button" disabled={actionBusy} onClick={() => setActionRecord(null)}>Fechar</button></div></footer>
+            <footer><span>As ações seguem as permissões e os vínculos deste registro.</span></footer>
           </section>
         </div>
       ) : null}
 
       {editing !== undefined ? (
-        <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setEditing(undefined) }}>
-          <section role="dialog" aria-modal="true" aria-label={`${editing ? 'Editar' : 'Novo'} ${definition.singular}`}>
-            <header><div><span className="eyebrow">{editingReadOnly ? 'VISUALIZAÇÃO PROTEGIDA' : editing ? 'EDIÇÃO CONTROLADA' : 'NOVO CADASTRO'}</span><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>×</button></header>
-            <fieldset className="admin-catalog-form" disabled={editingReadOnly || saving}>
+        <div className="pcm-resource-page">
+          <section role="region" aria-label={`${editing ? 'Editar' : 'Novo'} ${definition.singular}`}>
+            <header><div><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>Cancelar</button></header>
+            <fieldset className="pcm-resource-catalog-form" disabled={editingReadOnly || saving}>
               {definition.fields.map((field) => {
                 const fieldValue = draft[field.key] ?? ''
                 if (field.type === 'select') {
                   const hasCurrentOption = field.options?.some((option) => option.value === String(fieldValue))
                   return (
                     <label key={field.key}>
-                      <span>{field.label}{field.required ? ' *' : ''}</span>
+                      <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select value={String(fieldValue)} onChange={(event) => updateDraftField(field, event.target.value)}>
                         {fieldValue !== '' && !hasCurrentOption ? <option value={String(fieldValue)}>{String(fieldValue)} · valor atual</option> : null}
                         {field.options?.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                       </select>
-                      {field.help ? <small>{field.help}</small> : null}
+
                     </label>
                   )
                 }
@@ -850,7 +852,7 @@ export function PcmCatalogWorkspace({
                   const dependencyMissing = field.dependsOn && !draft[field.dependsOn.field]
                   return (
                     <label key={field.key}>
-                      <span>{field.label}{field.required ? ' *' : ''}</span>
+                      <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select
                         value={String(fieldValue)}
                         disabled={Boolean(dependencyMissing)}
@@ -859,7 +861,7 @@ export function PcmCatalogWorkspace({
                         <option value="">{dependencyMissing ? 'Selecione o campo anterior…' : field.required ? 'Selecione…' : 'Sem vínculo'}</option>
                         {referenceOptions(field).map((option) => <option value={option.id} key={option.id}>{valueText(option.tag || option.sku || option.id)} · {valueText(option[field.referenceLabel ?? 'nome'])}</option>)}
                       </select>
-                      {field.help ? <small>{field.help}</small> : null}
+
                     </label>
                   )
                 }
@@ -867,7 +869,7 @@ export function PcmCatalogWorkspace({
                   const options = checklistOptions()
                   return (
                     <label key={field.key}>
-                      <span>{field.label}{field.required ? ' *' : ''}</span>
+                      <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select
                         value={String(fieldValue)}
                         disabled={!draft.ativo_id}
@@ -880,7 +882,7 @@ export function PcmCatalogWorkspace({
                           </option>
                         ))}
                       </select>
-                      {field.help ? <small>{field.help}</small> : null}
+
                     </label>
                   )
                 }
@@ -889,13 +891,13 @@ export function PcmCatalogWorkspace({
                   : String(fieldValue)
                 return (
                   <label key={field.key}>
-                    <span>{field.label}{field.required ? ' *' : ''}</span>
+                    <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                     <input
                       type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
                       value={inputValue}
                       onChange={(event) => updateDraftField(field, event.target.value)}
                     />
-                    {field.help ? <small>{field.help}</small> : null}
+
                   </label>
                 )
               })}

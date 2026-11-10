@@ -737,51 +737,51 @@ export function PcmChecklistBuilder({
   if (loading) return <div className="dashboard-loading">Carregando construtor de checklist…</div>
 
   return (
-    <section className="admin-checklist-workspace pcm-checklist-workspace" data-view={view} data-stage={stage} ref={workspaceRef}>
+    <section className="pcm-resource-checklist-workspace pcm-checklist-workspace" data-view={view} data-stage={stage} ref={workspaceRef}>
       <nav className="pcm-checklist-navigation" aria-label="Checklists">
         <button type="button" onClick={() => setView('library')}><ChecklistIcon />Biblioteca de modelos</button>
         <button type="button" className="primary-button" onClick={newModel}><PlusIcon />Criar modelo</button>
       </nav>
-      {view === 'home' ? <div className="pcm-checklist-welcome"><ChecklistIcon /><h2>Checklists</h2><p>Crie um modelo ou consulte sua biblioteca.</p><button type="button" onClick={newModel}>Criar modelo</button></div> : null}
+      {view === 'home' ? <div className="pcm-checklist-welcome"><ChecklistIcon /><p>Crie um modelo ou consulte sua biblioteca.</p></div> : null}
       {error ? <div className="dashboard-error" role="alert"><strong>Ação não concluída.</strong><span>{error}</span></div> : null}
       {notice ? <div className="dashboard-notice" role="status">{notice}</div> : null}
 
-      <div className="admin-checklist-layout">
-        <aside className="admin-checklist-library">
+      <div className="pcm-resource-checklist-layout">
+        <aside className="pcm-resource-checklist-library">
           <header><div><span className="eyebrow">BIBLIOTECA</span><h2>Modelos técnicos</h2></div><span className="manager-live-sync manager-live-sync--compact" title="Biblioteca sincronizada automaticamente"><i aria-hidden="true" />Ao vivo</span></header>
           <label><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar checklist ou ativo" /></label>
-          <button className="primary-button admin-checklist-new" type="button" onClick={newModel}>+ Novo checklist</button>
-          <div className="admin-checklist-models">
+          <button className="primary-button pcm-resource-checklist-new" type="button" onClick={newModel}>+ Novo checklist</button>
+          <div className="pcm-resource-checklist-models">
             {filteredModels.map((model) => (
               <article key={model.id} className={plan.id === model.id ? 'is-active' : ''}>
-                <button className="admin-checklist-model-open" type="button" onClick={() => void openModel(model.id)}>
-                  <span className="admin-checklist-model-heading">
+                <button className="pcm-resource-checklist-model-open" type="button" onClick={() => void openModel(model.id)}>
+                  <span className="pcm-resource-checklist-model-heading">
                     <strong>{model.nome}</strong>
-                    <i className={`admin-workflow-chip admin-workflow-chip--${String(model.workflow_status || 'rascunho').toLowerCase()}`}>{workflowLabel(model.workflow_status)}</i>
+                    <i className={`pcm-resource-workflow-chip pcm-resource-workflow-chip--${String(model.workflow_status || 'rascunho').toLowerCase()}`}>{workflowLabel(model.workflow_status)}</i>
                   </span>
-                  <small className="admin-checklist-model-asset">{model.ativo_tag || model.ativo_nome}{model.componente_nome ? ` · ${model.componente_nome}` : ''}</small>
-                  <b className="admin-checklist-model-meta">{model.itens_count ?? 0} itens <span>•</span> R{model.revisao || 1}</b>
+                  <small className="pcm-resource-checklist-model-asset">{model.ativo_tag || model.ativo_nome}{model.componente_nome ? ` · ${model.componente_nome}` : ''}</small>
+                  <b className="pcm-resource-checklist-model-meta">{model.itens_count ?? 0} itens <span>•</span> R{model.revisao || 1}</b>
                 </button>
-                <div className="admin-checklist-model-actions"><button type="button" title="Duplicar modelo" aria-label={`Duplicar ${model.nome}`} disabled={detailLoading || libraryBusy} onClick={() => void duplicateModel(model.id)}><CopyIcon /></button>
+                <div className="pcm-resource-checklist-model-actions"><button type="button" title="Duplicar modelo" aria-label={`Duplicar ${model.nome}`} disabled={detailLoading || libraryBusy} onClick={() => void duplicateModel(model.id)}><CopyIcon /></button>
                   {normalizedWorkflow(model.workflow_status) === 'VALIDADO' ? <button type="button" title="Nova revisão" aria-label={`Criar nova revisão de ${model.nome}`} disabled={libraryBusy} onClick={() => void createRevision(model.id)}><CopyIcon /></button> : null}
                   {normalizedWorkflow(model.workflow_status) === 'RASCUNHO' && !model.revisao_origem_id && !model.substitui_plano_id ? <button className="is-danger" type="button" title="Excluir rascunho" aria-label={`Excluir rascunho ${model.nome}`} disabled={libraryBusy} onClick={() => setModelToDelete(model)}><TrashIcon /></button> : null}
                 </div>
               </article>
             ))}
-            {!filteredModels.length ? <div className="admin-empty-state admin-checklist-empty"><ShieldIcon /><strong>Nenhum modelo encontrado</strong><span>Crie o primeiro checklist. Depois, a biblioteca exibirá ações de edição, envio, correção, revisão e exclusão segura de rascunhos.</span></div> : null}
+            {!filteredModels.length ? <div className="pcm-resource-empty-state pcm-resource-checklist-empty"><ShieldIcon /><strong>Nenhum modelo encontrado</strong><span>Use Criar modelo para adicionar o primeiro checklist.</span></div> : null}
           </div>
         </aside>
 
-        <section className="admin-checklist-builder">
+        <section className="pcm-resource-checklist-builder">
           <header>
             <div><h2>{plan.id ? plan.nome : 'Novo modelo de checklist'}</h2></div>
-            <span className={`admin-workflow-chip admin-workflow-chip--${String(plan.workflow_status || 'rascunho').toLowerCase()}`}>{workflowLabel(plan.workflow_status)}</span>
+            <span className={`pcm-resource-workflow-chip pcm-resource-workflow-chip--${String(plan.workflow_status || 'rascunho').toLowerCase()}`}>{workflowLabel(plan.workflow_status)}</span>
           </header>
 
           {detailLoading ? <div className="dashboard-loading">Abrindo modelo…</div> : (
             <>
               {sourceAnalysis ? (
-                <div className="admin-checklist-source">
+                <div className="pcm-resource-checklist-source">
                   <ChartIcon />
                   <span>
                     <small>SOLICITAÇÃO DO GESTOR</small>
@@ -794,17 +794,17 @@ export function PcmChecklistBuilder({
                   <b>{normalizedCriticality(sourceAnalysis.prioridade)}</b>
                 </div>
               ) : null}
-              {!canEdit ? <div className="admin-checklist-lock"><ShieldIcon /><span><strong>Versão protegida</strong><small>Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.</small></span></div> : null}
+              {!canEdit ? <div className="pcm-resource-checklist-lock"><ShieldIcon /><span><strong>Versão protegida</strong><small>Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.</small></span></div> : null}
               <nav className="pcm-checklist-stages" aria-label="Etapas de criação">{['Escolher etapas', 'Aplicação e programação', 'Configurar etapas', 'Conferir e salvar'].map((label, index) => <button type="button" key={label} aria-current={stage === index ? 'step' : undefined} disabled={index > 0 && !items.length} onClick={() => setStage(index)}>{index + 1}. {label}</button>)}</nav>
               {canEdit ? (
-                <section className="admin-checklist-quick-start" aria-label="Criação rápida de etapas">
+                <section className="pcm-resource-checklist-quick-start" aria-label="Criação rápida de etapas">
                   <header>
                     <div>
                       <span className="eyebrow">CRIAÇÃO RÁPIDA</span>
                       <h3>Qual etapa deseja adicionar?</h3>
                     </div>
                     <button
-                      className="admin-checklist-add-main"
+                      className="pcm-resource-checklist-add-main"
                       type="button"
                       onClick={() => addItem()}
                     >
@@ -812,7 +812,7 @@ export function PcmChecklistBuilder({
                       Etapa padrão
                     </button>
                   </header>
-                  <div className="admin-checklist-quick-types" aria-label="Adicionar etapa rápida">
+                  <div className="pcm-resource-checklist-quick-types" aria-label="Adicionar etapa rápida">
                     {QUICK_ITEM_TYPES.map(({ value, label, detail, Icon }) => (
                       <button type="button" key={value} onClick={() => addItem(value)}>
                         <Icon />
@@ -824,7 +824,7 @@ export function PcmChecklistBuilder({
                 </section>
               ) : null}
               <div className="pcm-checklist-chosen" hidden={stage !== 0}><ol>{items.map((item, index) => <li key={index}><span>{index + 1}. {RESPONSE_TYPES.find(type => type.value === item.tipo_resposta)?.label}</span><button type="button" aria-label={`Remover etapa ${index + 1}`} onClick={() => setItems(current => current.filter((_, position) => position !== index).map((entry, position) => ({ ...entry, ordem: position + 1 })))}><TrashIcon /></button></li>)}</ol><button type="button" disabled={!items.length} onClick={() => setStage(1)}>Confirmar etapas</button></div>
-              <fieldset disabled={!canEdit || saving || sending} className="admin-checklist-plan-form">
+              <fieldset disabled={!canEdit || saving || sending} className="pcm-resource-checklist-plan-form">
                 <legend>Programação e contexto</legend>
                 <label><span>Ativo *</span><select value={plan.ativo_id} onChange={(event) => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter((asset) => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map((asset) => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
                 <label><span>Componente</span><select value={plan.componente_id || ''} onChange={(event) => updatePlan('componente_id', event.target.value)}><option value="">Checklist do ativo completo</option>{availableComponents.map((component) => <option value={component.id} key={component.id}>{String(component.tag || component.id)} · {String(component.nome)}</option>)}</select></label>
@@ -839,7 +839,7 @@ export function PcmChecklistBuilder({
                 <label><span>Modo de parada</span><select value={plan.modo_parada_manutencao || 'DECISAO_EXECUTOR'} onChange={(event) => updatePlan('modo_parada_manutencao', event.target.value)}><option value="DECISAO_EXECUTOR">Decisão do executor</option><option value="OBRIGATORIA">Parada obrigatória</option><option value="SEM_PARADA">Executar sem parada</option></select></label>
               </fieldset>
 
-              <section className="admin-checklist-items">
+              <section className="pcm-resource-checklist-items">
                 <header>
                   <div>
                     <span className="eyebrow">ETAPAS</span>
@@ -849,7 +849,7 @@ export function PcmChecklistBuilder({
                 </header>
                 {items.map((item, index) => (
                   <fieldset
-                    className={`admin-checklist-item ${activeItemIndex === index ? 'is-active' : ''}`}
+                    className={`pcm-resource-checklist-item ${activeItemIndex === index ? 'is-active' : ''}`}
                     data-checklist-index={index}
                     disabled={!canEdit || saving || sending}
                     key={`${item.id || 'new'}-${index}`}
@@ -867,7 +867,7 @@ export function PcmChecklistBuilder({
                         <button className="is-danger" type="button" disabled={items.length === 1} onClick={() => removeItem(index)} aria-label="Remover etapa" title="Remover etapa"><TrashIcon /></button>
                       </div>
                     </header>
-                    <div className="admin-checklist-item-form">
+                    <div className="pcm-resource-checklist-item-form">
                       <label className="is-wide"><span>Título da etapa *</span><input data-step-title value={item.titulo} onChange={(event) => updateItem(index, { titulo: event.target.value })} placeholder="O que o Operador deve verificar?" /></label>
                       <label><span>Tipo de resposta</span><select value={item.tipo_resposta} onChange={(event) => updateItem(index, { tipo_resposta: event.target.value as ChecklistResponseType })}>{RESPONSE_TYPES.map((type) => <option value={type.value} key={type.value}>{type.label}</option>)}</select></label>
                       <label><span>Categoria</span><select value={item.categoria || 'OPERACIONAL'} onChange={(event) => updateItem(index, { categoria: event.target.value })}><option value="OPERACIONAL">Operacional</option><option value="MANUTENCAO">Manutenção</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option><option value="MEIO_AMBIENTE">Meio ambiente</option></select></label>
@@ -885,7 +885,7 @@ export function PcmChecklistBuilder({
 
               {stage === 3 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd></dl><p>Salvar mantém o rascunho. O envio para validação segue as regras atuais do sistema.</p></section> : null}
               <div className="pcm-checklist-stage-actions"><button type="button" disabled={stage === 0} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button>{stage < 3 ? <button type="button" disabled={!items.length} onClick={() => setStage(current => Math.min(3, current + 1))}>Continuar</button> : null}</div>
-              <footer className="admin-checklist-actions">
+              <footer className="pcm-resource-checklist-actions">
                 <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A assinatura técnica libera esta versão.</small></span>
                 {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Enviar para validação</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
               </footer>
@@ -896,7 +896,7 @@ export function PcmChecklistBuilder({
 
       {routingOpen && canEdit ? (
         <div
-          className="admin-catalog-dialog admin-checklist-routing-dialog"
+          className="pcm-resource-catalog-dialog pcm-resource-checklist-routing-dialog"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !sending) setRoutingOpen(false)
@@ -910,7 +910,7 @@ export function PcmChecklistBuilder({
               </div>
               <button type="button" disabled={sending} aria-label="Fechar" onClick={() => setRoutingOpen(false)}>×</button>
             </header>
-            <div className="admin-checklist-routing">
+            <div className="pcm-resource-checklist-routing">
               <header><ShieldIcon /><span><strong>Filtro de assinatura</strong><small>Somente os validadores escolhidos poderão aprovar esta versão.</small></span></header>
               {error ? <div className="dashboard-error" role="alert"><strong>Revise o envio.</strong><span>{error}</span></div> : null}
               <div>
@@ -930,9 +930,9 @@ export function PcmChecklistBuilder({
         </div>
       ) : null}
 
-      {modelToDelete ? <div className="admin-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !libraryBusy) setModelToDelete(null) }}><section role="dialog" aria-modal="true" aria-labelledby="delete-checklist-title">
+      {modelToDelete ? <div className="pcm-resource-catalog-dialog" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !libraryBusy) setModelToDelete(null) }}><section role="dialog" aria-modal="true" aria-labelledby="delete-checklist-title">
         <header><div><span className="eyebrow">EXCLUSÃO PROTEGIDA</span><h2 id="delete-checklist-title">Excluir rascunho</h2></div><button type="button" disabled={libraryBusy} onClick={() => setModelToDelete(null)}>×</button></header>
-        <div className="admin-checklist-delete"><ShieldIcon /><span><strong>{modelToDelete.nome}</strong><small>O servidor verificará planos, ordens, execuções e validações. Se existir qualquer vínculo, a exclusão será bloqueada e o modelo deverá permanecer no histórico.</small></span></div>
+        <div className="pcm-resource-checklist-delete"><ShieldIcon /><span><strong>{modelToDelete.nome}</strong><small>O servidor verificará planos, ordens, execuções e validações. Se existir qualquer vínculo, a exclusão será bloqueada e o modelo deverá permanecer no histórico.</small></span></div>
         <footer><span>Modelos validados nunca são excluídos por esta ação.</span><div><button type="button" disabled={libraryBusy} onClick={() => setModelToDelete(null)}>Cancelar</button><button className="is-danger" type="button" disabled={libraryBusy} onClick={() => void deleteDraftModel()}>{libraryBusy ? 'Excluindo…' : 'Excluir rascunho'}</button></div></footer>
       </section></div> : null}
     </section>
