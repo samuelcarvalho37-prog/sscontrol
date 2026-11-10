@@ -93,7 +93,7 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-operational-alerts__label {
 .pcm-planning-section > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry { display: flex; align-items: center; gap: 14px; padding: 20px; min-height: 80px; border: 1px solid var(--pcm-shell-line); border-radius: 4px; background: var(--pcm-shell-panel); color: var(--pcm-shell-ink); text-align: left; cursor: pointer; }
 .pcm-planning-entry > span:last-child { margin-left: auto; color: var(--pcm-shell-muted); }
-.pcm-planning-entry:hover { outline: 1px solid #3487c7; }
+.pcm-planning-entry:hover { outline: 1px solid var(--pcm-shell-ink); }
 .pcm-planning-shortcuts { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--pcm-shell-line); }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-shortcuts button { padding: 7px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--pcm-shell-muted); cursor: pointer; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-shortcuts button[aria-current="page"] { border-color: var(--pcm-shell-line); background: var(--pcm-shell-panel); color: var(--pcm-shell-ink); }
@@ -108,3 +108,22 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-ca
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .admin-catalog-summary > button.is-active { background: color-mix(in srgb, #176fc1 18%, var(--pcm-shell-panel)) !important; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-catalog-panel > header p, .admin-catalog-summary small, .manager-live-sync) { color: var(--pcm-shell-muted) !important; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace__plan { padding: 7px 10px; border: 1px solid var(--pcm-shell-line); border-radius: 4px; font-size: 12px; cursor: pointer; }
+/* Avisos compactos, com campos e interação herdados do tema. */
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices { width: min(640px, calc(100vw - 32px)); max-height: min(720px, calc(100dvh - 48px)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-header { padding: 16px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-header h2 { margin: 0; font-size: 20px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices :is(.manager-notification-scroll, .manager-notification-empty) { min-height: 160px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-empty { padding: 24px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px 16px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools > div { display: flex; gap: 8px; flex-wrap: wrap; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools select { flex: 1 1 180px; width: auto; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools > label { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-muted); border-color: var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools > label input { background: transparent !important; color: var(--pcm-shell-ink) !important; border: 0; box-shadow: none; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools input::placeholder { color: var(--pcm-shell-muted); opacity: 1; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-section { background: transparent; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry { transition: background-color 160ms ease, box-shadow 160ms ease; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry:is(:hover, :focus-visible) { outline: 2px solid color-mix(in srgb, var(--pcm-shell-ink) 55%, var(--pcm-shell-panel)); outline-offset: 2px; background-color: color-mix(in srgb, var(--pcm-shell-ink) 7%, var(--pcm-shell-panel)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry > span:last-child { color: inherit; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect^="glass"] .pcm-planning-entry { background-image: linear-gradient(130deg, #ffffff38, #ffffff08 35%, #ffffff30 46%, transparent 60%); backdrop-filter: blur(10px) saturate(125%); box-shadow: inset 0 1px 0 #ffffff55, 0 3px 12px #00000010; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect="gradient"] .pcm-planning-entry { background-image: linear-gradient(125deg, color-mix(in srgb, var(--pcm-shell-panel) 75%, white), var(--pcm-shell-panel)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-heading { padding-bottom: 12px; border-bottom: 1px solid var(--pcm-shell-line); }

@@ -515,6 +515,15 @@ export function NotificationCenter({
     }
   }
 
+  const isPcm = profile.toUpperCase() === "PCM";
+
+  useEffect(() => {
+    if (!open || !isPcm) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open, isPcm, onClose]);
+
   if (!open) return null;
 
   const audienceDescription =
@@ -529,7 +538,7 @@ export function NotificationCenter({
       onMouseDown={onClose}
     >
       <aside
-        className={`manager-notification-center manager-notification-center--${audience}`}
+        className={`manager-notification-center manager-notification-center--${audience}${isPcm ? " pcm-notices" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="manager-notification-title"
@@ -537,11 +546,11 @@ export function NotificationCenter({
       >
         <header className="manager-notification-header">
           <div>
-            <span className="eyebrow">{audience === "admin" ? "CENTRAL DE ALERTAS" : "ALERTAS E DECISÕES"}</span>
-            <h2 id="manager-notification-title">{audience === "admin" ? "Alertas e atividade do sistema" : "Central operacional"}</h2>
-            <p>{audienceDescription}</p>
+            {!isPcm ? <span className="eyebrow">{audience === "admin" ? "CENTRAL DE ALERTAS" : "ALERTAS E DECISÕES"}</span> : null}
+            <h2 id="manager-notification-title">{isPcm ? "Avisos" : audience === "admin" ? "Alertas e atividade do sistema" : "Central operacional"}</h2>
+            {!isPcm ? <p>{audienceDescription}</p> : null}
           </div>
-          <div>
+          {!isPcm ? <div>
             <button
               type="button"
               onClick={onClose}
@@ -549,12 +558,12 @@ export function NotificationCenter({
             >
               ×
             </button>
-          </div>
+          </div> : null}
         </header>
 
         {["PCM", "GESTOR"].includes(profile.toUpperCase()) ? <div id="pcm-operational-alerts-slot" /> : null}
 
-        <section
+        {!isPcm ? <section
           className="manager-notification-summary"
           aria-label="Resumo dos alertas"
         >
@@ -594,7 +603,7 @@ export function NotificationCenter({
             <span>Todas</span>
             <strong>{profileNotifications.length}</strong>
           </button>
-        </section>
+        </section> : null}
 
         {audience === "admin" ? (
           <section className="manager-system-alerts" aria-label="Integridade e última alteração registrada">
@@ -635,6 +644,12 @@ export function NotificationCenter({
             />
           </label>
           <div>
+            {isPcm ? <select aria-label="Exibir avisos" value={scope} onChange={event => setScope(event.target.value as NotificationScope)}>
+              <option value="unread">Não lidos ({summary.unread})</option>
+              <option value="all">Todos ({profileNotifications.length})</option>
+              <option value="critical">Críticos ({summary.critical})</option>
+              <option value="today">Hoje ({summary.today})</option>
+            </select> : null}
             <select
               value={category}
               onChange={(event) =>
@@ -672,7 +687,7 @@ export function NotificationCenter({
               <span>
                 {profileNotifications.length
                   ? "Ajuste a busca ou consulte todas as notificações."
-                  : ["PCM", "GESTOR"].includes(profile.toUpperCase()) ? "Consulte os avisos da lousa acima. Novas ocorrências, análises e decisões aparecerão aqui." : "Novas ocorrências, análises e decisões aparecerão aqui."}
+                  : isPcm ? "" : ["GESTOR"].includes(profile.toUpperCase()) ? "Consulte os avisos da lousa acima. Novas ocorrências, análises e decisões aparecerão aqui." : "Novas ocorrências, análises e decisões aparecerão aqui."}
               </span>
               {profileNotifications.length ? (
                 <button
