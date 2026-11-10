@@ -1,3 +1,6 @@
+import { Filter } from 'lucide-react'
+import { filterPcmCatalog } from './pcmCatalogFilters'
+import type { PcmColumnRules, PcmColumnRule } from './pcmCatalogFilters'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { actionAdminEntity, listAdminEntity, saveAdminEntity } from '../services/api/catalog'
 import { listAdminChecklistModels } from '../services/api/checklists'
@@ -5,7 +8,7 @@ import { isGestorAuthenticationError } from '../services/api/gestor'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { AdminEntity, AdminEntityRecord } from '../types/catalog'
 import type { AdminChecklistPlan } from '../types/checklists'
-import { AssetIcon, CheckIcon, MoreIcon, SearchIcon, SettingsIcon, StopIcon } from './Icons'
+import { AssetIcon, CheckIcon, MoreIcon, SettingsIcon, StopIcon } from './Icons'
 
 export type AdminCatalogScope = 'structure' | 'assets' | 'inventory' | 'maintenance'
 
@@ -295,7 +298,7 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
   },
   planos: {
     entity: 'planos', singular: 'plano', label: 'Planos programados', description: 'Programações que seguem para validação técnica antes de chegar ao Operador.',
-    columns: [{ key: 'nome', label: 'Plano' }, { key: 'ativo_id', label: 'Ativo' }, { key: 'tipo', label: 'Tipo' }, { key: 'gatilho_tipo', label: 'Gatilho' }, { key: 'gatilho_valor', label: 'Intervalo' }, { key: 'workflow_status', label: 'Fluxo' }],
+    columns: [{ key: 'nome', label: 'Plano' }, { key: 'ativo_id', label: 'Ativo' }, { key: 'tipo', label: 'Tipo' }, { key: 'gatilho_tipo', label: 'Gatilho' }, { key: 'gatilho_valor', label: 'Intervalo' }, { key: 'workflow_status', label: 'Situação do plano' }],
     fields: [
       { key: 'planta_contexto', label: 'Planta', type: 'reference', reference: 'plantas', referenceLabel: 'nome', required: true },
       { key: 'setor_contexto', label: 'Setor', type: 'reference', reference: 'setores', referenceLabel: 'nome', dependsOn: { field: 'planta_contexto', targetField: 'planta_id' }, required: true },
@@ -403,7 +406,8 @@ export function PcmCatalogWorkspace({
   const [selectedEntity, setSelectedEntity] = useState<AdminEntity>(scopeEntities[0])
   const [records, setRecords] = useState<Partial<Record<AdminEntity, AdminEntityRecord[]>>>({})
   const [checklistModels, setChecklistModels] = useState<AdminChecklistPlan[]>([])
-  const [search, setSearch] = useState('')
+  const [columnFilters, setColumnFilters] = useState<PcmColumnRules>({})
+  const [filterKey, setFilterKey] = useState<string | null>(null)
   const [editing, setEditing] = useState<AdminEntityRecord | null | undefined>(undefined)
   const [draft, setDraft] = useState<AdminEntityRecord>({ id: '' })
   const [loading, setLoading] = useState(true)
@@ -417,7 +421,6 @@ export function PcmCatalogWorkspace({
 
   useEffect(() => {
     setSelectedEntity(SCOPE_ENTITIES[scope][0])
-    setSearch('')
     setEditing(undefined)
     setActionRecord(null)
   }, [scope])
@@ -466,13 +469,28 @@ export function PcmCatalogWorkspace({
 
   const [assetContext, setAssetContext] = useState<AdminEntityRecord | null>(null)
   const definition = ENTITY_DEFINITIONS[selectedEntity]
+  const hasColumnFilters = Object.values(columnFilters).some(rule => rule.value || rule.order)
   const editingReadOnly = approvalOnly || (selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing)))
-  const visibleRecords = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return (records[selectedEntity] ?? []).filter((record) => (
-      (!assetContext || selectedEntity !== 'componentes' || String(record.ativo_id) === String(assetContext.id)) && (!term || Object.values(record).some((value) => valueText(value).toLowerCase().includes(term)))
-    ))
-  }, [records, search, selectedEntity, assetContext])
+  useEffect(() => { setColumnFilters({}); setFilterKey(null) }, [selectedEntity])
+  const visibleRecords = useMemo(() => filterPcmCatalog((records[selectedEntity] ?? []).filter(record => !assetContext || selectedEntity !== 'componentes' || String(record.ativo_id) === String(assetContext.id)), columnFilters, (row, key) => key.endsWith('_id') ? displayCell(key, row[key]) : row[key]), [records, selectedEntity, assetContext, columnFilters])
+  const activeFilter = filterKey ? columnFilters[filterKey] ?? { value: '', operator: 'contains' as const, order: '' as const } : null
+  const activeColumn = definition.columns.find(column => column.key === filterKey)
+  const numericFilter = ['saude_pct', 'horas_acumuladas', 'gatilho_valor', 'estoque_atual', 'estoque_minimo', 'valor_unitario'].includes(filterKey ?? '')
+  const choiceFilter = ['status', 'criticidade', 'gatilho_tipo', 'workflow_status', 'tipo', 'unidade'].includes(filterKey ?? '')
+  const filterChoices = filterKey ? [...new Set((records[selectedEntity] ?? []).map(record => String(record[filterKey] ?? '')).filter(Boolean))] : []
+  function updateColumnFilter(patch: Partial<PcmColumnRule>) {
+    if (!filterKey) return
+    setColumnFilters(current => {
+      const next = { ...current }
+      if (patch.order) for (const key of Object.keys(next)) next[key] = { ...next[key], order: '' }
+      next[filterKey] = { ...(current[filterKey] ?? { value: '', operator: numericFilter || choiceFilter ? 'eq' : 'contains' }), ...patch }
+      return next
+    })
+  }
+  function toggleColumnFilter(key: string) {
+    setFilterKey(current => current === key ? null : key)
+    setColumnFilters(current => current[key] ? current : { ...current, [key]: { value: '', operator: ['saude_pct', 'horas_acumuladas', 'gatilho_valor', 'estoque_atual', 'estoque_minimo', 'valor_unitario', 'status', 'criticidade', 'gatilho_tipo', 'workflow_status', 'tipo', 'unidade'].includes(key) ? 'eq' : 'contains', order: '' } })
+  }
 
   function referenceLabel(entity: AdminEntity, id: unknown): string {
     const item = (records[entity] ?? []).find((record) => String(record.id) === String(id))
@@ -742,25 +760,32 @@ export function PcmCatalogWorkspace({
       <section className="pcm-resource-catalog-summary" data-single={scopeEntities.length === 1 && !showImports} aria-label="Listas disponíveis">
         {scopeEntities.map((entity) => {
           const item = ENTITY_DEFINITIONS[entity]
-          return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setAssetContext(null); setSearch(''); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
+          return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setAssetContext(null); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
         })}
         {showImports ? (
           <button type="button" className="pcm-resource-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
         ) : null}
       </section>
 
-      {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos'); setSearch('') }}>Ativos</button></div> : null}
+      {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos') }}>Ativos</button></div> : null}
       <section className="pcm-resource-catalog-panel">
         <header>
           <div><h2>{definition.label}</h2><button type="button" className="pcm-resource-help" aria-label="Ajuda desta lista" title={definition.description}>?</button></div>
           <div>{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
         </header>
         {selectedEntity === 'planos' ? <p className="pcm-resource-rule" title="O plano nasce em rascunho e só pode ser publicado com um checklist validado. As assinaturas configuradas continuam obrigatórias."><CheckIcon />Publicação vinculada a checklist validado</p> : null}
-        <label className="pcm-resource-catalog-search"><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Buscar em ${definition.label.toLowerCase()}`} /></label>
+        {filterKey && activeFilter && activeColumn ? <section className="pcm-column-filter" onKeyDown={event => { if (event.key === 'Escape') setFilterKey(null) }} aria-label={`Filtrar ${activeColumn.label}`}>
+          <strong>{activeColumn.label}</strong>
+          {numericFilter ? <label>Comparação<select value={activeFilter.operator} onChange={event => updateColumnFilter({ operator: event.target.value as PcmColumnRule['operator'] })}><option value="eq">Igual a</option><option value="neq">Diferente de</option><option value="lt">Menor que</option><option value="lte">Até</option><option value="gt">Maior que</option><option value="gte">A partir de</option></select></label> : null}
+          {choiceFilter ? <label>Valor<select value={activeFilter.value} onChange={event => updateColumnFilter({ value: event.target.value })}><option value="">Todos</option>{filterChoices.map(value => <option key={value} value={value}>{displayCell(filterKey, value)}</option>)}</select></label> : <label>{numericFilter ? 'Valor' : 'Contém'}<input autoFocus key={filterKey} type={numericFilter ? 'number' : 'text'} step="any" value={activeFilter.value} onChange={event => updateColumnFilter({ value: event.target.value })} /></label>}
+          <label>Ordem<select value={activeFilter.order ?? ''} onChange={event => updateColumnFilter({ order: event.target.value as PcmColumnRule['order'] })}><option value="">Original</option><option value="asc">{filterKey === 'criticidade' ? 'Baixa → crítica' : numericFilter ? 'Menor → maior' : 'A → Z'}</option><option value="desc">{filterKey === 'criticidade' ? 'Crítica → baixa' : numericFilter ? 'Maior → menor' : 'Z → A'}</option></select></label>
+          <button type="button" onClick={() => { setColumnFilters(current => { const next = { ...current }; delete next[filterKey]; return next }); setFilterKey(null) }}>Limpar coluna</button><button type="button" onClick={() => setFilterKey(null)}>Concluir</button>
+        </section> : null}
+        {hasColumnFilters ? <div className="pcm-column-filter-summary"><span>{visibleRecords.length} resultado(s)</span><button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button></div> : null}
         <div className="pcm-resource-catalog-table">
           <table>
-            <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Ações</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setSearch(''); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
+            <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.key === 'linha_id' ? column.label : <button type="button" className="pcm-column-trigger" aria-expanded={filterKey === column.key} aria-label={`Filtrar ${column.label}`} data-active={Boolean(columnFilters[column.key]?.value || columnFilters[column.key]?.order)} onClick={() => toggleColumnFilter(column.key)}>{column.label}<Filter size={12} /></button>}</th>)}<th>Detalhes</th></tr></thead>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{hasColumnFilters ? 'Nenhum resultado para esses filtros' : EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{hasColumnFilters ? 'Ajuste as colunas ou limpe os filtros para ver a lista completa.' : approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{hasColumnFilters ? <button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button> : !approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>
@@ -771,7 +796,7 @@ export function PcmCatalogWorkspace({
           <section className="pcm-resource-entity-actions" role="region" aria-labelledby="pcm-resource-entity-actions-title">
             <header>
               <div><h2 id="pcm-resource-entity-actions-title">{valueText(actionRecord.nome || actionRecord.tag || definition.label)}</h2></div>
-              <button type="button" disabled={actionBusy} onClick={() => setActionRecord(null)}>Lista</button>
+              <button type="button" disabled={actionBusy} onClick={() => setActionRecord(null)}>← {definition.label}</button>
             </header>
             <div className="pcm-resource-entity-actions__body">
               <section className="pcm-resource-entity-actions__identity">
@@ -831,7 +856,7 @@ export function PcmCatalogWorkspace({
       {editing !== undefined ? (
         <div className="pcm-resource-page">
           <section role="region" aria-label={`${editing ? 'Editar' : 'Novo'} ${definition.singular}`}>
-            <header><div><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>Cancelar</button></header>
+            <header><div><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div></header>
             <fieldset className="pcm-resource-catalog-form" disabled={editingReadOnly || saving}>
               {definition.fields.map((field) => {
                 const fieldValue = draft[field.key] ?? ''
@@ -882,7 +907,7 @@ export function PcmCatalogWorkspace({
                           </option>
                         ))}
                       </select>
-
+                      <small>{draft.ativo_id && !options.length ? 'Nenhum checklist publicado para este ativo e componente. Crie o modelo em Checklists e conclua as assinaturas configuradas para disponibilizá-lo aqui.' : 'Use uma versão publicada para este ativo e, quando informado, para este componente. O plano será salvo em rascunho.'}</small>
                     </label>
                   )
                 }
@@ -902,7 +927,7 @@ export function PcmCatalogWorkspace({
                 )
               })}
             </fieldset>
-            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O backend força RASCUNHO e INATIVO.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{!editingReadOnly ? <button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
+            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O plano será salvo como rascunho. A publicação exige um checklist validado.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{!editingReadOnly ? <button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
           </section>
         </div>
       ) : null}

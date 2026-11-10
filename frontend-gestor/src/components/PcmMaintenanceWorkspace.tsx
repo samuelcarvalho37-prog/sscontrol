@@ -19,7 +19,7 @@ export function PcmMaintenanceWorkspace({ onSessionExpired }: { onSessionExpired
   const selected = MODULES.find(item => item.id === module)
   return <main className="content pcm-maintenance-workspace" aria-label="Planejamento da manutenção">
     <header className="pcm-planning-heading">
-      <div>{selected ? <button type="button" className="pcm-planning-back" onClick={() => setModule(null)}><ArrowLeft size={15} /> Planejamento</button> : <span className="eyebrow">MANUTENÇÃO</span>}<h1>{selected?.label ?? 'Planejamento'}</h1></div>
+      <div>{selected ? <button type="button" className="pcm-planning-back" onClick={() => setModule(null)}><ArrowLeft size={15} /> Manutenção</button> : <span className="eyebrow">PLANEJAMENTO</span>}<h1>{selected?.label ?? 'Manutenção'}</h1></div>
       <button type="button" className="pcm-planning-help" aria-label="Ajuda desta área" title={selected?.help ?? 'Comece pela estrutura dos ativos e pelas áreas técnicas. Depois prepare checklists, planos e materiais. Os indicadores da lousa mostram o que precisa de atenção.'}><CircleHelp size={18} /></button>
     </header>
     {!selected ? <div className="pcm-planning-sections">{[1, 2, 3].map(step => {

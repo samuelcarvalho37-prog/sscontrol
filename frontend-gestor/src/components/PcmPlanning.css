@@ -148,3 +148,28 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-resource-catalog-dialog > section { background: var(--pr-bg); }
 html body .pcm-maintenance-workspace .pcm-resource-catalog-summary[data-single="true"] { display: none; }
 html body .pcm-maintenance-workspace .pcm-checklist-welcome { min-height: 160px; }
+/* Filtros do catálogo pertencem ao PCM e acompanham a superfície do tema. */
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-trigger {
+  min-height: 30px; padding: 4px 6px; border-color: transparent; background: transparent !important;
+  color: var(--pr-muted); font-size: 12px; justify-content: flex-start; gap: 6px; white-space: nowrap;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-trigger:is(:hover, :focus-visible, [data-active="true"]) {
+  color: var(--pr-ink); border-color: var(--pr-line); background: var(--pr-surface) !important;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-filter {
+  display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 14px; margin: 12px 0;
+  border: 1px solid var(--pr-line); border-radius: 6px; background: var(--pr-surface);
+}
+.pcm-maintenance-workspace .pcm-column-filter > strong { align-self: center; margin-right: 8px; font-size: 13px; }
+.pcm-maintenance-workspace .pcm-column-filter label { display: grid; gap: 5px; flex: 1 1 140px; max-width: 280px; font-size: 11px; color: var(--pr-muted); }
+.pcm-maintenance-workspace .pcm-column-filter-summary { display: flex; align-items: center; gap: 12px; padding-block: 8px; font-size: 12px; color: var(--pr-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.pcm-resource-technical-search, .pcm-resource-checklist-search) input {
+  background: transparent !important; box-shadow: none !important; border: 0 !important; outline-offset: 2px;
+  color: var(--pr-ink) !important; min-width: 0; width: 100%; border-radius: 0; padding: 0;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-technical-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-technical-select { min-width: 0; min-height: 42px; padding: 6px; border: 0; background: transparent !important; justify-content: flex-start; text-align: left; }
+.pcm-maintenance-workspace .pcm-resource-technical-select span { display: grid; gap: 3px; }
+.pcm-maintenance-workspace .pcm-resource-technical-select b { font-size: 10px; font-weight: 400; color: var(--pr-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-catalog-chip--parado { color: color-mix(in srgb, var(--pr-ink) 45%, #ed5367); background: color-mix(in srgb, #ed5367 14%, var(--pr-bg)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-catalog-chip--operando { color: var(--pr-ink); background: color-mix(in srgb, #23b58f 12%, var(--pr-bg)); }

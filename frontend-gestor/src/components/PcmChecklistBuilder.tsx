@@ -1,3 +1,4 @@
+import './PcmChecklistRefinement.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   listAdminTechnicalAnalyses,
@@ -429,7 +430,7 @@ export function PcmChecklistBuilder({
     setActiveItemIndex(0)
     setRoutingOpen(false)
     setError('')
-    setNotice('Novo modelo iniciado. Preencha os campos e os itens abaixo.')
+    setNotice('')
   }
 
   async function duplicateModel(modelId: string) {
@@ -739,8 +740,8 @@ export function PcmChecklistBuilder({
   return (
     <section className="pcm-resource-checklist-workspace pcm-checklist-workspace" data-view={view} data-stage={stage} ref={workspaceRef}>
       <nav className="pcm-checklist-navigation" aria-label="Checklists">
-        <button type="button" onClick={() => setView('library')}><ChecklistIcon />Biblioteca de modelos</button>
-        <button type="button" className="primary-button" onClick={newModel}><PlusIcon />Criar modelo</button>
+        <button type="button" aria-pressed={view === 'library'} onClick={() => setView('library')}><ChecklistIcon />Biblioteca de modelos</button>
+        <button type="button" className="primary-button" aria-pressed={view === 'editor'} onClick={newModel}><PlusIcon />Criar modelo</button>
       </nav>
       {view === 'home' ? <div className="pcm-checklist-welcome"><ChecklistIcon /><p>Crie um modelo ou consulte sua biblioteca.</p></div> : null}
       {error ? <div className="dashboard-error" role="alert"><strong>Ação não concluída.</strong><span>{error}</span></div> : null}
@@ -796,34 +797,29 @@ export function PcmChecklistBuilder({
               ) : null}
               {!canEdit ? <div className="pcm-resource-checklist-lock"><ShieldIcon /><span><strong>Versão protegida</strong><small>Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.</small></span></div> : null}
               <nav className="pcm-checklist-stages" aria-label="Etapas de criação">{['Escolher etapas', 'Aplicação e programação', 'Configurar etapas', 'Conferir e salvar'].map((label, index) => <button type="button" key={label} aria-current={stage === index ? 'step' : undefined} disabled={index > 0 && !items.length} onClick={() => setStage(index)}>{index + 1}. {label}</button>)}</nav>
+              <div className="pcm-checklist-step-composer" hidden={stage !== 0}>
               {canEdit ? (
                 <section className="pcm-resource-checklist-quick-start" aria-label="Criação rápida de etapas">
                   <header>
                     <div>
-                      <span className="eyebrow">CRIAÇÃO RÁPIDA</span>
-                      <h3>Qual etapa deseja adicionar?</h3>
+                      <span className="eyebrow">ETAPAS DISPONÍVEIS</span>
+                      <h3>Adicione na ordem de execução</h3>
                     </div>
-                    <button
-                      className="pcm-resource-checklist-add-main"
-                      type="button"
-                      onClick={() => addItem()}
-                    >
-                      <PlusIcon />
-                      Etapa padrão
-                    </button>
+
                   </header>
                   <div className="pcm-resource-checklist-quick-types" aria-label="Adicionar etapa rápida">
                     {QUICK_ITEM_TYPES.map(({ value, label, detail, Icon }) => (
-                      <button type="button" key={value} onClick={() => addItem(value)}>
+                      <button type="button" key={value} disabled={saving || sending} onClick={() => addItem(value)} title={`Adicionar etapa: ${label}`}>
                         <Icon />
                         <span><strong>{label}</strong><small>{detail}</small></span>
-                        <PlusIcon />
+                        <span className="pcm-checklist-type-count" aria-label={`${items.filter(item => item.tipo_resposta === value).length} adicionadas`}>{items.some(item => item.tipo_resposta === value) ? items.filter(item => item.tipo_resposta === value).length : <PlusIcon />}</span>
                       </button>
                     ))}
                   </div>
                 </section>
               ) : null}
-              <div className="pcm-checklist-chosen" hidden={stage !== 0}><ol>{items.map((item, index) => <li key={index}><span>{index + 1}. {RESPONSE_TYPES.find(type => type.value === item.tipo_resposta)?.label}</span><button type="button" aria-label={`Remover etapa ${index + 1}`} onClick={() => setItems(current => current.filter((_, position) => position !== index).map((entry, position) => ({ ...entry, ordem: position + 1 })))}><TrashIcon /></button></li>)}</ol><button type="button" disabled={!items.length} onClick={() => setStage(1)}>Confirmar etapas</button></div>
+              <div className="pcm-checklist-chosen" hidden={stage !== 0}><header><h3>Sequência de execução</h3><span>{items.length} etapa(s)</span></header>{!items.length ? <p className="pcm-checklist-chosen-empty">Escolha uma etapa ao lado para começar.</p> : null}<ol>{items.map((item, index) => <li key={index}><span>{index + 1}. {RESPONSE_TYPES.find(type => type.value === item.tipo_resposta)?.label}</span><button type="button" disabled={!canEdit || saving || sending} aria-label={`Remover etapa ${index + 1}`} onClick={() => setItems(current => current.filter((_, position) => position !== index).map((entry, position) => ({ ...entry, ordem: position + 1 })))}><TrashIcon /></button></li>)}</ol></div>
+              </div>
               <fieldset disabled={!canEdit || saving || sending} className="pcm-resource-checklist-plan-form">
                 <legend>Programação e contexto</legend>
                 <label><span>Ativo *</span><select value={plan.ativo_id} onChange={(event) => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter((asset) => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map((asset) => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
@@ -884,7 +880,7 @@ export function PcmChecklistBuilder({
               </section>
 
               {stage === 3 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd></dl><p>Salvar mantém o rascunho. O envio para validação segue as regras atuais do sistema.</p></section> : null}
-              <div className="pcm-checklist-stage-actions"><button type="button" disabled={stage === 0} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button>{stage < 3 ? <button type="button" disabled={!items.length} onClick={() => setStage(current => Math.min(3, current + 1))}>Continuar</button> : null}</div>
+              <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 3 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending} onClick={() => setStage(current => Math.min(3, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
               <footer className="pcm-resource-checklist-actions">
                 <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A assinatura técnica libera esta versão.</small></span>
                 {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Enviar para validação</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
