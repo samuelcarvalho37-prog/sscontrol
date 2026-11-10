@@ -531,6 +531,7 @@ export function PcmChecklistBuilder({
   function updatePlan<K extends keyof AdminChecklistPlan>(key: K, value: AdminChecklistPlan[K]) {
     setPlan((current) => {
       const next = { ...current, [key]: value }
+      if (key === 'tipo' && value === 'CORRETIVA') next.criticidade = 'BAIXA'
       if (key === 'ativo_id' && String(current.ativo_id) !== String(value)) next.componente_id = ''
       if (key === 'gatilho_tipo') {
         const unitByTrigger: Record<string, string> = { DIAS: 'dias', HORAS: 'h', PARAMETRO: '' }
@@ -606,7 +607,7 @@ export function PcmChecklistBuilder({
   function validateDraft(): string {
     if (!plan.ativo_id) return 'Selecione o ativo do checklist.'
     if (!plan.nome.trim()) return 'Informe o nome do checklist.'
-    if (!(Number(plan.gatilho_valor) > 0)) return 'Informe um valor de gatilho maior que zero.'
+
     if (!items.length) return 'Inclua pelo menos um item.'
     for (const [index, item] of items.entries()) {
       if (!item.titulo.trim()) return `Informe o título do item ${index + 1}.`
@@ -760,8 +761,8 @@ export function PcmChecklistBuilder({
                     <strong>{model.nome}</strong>
                     <i className={`pcm-resource-workflow-chip pcm-resource-workflow-chip--${String(model.workflow_status || 'rascunho').toLowerCase()}`}>{workflowLabel(model.workflow_status)}</i>
                   </span>
-                  <small className="pcm-resource-checklist-model-asset">{model.ativo_tag || model.ativo_nome}{model.componente_nome ? ` · ${model.componente_nome}` : ''}</small>
-                  <b className="pcm-resource-checklist-model-meta">{model.itens_count ?? 0} itens <span>•</span> R{model.revisao || 1}</b>
+                  <small className="pcm-resource-checklist-model-asset">{[model.ativo_tag, model.ativo_nome].filter(Boolean).join(' · ') || 'Ativo não informado'}{model.componente_nome ? ` / ${model.componente_nome}` : ''}</small>
+                  <span className="pcm-resource-checklist-model-meta">{model.itens_count ?? 0} itens <span>•</span> R{model.revisao || 1}</span>
                 </button>
                 <div className="pcm-resource-checklist-model-actions"><button type="button" title="Duplicar modelo" aria-label={`Duplicar ${model.nome}`} disabled={detailLoading || libraryBusy} onClick={() => void duplicateModel(model.id)}><CopyIcon /></button>
                   {normalizedWorkflow(model.workflow_status) === 'VALIDADO' ? <button type="button" title="Nova revisão" aria-label={`Criar nova revisão de ${model.nome}`} disabled={libraryBusy} onClick={() => void createRevision(model.id)}><CopyIcon /></button> : null}
@@ -796,7 +797,7 @@ export function PcmChecklistBuilder({
                 </div>
               ) : null}
               {!canEdit ? <div className="pcm-resource-checklist-lock"><ShieldIcon /><span><strong>Versão protegida</strong><small>Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.</small></span></div> : null}
-              <nav className="pcm-checklist-stages" aria-label="Etapas de criação">{['Escolher etapas', 'Aplicação e programação', 'Configurar etapas', 'Conferir e salvar'].map((label, index) => <button type="button" key={label} aria-current={stage === index ? 'step' : undefined} disabled={index > 0 && !items.length} onClick={() => setStage(index)}>{index + 1}. {label}</button>)}</nav>
+              <nav className="pcm-checklist-stages" aria-label="Etapas de criação">{['Etapas', 'Nome e tipo', 'Aplicação', 'Configurar etapas', 'Revisão'].map((label, index) => <button type="button" key={label} aria-current={stage === index ? 'step' : undefined} disabled={index > 0 && !items.length} onClick={() => setStage(index)}>{index + 1}. {label}</button>)}</nav>
               <div className="pcm-checklist-step-composer" hidden={stage !== 0}>
               {canEdit ? (
                 <section className="pcm-resource-checklist-quick-start" aria-label="Criação rápida de etapas">
@@ -820,19 +821,22 @@ export function PcmChecklistBuilder({
               ) : null}
               <div className="pcm-checklist-chosen" hidden={stage !== 0}><header><h3>Sequência de execução</h3><span>{items.length} etapa(s)</span></header>{!items.length ? <p className="pcm-checklist-chosen-empty">Escolha uma etapa ao lado para começar.</p> : null}<ol>{items.map((item, index) => <li key={index}><span>{index + 1}. {RESPONSE_TYPES.find(type => type.value === item.tipo_resposta)?.label}</span><button type="button" disabled={!canEdit || saving || sending} aria-label={`Remover etapa ${index + 1}`} onClick={() => setItems(current => current.filter((_, position) => position !== index).map((entry, position) => ({ ...entry, ordem: position + 1 })))}><TrashIcon /></button></li>)}</ol></div>
               </div>
+              <fieldset disabled={!canEdit || saving || sending} className="pcm-checklist-definition" hidden={stage !== 1}>
+                <legend>O que será feito?</legend>
+                <label><span>Nome do checklist *</span><input value={plan.nome} onChange={event => updatePlan('nome', event.target.value)} placeholder="Ex.: Inspeção do motor principal" /></label>
+                <label><span>Tipo de manutenção *</span><select value={plan.tipo} onChange={event => updatePlan('tipo', event.target.value)}>
+                  {!["PREVENTIVA", "PREDITIVA", "INSPECAO", "LUBRIFICACAO", "CORRETIVA", "MELHORIA", "BASEADA_CONDICAO", "QUALIDADE", "SEGURANCA"].includes(plan.tipo) ? <option value={plan.tipo}>{plan.tipo}</option> : null}
+                  <option value="PREVENTIVA">Preventiva</option><option value="PREDITIVA">Preditiva</option><option value="INSPECAO">Inspeção</option><option value="LUBRIFICACAO">Lubrificação</option><option value="CORRETIVA">Corretiva</option><option value="MELHORIA">Melhoria</option><option value="BASEADA_CONDICAO">Baseada em condição</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option>
+                </select></label>
+                {plan.tipo === 'CORRETIVA' ? <label><span>Prioridade do atendimento</span><select value={plan.criticidade === 'CRITICA' ? 'urgente' : plan.criticidade === 'BAIXA' ? 'normal' : 'ajustada'} onChange={event => updatePlan('criticidade', event.target.value === 'urgente' ? 'CRITICA' : 'BAIXA')}><option value="normal">Não emergencial · baixa</option><option value="urgente">Emergencial · crítica</option>{!['BAIXA', 'CRITICA'].includes(plan.criticidade) ? <option value="ajustada">Criticidade ajustada na aplicação</option> : null}</select></label> : null}
+                {plan.tipo === 'CORRETIVA' ? <p>A corretiva emergencial sugere criticidade crítica. A não emergencial sugere baixa. Você pode ajustar a criticidade na aplicação.</p> : null}
+              </fieldset>
               <fieldset disabled={!canEdit || saving || sending} className="pcm-resource-checklist-plan-form">
-                <legend>Programação e contexto</legend>
-                <label><span>Ativo *</span><select value={plan.ativo_id} onChange={(event) => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter((asset) => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map((asset) => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
-                <label><span>Componente</span><select value={plan.componente_id || ''} onChange={(event) => updatePlan('componente_id', event.target.value)}><option value="">Checklist do ativo completo</option>{availableComponents.map((component) => <option value={component.id} key={component.id}>{String(component.tag || component.id)} · {String(component.nome)}</option>)}</select></label>
-                <label className="is-wide"><span>Nome do checklist *</span><input value={plan.nome} onChange={(event) => updatePlan('nome', event.target.value)} /></label>
-                <label><span>Tipo</span><select value={plan.tipo} onChange={(event) => updatePlan('tipo', event.target.value)}><option value="PREVENTIVA">Preventiva</option><option value="PREDITIVA">Preditiva</option><option value="INSPECAO">Inspeção</option><option value="QUALIDADE">Qualidade</option><option value="SEGURANCA">Segurança</option></select></label>
-                <label><span>Criticidade</span><select value={plan.criticidade} onChange={(event) => updatePlan('criticidade', event.target.value)}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></label>
-                <label><span>Disparo</span><select value={plan.gatilho_tipo} onChange={(event) => updatePlan('gatilho_tipo', event.target.value)}><option value="DIAS">Periodicidade</option><option value="HORAS">Horímetro</option><option value="PARAMETRO">Parâmetro técnico</option></select></label>
-                <label><span>Intervalo *</span><input type="number" min="0.01" step="0.01" value={plan.gatilho_valor} onChange={(event) => updatePlan('gatilho_valor', event.target.value)} /></label>
-                <label><span>Unidade do disparo</span><select value={plan.unidade || ''} onChange={(event) => updatePlan('unidade', event.target.value)}>{UNIT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-                <label><span>Tempo estimado</span><select value={String(plan.tempo_estimado_min || 60)} onChange={(event) => updatePlan('tempo_estimado_min', Number(event.target.value))}><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">1 hora</option><option value="90">1h30</option><option value="120">2 horas</option><option value="240">4 horas</option><option value="480">1 turno</option></select></label>
-                <label><span>Bloqueio LOTO</span><select value={plan.requer_bloqueio || 'SIM'} onChange={(event) => updatePlan('requer_bloqueio', event.target.value)}>{YES_NO.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-                <label><span>Modo de parada</span><select value={plan.modo_parada_manutencao || 'DECISAO_EXECUTOR'} onChange={(event) => updatePlan('modo_parada_manutencao', event.target.value)}><option value="DECISAO_EXECUTOR">Decisão do executor</option><option value="OBRIGATORIA">Parada obrigatória</option><option value="SEM_PARADA">Executar sem parada</option></select></label>
+                <legend>Onde será aplicado?</legend>
+                <label><span>Ativo *</span><select value={plan.ativo_id} onChange={event => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter(asset => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map(asset => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
+                <label><span>Componente opcional</span><select value={plan.componente_id || ''} onChange={event => updatePlan('componente_id', event.target.value)}><option value="">Ativo completo</option>{availableComponents.map(component => <option value={component.id} key={component.id}>{String(component.tag || component.id)} · {String(component.nome)}</option>)}</select></label>
+                <label><span>Criticidade</span><select value={plan.criticidade} onChange={event => updatePlan('criticidade', event.target.value)}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></label>
+                <p className="is-wide pcm-checklist-scheduling-note">Periodicidade, tempo estimado, bloqueio LOTO e modo de parada são configurados no plano vinculado ao checklist publicado.</p>
               </fieldset>
 
               <section className="pcm-resource-checklist-items">
@@ -879,8 +883,8 @@ export function PcmChecklistBuilder({
                 ))}
               </section>
 
-              {stage === 3 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd></dl><p>Salvar mantém o rascunho. O envio para validação segue as regras atuais do sistema.</p></section> : null}
-              <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 3 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending} onClick={() => setStage(current => Math.min(3, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
+              {stage === 4 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Tipo</dt><dd>{plan.tipo.replaceAll('_', ' ')}</dd><dt>Criticidade</dt><dd>{plan.criticidade}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd></dl><p>Salvar mantém o rascunho. O envio para validação segue as regras atuais do sistema.</p></section> : null}
+              <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 4 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending || (stage === 1 && !plan.nome.trim()) || (stage === 2 && !plan.ativo_id)} onClick={() => setStage(current => Math.min(4, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
               <footer className="pcm-resource-checklist-actions">
                 <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A assinatura técnica libera esta versão.</small></span>
                 {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Enviar para validação</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}

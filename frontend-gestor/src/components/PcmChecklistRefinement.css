@@ -31,7 +31,7 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-
   outline: 2px solid var(--pr-ink); outline-offset: 2px;
 }
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-checklist-stages {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 20px;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0 0 20px;
 }
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-checklist-stages button {
   justify-content: flex-start; text-align: left; padding: 9px 10px; font-size: 12px;
@@ -92,3 +92,29 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-
 @media (prefers-reduced-motion: reduce) {
   html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-checklist-navigation button { transition: none; }
 }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-checklist-models > article {
+ display: flex; align-items: center; gap: 10px; padding: 10px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--pr-line) 55%, transparent); border-radius: 0;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-checklist-model-open {
+ display: grid; justify-items: start; justify-content: start; text-align: left; gap: 5px; flex: 1; border: 0; border-radius: 3px; min-height: 60px; padding: 8px 10px; box-shadow: none;
+}
+.pcm-maintenance-workspace .pcm-resource-checklist-model-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pcm-maintenance-workspace .pcm-resource-checklist-model-asset { display: block; overflow-wrap: anywhere; }
+.pcm-maintenance-workspace .pcm-resource-checklist-model-meta { font-size: 11px; color: var(--pr-muted); font-weight: 400; }
+.pcm-maintenance-workspace .pcm-resource-checklist-model-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-checklist-library > label > input { background: transparent !important; border-radius: 0 !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-checklist-stages { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+html body .pcm-maintenance-workspace .pcm-checklist-definition { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; padding: 16px 0; margin: 0; max-width: 850px; }
+html body .pcm-maintenance-workspace .pcm-checklist-definition[hidden] { display: none !important; }
+.pcm-maintenance-workspace .pcm-checklist-definition label { display: grid; gap: 6px; }
+.pcm-maintenance-workspace .pcm-checklist-definition p { grid-column: 1/-1; color: var(--pr-muted); font-size: 12px; }
+.pcm-maintenance-workspace .pcm-checklist-scheduling-note { color: var(--pr-muted); font-size: 12px; max-width: 650px; }
+@container pcm-planning (max-width: 700px) {
+ html body .pcm-maintenance-workspace .pcm-checklist-definition { grid-template-columns: minmax(0, 1fr); }
+ html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-checklist-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+html body .app-shell[data-pcm-workspace="true"][data-pcm-theme] .pcm-maintenance-workspace .pcm-planning-page .pcm-checklist-workspace .pcm-resource-checklist-library > label > input {
+ background: transparent !important; color: var(--pr-ink) !important; border: 0 !important; box-shadow: none !important;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-checklist-models { gap: 0; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-checklist-models > article { padding-block: 4px; }
