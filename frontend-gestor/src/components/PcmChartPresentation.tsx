@@ -4,6 +4,8 @@ export type PcmChartPresentation = {
   themeAdaptive?: boolean
   contentSurfaceColor?: string
   contentSurfaceOpacity?: number
+  cardGlassIntensity?: number
+  cardGlassBlur?: number
   accentStyle?: 'solid' | 'double' | 'diagonal' | 'triangle' | 'cone'
   chartVisualStyle?: 'technical' | 'fluid' | 'luminous' | 'stepped' | 'editorial' | 'separated' | 'volume' | 'capsule' | 'striped'
   gradientEnd?: string

@@ -28,3 +28,102 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(h
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(p, small, .eyebrow) { color: var(--pcm-shell-muted); }
 html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace :is(button, summary) { color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line); }
 @media (max-width: 900px) { html body .app-shell[data-pcm-workspace="true"] > .topbar { padding-inline: 12px; } .pcm-header-navigation { margin-left: 0; } html body .app-shell[data-pcm-workspace="true"] > .app-content { padding-inline: 12px !important; } }
+html body .app-shell[data-pcm-workspace="true"] > .topbar { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'identity actions' 'alerts navigation' 'tools tools'; gap: 6px 16px; }
+.app-shell[data-pcm-workspace="true"] .topbar__identity { grid-area: identity; min-width: 0; }
+.app-shell[data-pcm-workspace="true"] .topbar__actions { grid-area: actions; margin-left: 0; justify-self: end; gap: 8px; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-navigation { grid-area: navigation; margin: 0; justify-self: center; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-alerts-slot { grid-area: alerts; }
+.app-shell[data-pcm-workspace="true"] .pcm-header-toolbar-slot { grid-area: tools; }
+html body .app-shell[data-pcm-workspace="true"] .topbar__identity > div > span { display: block; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line b { color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-identity-line strong { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .user-badge[hidden] { display: none !important; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip { padding: 0; width: 12px; min-width: 12px; background: transparent; border: 0; font-size: 0; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip i { width: 7px; height: 7px; margin: 0; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip[data-online="false"] i { background: #d99b35; }
+html body .app-shell[data-pcm-workspace="true"] :is(.manager-notification-trigger, .logout-button) { min-width: 30px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--pcm-shell-line); background: transparent; color: var(--pcm-shell-ink); border-radius: 5px; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-trigger > svg { width: 16px; height: 16px; }
+html body .app-shell[data-pcm-workspace="true"] .vorqix-logo--compact { width: 112px; border-radius: 0; background: transparent; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-theme="dark"] .vorqix-logo--compact { filter: grayscale(1) invert(1); mix-blend-mode: screen; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search { background: var(--pcm-shell-panel) !important; border-color: var(--pcm-shell-line) !important; color: var(--pcm-shell-muted) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search input { background: transparent !important; color: var(--pcm-shell-ink) !important; box-shadow: none !important; border: 0 !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__search input::placeholder { color: var(--pcm-shell-muted); opacity: 1; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-header-content :is(.pcm-operational-alerts__summary, .pcm-operational-alerts__category) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-header-content :is(.pcm-operational-alerts__summary, .pcm-operational-alerts__category) strong { background: color-mix(in srgb, var(--pcm-shell-ink) 10%, transparent); color: var(--pcm-shell-ink); }
+@media (max-width: 720px) { html body .app-shell[data-pcm-workspace="true"] > .topbar { grid-template-areas: 'identity actions' 'navigation navigation' 'alerts alerts' 'tools tools'; } }
+
+/* Uma única faixa para identidade, acesso e ferramentas. */
+html body .app-shell[data-pcm-workspace="true"] > .topbar { grid-template-areas: 'identity actions' 'navigation navigation' 'tools tools'; gap: 4px 16px; }
+html body .app-shell[data-pcm-workspace="true"] .topbar__actions { display: flex; align-items: center; }
+html body .app-shell[data-pcm-workspace="true"] .topbar__actions .pcm-header-alerts-slot { flex: 0 0 auto; grid-area: auto; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-header-navigation { justify-self: start; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip { display: inline-flex; align-items: center; justify-content: center; height: 8px; min-height: 0; width: 8px; min-width: 8px; border-radius: 50%; box-shadow: none; line-height: 0; }
+html body .app-shell[data-pcm-workspace="true"] .connection-chip::before,
+html body .app-shell[data-pcm-workspace="true"] .connection-chip::after { display: none; }
+html body .app-shell[data-pcm-workspace="true"] :is(.manager-notification-trigger, .logout-button, .pcm-operational-alert-trigger) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; min-height: 30px; padding: 5px 9px; background: transparent; color: var(--pcm-shell-ink); border: 1px solid var(--pcm-shell-line); border-radius: 5px; font-size: 11px; cursor: pointer; }
+.pcm-operational-alert-trigger strong { padding: 1px 4px; border-radius: 3px; background: color-mix(in srgb, currentColor 12%, transparent); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__toolbar :is(.pcm-canvas__button, .pcm-canvas__select-mode) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border: 1px solid var(--pcm-shell-line) !important; box-shadow: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__toolbar :is(.pcm-canvas__button, .pcm-canvas__select-mode):is(:hover, :focus-visible) { background: color-mix(in srgb, #176fc1 22%, var(--pcm-shell-panel)) !important; color: var(--pcm-shell-ink) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__toolbar button[aria-pressed="true"] { background: #176fc1 !important; color: #fff !important; border-color: #438dcc !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-canvas__toolbar button:disabled { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-muted) !important; opacity: .55; }
+
+/* A central usa os mesmos tokens, incluindo seus estados e campos. */
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-center { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border: 1px solid var(--pcm-shell-line); border-radius: 10px; }
+html body .app-shell[data-pcm-workspace="true"] :is(.manager-notification-header, .manager-notification-summary, .manager-notification-tools, .manager-notification-footer) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-scroll { background: var(--pcm-shell-bg) !important; color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-center :is(h2, h3, strong, b) { color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-center :is(p, small, .eyebrow, .manager-notification-empty > span) { color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-center :is(button, select, input, .manager-notification-search) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-center :is(button.is-active, button[aria-pressed="true"], button:hover) { background: color-mix(in srgb, #176fc1 18%, var(--pcm-shell-panel)) !important; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-group > div > button { border: 1px solid var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] #pcm-operational-alerts-slot:not(:empty) { padding: 12px 16px; border-bottom: 1px solid var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] #pcm-operational-alerts-slot .pcm-operational-alerts { margin: 0; display: grid; gap: 8px; padding: 0; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-operational-alerts__label { font-size: 11px; }
+
+/* Entrada por páginas: estrutura, preparação e recursos. */
+.pcm-maintenance-workspace { container-type: inline-size; container-name: pcm-planning; }
+.pcm-planning-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.pcm-planning-heading h1 { margin: 4px 0 0; font-size: 23px; line-height: 1.2; }
+.pcm-planning-back, .pcm-planning-help { display: inline-flex; align-items: center; gap: 6px; padding: 5px; background: transparent; border: 0; color: var(--pcm-shell-muted); cursor: pointer; }
+.pcm-planning-sections { display: grid; gap: 24px; }
+.pcm-planning-section > header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.pcm-planning-section > header > span { font-size: 12px; color: var(--pcm-shell-muted); }
+.pcm-planning-section h2 { font-size: 15px; margin: 0; }
+.pcm-planning-section > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry { display: flex; align-items: center; gap: 14px; padding: 20px; min-height: 80px; border: 1px solid var(--pcm-shell-line); border-radius: 4px; background: var(--pcm-shell-panel); color: var(--pcm-shell-ink); text-align: left; cursor: pointer; }
+.pcm-planning-entry > span:last-child { margin-left: auto; color: var(--pcm-shell-muted); }
+.pcm-planning-entry:hover { outline: 1px solid var(--pcm-shell-ink); }
+.pcm-planning-shortcuts { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-shortcuts button { padding: 7px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--pcm-shell-muted); cursor: pointer; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-shortcuts button[aria-current="page"] { border-color: var(--pcm-shell-line); background: var(--pcm-shell-panel); color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-catalog-search, .admin-plan-rule, .admin-catalog-kpis > button, .admin-catalog-table, .admin-catalog-table thead, .admin-checklist-library, .admin-checklist-detail, .admin-technical-panel, .admin-empty-state, .admin-entity-actions, .admin-entity-editor) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-plan-rule small, .admin-catalog-kpis small, .admin-empty-state span) { color: var(--pcm-shell-muted) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(input:not([type="checkbox"]), select, textarea) { background: var(--pcm-shell-bg) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .admin-catalog-header > div > p { display: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace { background: var(--pcm-shell-bg); color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace :is(button, li) { background-color: var(--pcm-shell-panel); color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line); }
+@container pcm-planning (max-width: 620px) { .pcm-planning-section > div { grid-template-columns: 1fr; } }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-catalog-summary > button, .admin-catalog-panel, .admin-catalog-panel > header, .admin-catalog-table th, .admin-checklist-models > article, .admin-checklist-step, .technical-structure-panel) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .admin-catalog-summary > button.is-active { background: color-mix(in srgb, #176fc1 18%, var(--pcm-shell-panel)) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-catalog-panel > header p, .admin-catalog-summary small, .manager-live-sync) { color: var(--pcm-shell-muted) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace__plan { padding: 7px 10px; border: 1px solid var(--pcm-shell-line); border-radius: 4px; font-size: 12px; cursor: pointer; }
+/* Avisos compactos, com campos e interação herdados do tema. */
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices { width: min(640px, calc(100vw - 32px)); max-height: min(720px, calc(100dvh - 48px)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-header { padding: 16px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-header h2 { margin: 0; font-size: 20px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices :is(.manager-notification-scroll, .manager-notification-empty) { min-height: 160px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-empty { padding: 24px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px 16px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools > div { display: flex; gap: 8px; flex-wrap: wrap; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-notices .manager-notification-tools select { flex: 1 1 180px; width: auto; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools > label { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-muted); border-color: var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools > label input { background: transparent !important; color: var(--pcm-shell-ink) !important; border: 0; box-shadow: none; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .manager-notification-tools input::placeholder { color: var(--pcm-shell-muted); opacity: 1; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-section { background: transparent; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry { transition: background-color 160ms ease, box-shadow 160ms ease; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry:is(:hover, :focus-visible) { outline: 2px solid color-mix(in srgb, var(--pcm-shell-ink) 55%, var(--pcm-shell-panel)); outline-offset: 2px; background-color: color-mix(in srgb, var(--pcm-shell-ink) 7%, var(--pcm-shell-panel)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry > span:last-child { color: inherit; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect^="glass"] .pcm-planning-entry { background-image: linear-gradient(130deg, #ffffff38, #ffffff08 35%, #ffffff30 46%, transparent 60%); backdrop-filter: blur(10px) saturate(125%); box-shadow: inset 0 1px 0 #ffffff55, 0 3px 12px #00000010; }
+html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect="gradient"] .pcm-planning-entry { background-image: linear-gradient(125deg, color-mix(in srgb, var(--pcm-shell-panel) 75%, white), var(--pcm-shell-panel)); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-heading { padding-bottom: 12px; border-bottom: 1px solid var(--pcm-shell-line); }

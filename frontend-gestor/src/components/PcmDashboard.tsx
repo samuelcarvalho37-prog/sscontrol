@@ -1,3 +1,4 @@
+import { clonePcmPrintBoard } from './pcmPrintAppearance'
 import { PcmHeaderContent } from './PcmHeaderContent'
 import { PcmPointAppearanceEditor } from './PcmPointAppearanceEditor'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -215,6 +216,7 @@ function pcmNumberWidget({ id, title, categoryId, value, note, icon, tone = 'def
     note,
     modes: [{ id: 'number', label: 'Número' }],
     defaultMode: 'number',
+    onActivate: onClick,
     render: (_mode, _palette, segments) => <Metric label="" value={segmentValue?.(segments ?? {}) ?? value} note={note} icon={icon} tone={tone} onClick={onClick} />,
   }
 }
@@ -235,10 +237,10 @@ const pcmCanvasCategories: PcmCanvasCategory[] = [
 
 interface InsightItem { id: string; title: string; detail: string; status?: string }
 
-function InsightWorkspace({ insight, onClose, onSelect }: { insight: { title: string; description: string; items: InsightItem[] } | null; onClose: () => void; onSelect: (item: InsightItem) => void }) {
+function InsightWorkspace({ insight, onClose, onSelect, onPlan }: { insight: { title: string; description: string; items: InsightItem[] } | null; onClose: () => void; onSelect: (item: InsightItem) => void; onPlan?: () => void }) {
   if (!insight) return null
   return <section className="pcm-focus-workspace" aria-labelledby="pcm-insight-title" aria-live="polite">
-      <header><button type="button" className="pcm-focus-workspace__back" onClick={onClose}>← Painel</button><div><span className="pcm-section-kicker">CONSULTA OPERACIONAL</span><h2 id="pcm-insight-title">{insight.title}</h2><p>{insight.description}</p></div><span className="pcm-focus-workspace__count">{insight.items.length} registro(s)</span></header>
+      <header><button type="button" className="pcm-focus-workspace__back" onClick={onClose}>← Painel</button><div><span className="pcm-section-kicker">CONSULTA OPERACIONAL</span><h2 id="pcm-insight-title">{insight.title}</h2><p>{insight.description}</p></div><span className="pcm-focus-workspace__count">{insight.items.length} registro(s)</span>{onPlan ? <button type="button" className="pcm-focus-workspace__plan" onClick={onPlan}>Abrir planejamento</button> : null}</header>
       {insight.items.length ? <ul>{insight.items.map(item => <li key={item.id}><button type="button" onClick={() => onSelect(item)}><div><strong>{item.title}</strong><span>{item.detail}</span></div>{item.status ? <small>{item.status}</small> : null}</button></li>)}</ul> : <p className="pcm-empty">Nenhum registro disponível neste momento.</p>}
     </section>
 }
@@ -809,7 +811,7 @@ interface ExecutablePlan {
   recurrenceDays: number | null
 }
 
-export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void }) {
+export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory, onOpenPlanning }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void; onOpenPlanning?: () => void }) {
   const [timeMetric, setTimeMetric] = useState<'MTTR' | 'MTBF'>('MTTR')
   const [days, setDays] = useState('30')
   const [demoMode] = useState(false)
@@ -1048,16 +1050,18 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       filters.textContent = activeFilters.length ? `Filtros aplicados: ${activeFilters.join(' · ')}` : 'Filtros: nenhum'
     }
 
-    const boardCopy = printDocument.importNode(board, true) as HTMLElement
-    boardCopy.removeAttribute('id')
-    boardCopy.classList.remove('is-selecting')
-    boardCopy.querySelectorAll('.pcm-canvas__group-controls, .pcm-canvas__resize-handle, .pcm-canvas__select-handle, .pcm-canvas__palette-control, .pcm-canvas__widget-tools, .pcm-canvas__context-menu').forEach(element => element.remove())
-    boardCopy.querySelectorAll('.is-dragging, .is-drop-target, .is-selected, .has-palette-open, .is-drop-left, .is-drop-right, .is-drop-top, .is-drop-bottom').forEach(element => element.classList.remove('is-dragging', 'is-drop-target', 'is-selected', 'has-palette-open', 'is-drop-left', 'is-drop-right', 'is-drop-top', 'is-drop-bottom'))
-    boardCopy.querySelectorAll<HTMLElement>('[draggable]').forEach(element => element.removeAttribute('draggable'))
+    const boardCopy = clonePcmPrintBoard(board, printDocument)
+    printDocument.querySelector('.pcm-canvas-print__board')?.classList.add('pcm-canvas')
     printDocument.querySelector('.pcm-canvas-print__board')?.appendChild(boardCopy)
 
     const printStyles = printDocument.createElement('style')
-    printStyles.textContent = `body{margin:0;padding:22px;background:#fff;color:#17324a;font:12px/1.4 Arial,sans-serif}.pcm-canvas-print__heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #173f5f}.pcm-canvas-print__heading h1{margin:0;font-size:20px}.pcm-canvas-print__heading p{margin:3px 0 0;color:#607688}.pcm-canvas-print__meta{color:#607688;text-align:right}.pcm-canvas-print__filters{margin:0 0 12px;color:#526b7d;font-size:10px}.pcm-canvas-print__board .pcm-canvas__board{grid-auto-rows:auto!important;grid-auto-flow:row!important;align-items:stretch!important;gap:8px!important}.pcm-canvas-print__board .pcm-canvas__group{grid-row:auto!important;height:auto!important;min-height:0!important;align-self:start!important;break-inside:avoid;padding:6px!important}.pcm-canvas-print__board .pcm-canvas__group-heading{cursor:default!important}.pcm-canvas-print__board .pcm-canvas__widgets{grid-auto-rows:auto!important;grid-auto-flow:row!important;align-items:stretch!important;gap:6px!important}.pcm-canvas-print__board .pcm-canvas__widget{grid-row:auto!important;height:auto!important;min-height:105px!important;max-height:none!important;overflow:visible!important;align-self:stretch!important;break-inside:avoid;box-shadow:none!important}.pcm-canvas-print__board .pcm-canvas__widget-body{overflow:visible!important}.pcm-canvas-print__board .pcm-canvas__widget:has(.pcm-canvas-list,.pcm-bar-chart,.pcm-pie-chart,.pcm-monthly-line-chart,.pcm-monthly-chart,.pcm-monthly-progress,.pcm-time-comparison-widget){min-height:190px!important}.pcm-canvas-print__board .pcm-canvas__group--board{padding:0!important;border:0!important}@page{size:landscape;margin:12mm}@media print{body{padding:0}.pcm-canvas-print__board{width:100%}}`
+    const theme = document.documentElement.dataset.pcmDashboardTheme ?? 'dark'
+    printDocument.documentElement.dataset.pcmDashboardTheme = theme
+    const surface = getComputedStyle(board.closest('.app-content') ?? board).backgroundColor
+    const ink = theme === 'dark' ? '#edf5fc' : '#17324a'
+    const width = Math.ceil(board.getBoundingClientRect().width)
+    const scale = Math.min(1, 1060 / Math.max(1, width))
+    printStyles.textContent = `*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}body{margin:0;padding:16px;background:${surface};color:${ink};font:12px/1.4 Arial,sans-serif}.pcm-canvas-print__heading{display:flex;justify-content:space-between;gap:20px;margin-bottom:12px}.pcm-canvas-print__heading h1{margin:0;font-size:20px}.pcm-canvas-print__heading p{margin:4px 0}.pcm-canvas-print__filters{margin-bottom:12px}.pcm-canvas-print__board{width:${width}px;zoom:${scale}}@page{size:landscape;margin:8mm}@media print{body{padding:0}}`
     printDocument.head.appendChild(printStyles)
 
     printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true })
@@ -1456,6 +1460,14 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     })),
     ...Object.entries(operationalMetrics).map(([id, metric]) => pcmNumberWidget({
       id: `operational-${id}`, title: metric.label, categoryId: 'operational', value: metric.value, note: metric.note, icon: metric.icon,
+      onClick: () => {
+        const summary = { id: `summary-operational-${id}`, title: `${metric.label}: ${metric.value}`, detail: metric.note }
+        if (id === 'active-technicians' || id === 'unestimated') {
+          openInsight(metric.label, 'Total informado pela API. O detalhamento individual deste indicador não está disponível nesta consulta.', [summary])
+          return
+        }
+        openInsight(metric.label, `${metric.note} Ordens abertas relacionadas ao acompanhamento:`, [summary, ...operationalOrders.filter(order => !isClosedWorkOrder(order.status)).map(order => ({ id: order.id, title: `${order.code} · ${order.equipment}`, detail: `${order.sector} · ${order.responsible} · ${humanStatus(order.status)}` }))])
+      },
       segmentValue: segments => {
         const subset = ordersForSegments(segments).filter(order => !isClosedWorkOrder(order.status))
         if (id === 'open-orders') return subset.length
@@ -1465,6 +1477,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     })),
     ...Object.entries(reliabilityMetrics).map(([id, metric]) => pcmNumberWidget({
       id: `reliability-${id}`, title: metric.label, categoryId: 'reliability', value: metric.value, note: metric.note, icon: metric.icon,
+      onClick: () => openInsight(metric.label, metric.note, [{ id: `summary-${id}`, title: `${metric.label}: ${metric.value}`, detail: `${days} dias · ${reliability?.ativos_considerados ?? 0} ativos considerados` }, ...(id === 'availability' ? dailyInsights.stopped : (displayData?.falhas_por_ativo ?? []).filter(item => id !== 'recurrence' || item.falhas > 1).map(item => ({ id: item.ativo_id, title: `${item.ativo_tag} · ${item.ativo_nome}`, detail: `${item.setor_nome} · ${item.falhas} falha(s) no período` })))]),
     })),
     {
       id: 'mttr-mtbf-comparison', title: 'MTTR e MTBF', categoryId: 'comparison', note: 'Reparo médio e intervalo médio entre falhas.',
@@ -1481,7 +1494,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     {
       id: 'monthly-mttr', title: `${timeMetric} mensal`, categoryId: 'time', note: 'Tendência de tempo médio para reparar falhas.',
       modes: [{ id: 'line', label: 'Linha' }, { id: 'area', label: 'Área' }, { id: 'bar', label: 'Colunas' }, { id: 'progress', label: 'Barras de progresso' }], defaultMode: 'line',
-      onActivate: () => openInsight('MTTR mensal', 'Média mensal do tempo para reparo.', monthlyMttr.map(item => ({ id: `report-month:${item.month}`, title: item.label, detail: item.mttrSeconds === null ? 'Sem amostra' : duration(item.mttrSeconds) }))),
+      onActivate: () => openInsight(`${timeMetric} mensal`, timeMetric === 'MTTR' ? 'Tempo médio mensal para reparo.' : 'Tempo médio mensal entre falhas.', monthlyMttr.map(item => { const value = timeMetric === 'MTTR' ? item.mttrSeconds : displayData?.relatorios?.mtbf_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? displayData?.confiabilidade_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? null; return { id: `report-month:${item.month}`, title: item.label, detail: value === null ? 'Sem amostra' : duration(value) } })),
       render: (mode: PcmCanvasMode, palette: PcmCanvasPalette, _segments?: PcmCanvasSegments, chartStyle?: 'default' | 'oval' | 'exploded' | 'depth' | 'smooth' | 'minimal' | 'rounded' | 'gradient' | 'bar-depth') => <MonthlyMttrChart key={timeMetric} items={timeMetric === 'MTTR' ? monthlyMttr : monthlyMttr.map(item => ({ ...item, mttrSeconds: displayData?.relatorios?.mtbf_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? displayData?.confiabilidade_mensal?.find(month => month.mes === item.month)?.mtbf_segundos ?? null }))} loading={loading} mode={mode === 'bar' || mode === 'progress' || mode === 'area' ? mode : 'line'} palette={palette} chartStyle={chartStyle} />,
     },
     {
@@ -2085,20 +2098,8 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
 
   return (
     <section className={`pcm-dashboard pcm-dashboard--desktop${insight ? ' pcm-dashboard--focus' : ''}`} aria-label="Dashboard do PCM" aria-busy={loading}>
-      <PcmHeaderContent slot="pcm-alerts-slot"><section className="pcm-operational-alerts" aria-labelledby="pcm-operational-alerts-title">
-        <div className="pcm-operational-alerts__summary">
-          <span id="pcm-operational-alerts-title">Avisos</span>
-          <strong>{operationalAlertCount}</strong>
-        </div>
-        {operationalAlerts.length ? <div className="pcm-operational-alerts__categories" aria-label="Tipos de aviso ativos">
-          {operationalAlerts.map(alert => {
-            const Icon = alert.icon
-            return <button key={alert.id} type="button" className={`pcm-operational-alerts__category is-${alert.tone}`} title={`${alert.label}: ${alert.value}. Clique para ver os registros.`} aria-label={`${alert.label}: ${alert.value}. Ver registros.`} onClick={alert.action}>
-              <Icon size={15} aria-hidden="true" /><span>{alert.label}</span><strong>{alert.value}</strong>
-            </button>
-          })}
-        </div> : <span className="pcm-operational-alerts__empty">Nenhum aviso operacional</span>}
-      </section></PcmHeaderContent>
+      <PcmHeaderContent slot="pcm-alerts-slot" fallback={false}><button type="button" className="pcm-operational-alert-trigger" aria-label={`${operationalAlertCount} avisos operacionais. Abrir central operacional`} onClick={() => window.dispatchEvent(new Event('vorqix:pcm-open-notifications'))}>Avisos <strong>{operationalAlertCount}</strong></button></PcmHeaderContent>
+      <PcmHeaderContent slot="pcm-operational-alerts-slot" fallback={false} watch><section className="pcm-operational-alerts" aria-label="Avisos da lousa"><strong className="pcm-operational-alerts__label">Situação operacional</strong>{operationalAlerts.length ? <div className="pcm-operational-alerts__categories">{operationalAlerts.map(alert => { const Icon = alert.icon; return <button key={alert.id} type="button" className={`pcm-operational-alerts__category is-${alert.tone}`} onClick={() => { alert.action(); window.dispatchEvent(new Event('vorqix:pcm-close-notifications')) }}><Icon size={15} /><span>{alert.label}</span><strong>{alert.value}</strong></button> })}</div> : <span className="pcm-operational-alerts__empty">Nenhum aviso operacional</span>}</section></PcmHeaderContent>
 
     {!demoMode && error && (
         <div className="dashboard-error" role="alert">
@@ -2124,7 +2125,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       )}
 
       {displayData && current && reliability && maintenanceStatus && (
-        insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} /> : <>
+        insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} onPlan={onOpenPlanning} /> : <>
       <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onOpenHistory={onOpenHistory} onPrintCanvas={printPcmCanvas} toolbarContent={<label className="pcm-canvas__period" title="Filtrar indicadores por período"><span>Período</span><select value={days} onChange={event => setDays(event.target.value)} aria-label="Período dos indicadores"><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">12 meses</option></select></label>} helpContent={<div className="pcm-canvas__help-content">
             <p>Adicione indicadores pelo botão “+”, organize-os arrastando os cartões e use o botão direito em cada cartão para personalizar a aparência e os filtros próprios. Salve o layout para reutilizar sua organização.</p>
             <p>
