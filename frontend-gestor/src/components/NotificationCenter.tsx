@@ -552,6 +552,8 @@ export function NotificationCenter({
           </div>
         </header>
 
+        {["PCM", "GESTOR"].includes(profile.toUpperCase()) ? <div id="pcm-operational-alerts-slot" /> : null}
+
         <section
           className="manager-notification-summary"
           aria-label="Resumo dos alertas"
@@ -665,12 +667,12 @@ export function NotificationCenter({
               <strong>
                 {profileNotifications.length
                   ? "Nenhum alerta neste filtro"
-                  : "Central em dia"}
+                  : ["PCM", "GESTOR"].includes(profile.toUpperCase()) ? "Sem mensagens pendentes" : "Central em dia"}
               </strong>
               <span>
                 {profileNotifications.length
                   ? "Ajuste a busca ou consulte todas as notificações."
-                  : "Novas ocorrências, análises e decisões aparecerão aqui."}
+                  : ["PCM", "GESTOR"].includes(profile.toUpperCase()) ? "Consulte os avisos da lousa acima. Novas ocorrências, análises e decisões aparecerão aqui." : "Novas ocorrências, análises e decisões aparecerão aqui."}
               </span>
               {profileNotifications.length ? (
                 <button

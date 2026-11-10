@@ -1,3 +1,4 @@
+import { matchesPcmOperationalArea, pcmOperationalAreas } from './pcmOperationalAreas'
 import { PcmHeaderContent } from './PcmHeaderContent'
 import { Children, isValidElement, Fragment as ReactFragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties, DragEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
@@ -223,7 +224,7 @@ type CanvasLayout = {
 type SavedCanvasLayout = { id: string; name: string; layout: CanvasLayout }
 
 const stylePlacementKeys = [
-  'themeAdaptive', 'accentStyle', 'contentSurfaceColor', 'contentSurfaceOpacity',
+  'themeAdaptive', 'accentStyle', 'contentSurfaceColor', 'contentSurfaceOpacity', 'cardGlassIntensity', 'cardGlassBlur',
   'chartVisualStyle',
   'chartUseOwnColors', 'chartAreaFill', 'chartAreaColor', 'chartAreaEndColor', 'chartAreaOpacity', 'chartAreaDirection', 'chartSelectionColor', 'chartSelectionOpacity',
   'contentAlign', 'contentVerticalAlign', 'showContent', 'showIcon', 'cardRadiusTopLeft', 'cardRadiusTopRight', 'cardRadiusBottomRight', 'cardRadiusBottomLeft',
@@ -397,7 +398,7 @@ function LibraryStyleEditor({ style, category, chartModes = [], onChange }: { st
     {surface ? section('Superfície e efeitos do card', <>
       <label>Fundo<PcmColorInput value={isHexColor(style.background) ? style.background : '#ffffff'} onChange={event => onChange({ ...style, background: event.currentTarget.value })} /></label>
       <label>Superfície<select value={style.effect ?? 'flat'} onChange={event => onChange({ ...style, effect: event.currentTarget.value as CanvasLibraryStyle['effect'] })}><option value="flat">Chapada</option><option value="glass">Cristal</option><option value="glass-blue">Vidro azul</option><option value="glass-mint">Vidro menta</option><option value="gradient">Degradê</option><option value="elevated">Elevada</option><option value="outline">Contorno</option></select></label>
-      {color('gradientEnd', 'Segunda cor do degradê', style.chartColors[1] ?? '#63a2df')}{range('cardShadow', 'Sombra', 0, 0, 24)}{range('cardTilt', 'Perspectiva', 0, -12, 12, '°')}{range('cardInset', 'Entalhe', 0, 0, 12)}
+      {color('gradientEnd', 'Segunda cor do degradê', style.chartColors[1] ?? '#63a2df')}{range('cardShadow', 'Sombra', 0, 0, 24)}{range('cardGlassIntensity', 'Reflexo do vidro', 35, 0, 100, '%')}{range('cardGlassBlur', 'Desfoque do vidro', 10, 0, 24, 'px')}{range('cardTilt', 'Perspectiva', 0, -12, 12, '°')}{range('cardInset', 'Entalhe', 0, 0, 12)}
       {select('cardFocusEffect', 'Animação do card', 'none', [['none', 'Sem animação'], ['lift', 'Elevação'], ['glow', 'Luz'], ['pulse', 'Pulso'], ['reflection', 'Reflexo']])}{range('cardFocusDuration', 'Duração', 450, 200, 1600, 'ms')}
       {select('accentPosition', 'Posição da faixa', 'left', [['left', 'Esquerda'], ['right', 'Direita'], ['top', 'Topo'], ['bottom', 'Base'], ['corners', 'Quinas'], ['none', 'Sem faixa']])}
       {select('accentStyle', 'Formato da faixa', 'solid', [['solid', 'Simples'], ['double', 'Dupla'], ['diagonal', 'Diagonalizada'], ['triangle', 'Triângulo'], ['cone', 'Cone / afunilada']])}
@@ -775,6 +776,8 @@ function readLayout(widgets: PcmCanvasWidget[]): CanvasLayout {
       if (typeof stored?.cardInset === 'number' && Number.isFinite(stored.cardInset)) placement.cardInset = Math.max(0, Math.min(12, stored.cardInset))
       if (typeof stored?.subtitleSize === 'number' && Number.isFinite(stored.subtitleSize)) placement.subtitleSize = Math.max(8, Math.min(25, stored.subtitleSize))
       if (stored?.accentPosition && ['left', 'right', 'top', 'bottom', 'corners', 'none'].includes(stored.accentPosition)) placement.accentPosition = stored.accentPosition
+      if (typeof stored?.cardGlassIntensity === 'number' && Number.isFinite(stored.cardGlassIntensity)) placement.cardGlassIntensity = Math.max(0, Math.min(100, stored.cardGlassIntensity))
+      if (typeof stored?.cardGlassBlur === 'number' && Number.isFinite(stored.cardGlassBlur)) placement.cardGlassBlur = Math.max(0, Math.min(24, stored.cardGlassBlur))
       if (typeof stored?.cardShadow === 'number' && Number.isFinite(stored.cardShadow)) placement.cardShadow = Math.max(0, Math.min(24, stored.cardShadow))
       for (const key of ['legendName', 'legendValue', 'legendPercent', 'legendSwatch', 'legendVisible'] as const) if (typeof stored?.[key] === 'boolean') placement[key] = stored[key]
       if (stored?.dataLabelMode && ['default', 'none', 'value', 'percent', 'both'].includes(stored.dataLabelMode)) placement.dataLabelMode = stored.dataLabelMode
@@ -1264,7 +1267,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         if (styleLibraryCategory === 'card') {
           const transparent = style.background === 'transparent'
           const themeDefault = style.id === 'standard'
-          placements[id] = { ...placement, cardBackground: style.background, cardBackgroundOpacity: transparent ? 0 : style.effect?.startsWith('glass') ? 82 : 100, cardBorder: style.border === 'transparent' ? 'none' : style.border, cardEffect: style.effect, titleColor: themeDefault ? undefined : style.titleColor, contentColor: themeDefault ? undefined : style.contentColor, accentColor: themeDefault ? undefined : style.chartColors[0], iconColor: themeDefault ? undefined : style.chartColors[0] }
+          placements[id] = { ...placement, contentSurfaceOpacity: style.properties?.contentSurfaceOpacity ?? 0, cardBackground: style.background, cardBackgroundOpacity: transparent ? 0 : style.effect?.startsWith('glass') ? 82 : 100, cardBorder: style.border === 'transparent' ? 'none' : style.border, cardEffect: style.effect, titleColor: themeDefault ? undefined : style.titleColor, contentColor: themeDefault ? undefined : style.contentColor, accentColor: themeDefault ? undefined : style.chartColors[0], iconColor: themeDefault ? undefined : style.chartColors[0] }
           placements[id] = { ...placements[id], customColors: themeDefault ? undefined : [...style.chartColors], customColor: undefined }
           placements[id] = { ...placements[id], ...properties }
         }
@@ -2093,7 +2096,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
     if (!layout.placements[id]) return false
     const widget = widgetById.get(id)
     if (!widget) return false
-    const matchesCategory = filterCategory === 'all' || (filterCategory.startsWith('indicator:') ? id.split('::copy::')[0] === filterCategory.slice(10) : widget.categoryId === filterCategory)
+    const matchesCategory = matchesPcmOperationalArea(widget, filterCategory)
     const placement = layout.placements[id]
     const matchesSearch = !normalizedSearch || `${placement.customTitle ?? widget.title} ${placement.customSubtitle ?? ''} ${categoryById.get(widget.categoryId) ?? ''}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch)
     return matchesCategory && matchesSearch
@@ -2204,7 +2207,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
           Object.assign(cardStyle, { '--pcm-card-hover': placement.hoverColor ?? placement.contentColor ?? (dashboardTheme === 'dark' ? '#edf5fb' : '#12324d') })
           Object.assign(cardStyle, { '--pcm-title-shadow': placement.titleShadow ? shadowValue(placement.titleShadow) : '0 0 0 transparent', '--pcm-content-shadow': shadowValue(placement.contentShadow) })
           Object.assign(cardStyle, { '--pcm-text-tilt': `${placement.textTilt ?? 0}deg`, '--pcm-text-depth': `${placement.textDepth ?? 0}px` })
-          Object.assign(cardStyle, { '--pcm-card-tilt': `${placement.cardTilt ?? 0}deg`, '--pcm-card-inset': `${placement.cardInset ?? 0}px` })
+          Object.assign(cardStyle, { '--pcm-glass-highlight': ((placement.cardGlassIntensity ?? 35) / 100) * (dashboardTheme === 'dark' ? .6 : .9), '--pcm-glass-blur': `${placement.cardGlassBlur ?? 10}px`, '--pcm-card-tilt': `${placement.cardTilt ?? 0}deg`, '--pcm-card-inset': `${placement.cardInset ?? 0}px` })
           Object.assign(cardStyle, { '--pcm-widget-title-size': `${placement.titleSize ?? 12}px`, '--pcm-widget-subtitle-size': `${placement.subtitleSize ?? 12}px` })
           Object.assign(cardStyle, { '--pcm-accent-clip': placement.accentPosition === 'corners' ? 'polygon(0 0, 28px 0, 28px 3px, 3px 3px, 3px 28px, 0 28px, 0 0, 100% 100%, calc(100% - 28px) 100%, calc(100% - 28px) calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) calc(100% - 28px), 100% calc(100% - 28px), 100% 100%)' : 'none', '--pcm-card-shadow': shadowValue(placement.cardShadow), '--pcm-accent-inset': placement.accentPosition === 'top' ? '0 0 auto 0' : placement.accentPosition === 'bottom' ? 'auto 0 0 0' : placement.accentPosition === 'right' ? '0 0 0 auto' : '0 auto 0 0', '--pcm-accent-width': placement.accentPosition === 'corners' ? '100%' : placement.accentPosition === 'top' || placement.accentPosition === 'bottom' ? '100%' : '3px', '--pcm-accent-height': placement.accentPosition === 'top' || placement.accentPosition === 'bottom' ? '3px' : '100%', '--pcm-accent-display': placement.accentPosition === 'none' ? 'none' : 'block' })
           if (placement.accentPosition !== 'corners') { const horizontal = placement.accentPosition === 'top' || placement.accentPosition === 'bottom'; const thickness = placement.accentStyle === 'triangle' || placement.accentStyle === 'cone' ? 14 : placement.accentStyle === 'double' || placement.accentStyle === 'diagonal' ? 8 : 3; Object.assign(cardStyle, { '--pcm-accent-width': horizontal ? '100%' : `${thickness}px`, '--pcm-accent-height': horizontal ? `${thickness}px` : '100%' }) }
@@ -2266,7 +2269,7 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         {toolbarContent}
         {onOpenHistory ? <button type="button" className="pcm-canvas__icon-button pcm-canvas__toolbar-icon" title="Abrir histórico e análise" aria-label="Abrir histórico e análise" onClick={onOpenHistory}><History size={15} aria-hidden="true" /></button> : null}
         <label className="pcm-canvas__search" title="Buscar indicador"><Search size={14} aria-hidden="true" /><input value={search} onChange={event => setSearch(event.target.value)} aria-label="Buscar indicador no painel" placeholder="Buscar" /></label>
-        <label className="pcm-canvas__filter" title="Escolher o indicador e suas cópias"><Filter size={14} aria-hidden="true" /><select value={filterCategory} onChange={event => setFilterCategory(event.target.value)} aria-label="Filtrar por indicador"><option value="all">Todos os indicadores</option>{sourceWidgets.map(widget => <option key={widget.id} value={`indicator:${widget.id}`}>{widget.title}</option>)}</select></label>
+        <label className="pcm-canvas__filter" title="Filtrar por área de acompanhamento"><Filter size={14} aria-hidden="true" /><select value={filterCategory} onChange={event => setFilterCategory(event.target.value)} aria-label="Filtrar por área"><option value="all">Todas as áreas</option>{pcmOperationalAreas.map(area => <option key={area.id} value={area.id}>{area.label}</option>)}</select></label>
         {segmentFilters.length ? <button type="button" className={`pcm-canvas__icon-button pcm-canvas__toolbar-icon${segmentFiltersOpen ? ' is-active' : ''}`} title="Segmentar os dados dos indicadores" aria-label="Mostrar filtros de segmentação" aria-expanded={segmentFiltersOpen} onClick={() => setSegmentFiltersOpen(value => !value)}><Filter size={14} aria-hidden="true" /></button> : null}
         {onPrintCanvas ? <button type="button" className="pcm-canvas__icon-button pcm-canvas__toolbar-icon" title="Imprimir lousa atual" aria-label="Imprimir lousa atual" onClick={() => { if (boardRef.current) onPrintCanvas(boardRef.current, segmentFilters.flatMap(filter => segments[filter.id] ? [`${filter.label}: ${segments[filter.id]}`] : [])) }}><Printer size={15} aria-hidden="true" /></button> : null}
         <details className="pcm-canvas__layout-menu">
@@ -2498,6 +2501,10 @@ export function PcmDashboardCanvas({ categories, widgets: sourceWidgets, segment
         </div>
       </details> : null}
       <details data-editor-order={40} className="pcm-canvas__editor-section"><summary>Aparência</summary>
+        {palettePlacement.cardEffect?.startsWith('glass') ? <>
+          <label className="pcm-canvas__range-field"><span>Reflexo do vidro · {palettePlacement.cardGlassIntensity ?? 35}%</span><input type="range" min={0} max={100} value={palettePlacement.cardGlassIntensity ?? 35} onChange={event => { const cardGlassIntensity = Number(event.currentTarget.value); setPlacement(paletteWidget.id, value => ({ ...value, cardGlassIntensity })) }} /></label>
+          <label className="pcm-canvas__range-field"><span>Desfoque do vidro · {palettePlacement.cardGlassBlur ?? 10}px</span><input type="range" min={0} max={24} value={palettePlacement.cardGlassBlur ?? 10} onChange={event => { const cardGlassBlur = Number(event.currentTarget.value); setPlacement(paletteWidget.id, value => ({ ...value, cardGlassBlur })) }} /></label>
+        </> : null}
         <label>Fundo interno do conteúdo<PcmColorInput type="color" value={palettePlacement.contentSurfaceColor ?? '#ffffff'} onChange={event => { const contentSurfaceColor = event.currentTarget.value; setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceColor })) }} /></label>
         <label className="pcm-canvas__range-field"><span>Opacidade do fundo interno · {palettePlacement.contentSurfaceOpacity ?? 0}%</span><input type="range" min={0} max={100} value={palettePlacement.contentSurfaceOpacity ?? 0} onChange={event => { const contentSurfaceOpacity = Number(event.currentTarget.value); setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceOpacity })) }} /></label>
         <button type="button" onClick={() => setPlacement(paletteWidget.id, value => ({ ...value, contentSurfaceOpacity: 0 }))}>Sem fundo interno</button>

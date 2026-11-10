@@ -122,6 +122,13 @@ function TenantApp() {
   const [notificationCount, setNotificationCount] = useState(0)
   const [technicianActionFocusId, setTechnicianActionFocusId] = useState('')
   const [notificationOpen, setNotificationOpen] = useState(false)
+  useEffect(() => {
+    const open = () => setNotificationOpen(true)
+    const close = () => setNotificationOpen(false)
+    window.addEventListener('vorqix:pcm-open-notifications', open)
+    window.addEventListener('vorqix:pcm-close-notifications', close)
+    return () => { window.removeEventListener('vorqix:pcm-open-notifications', open); window.removeEventListener('vorqix:pcm-close-notifications', close) }
+  }, [])
   const [loggingOut, setLoggingOut] = useState(false)
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
@@ -468,6 +475,8 @@ function TenantApp() {
             {!['PCM', 'GESTOR'].includes(normalizedProfile) ? <span>{session.user.perfil}</span> : null}
           </div>
 
+          {canViewPcmDashboard ? <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" /> : null}
+
           <button
             className="manager-notification-trigger"
             type="button"
@@ -495,7 +504,6 @@ function TenantApp() {
         </div>
         {canViewPcmDashboard ? <>
           <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
-          <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" />
           <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
         </> : null}
         </header>
@@ -553,7 +561,7 @@ function TenantApp() {
             {usesNodeApi() && canViewPcmDashboard && detailedAnalytics ? <nav className="pcm-view-switch pcm-view-switch--return" aria-label="Área do PCM">
               <button type="button" aria-pressed="false" onClick={() => setDetailedAnalytics(false)}>Voltar ao painel do PCM</button>
             </nav> : null}
-            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} onOpenHistory={() => setDetailedAnalytics(true)} /> :
+            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onOpenPlanning={canManageMaintenance ? () => handleNavigate('maintenance') : undefined} onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} onOpenHistory={() => setDetailedAnalytics(true)} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
