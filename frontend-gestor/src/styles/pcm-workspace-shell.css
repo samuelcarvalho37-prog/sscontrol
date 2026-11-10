@@ -127,3 +127,21 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-planning-entry > span:last-
 html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect^="glass"] .pcm-planning-entry { background-image: linear-gradient(130deg, #ffffff38, #ffffff08 35%, #ffffff30 46%, transparent 60%); backdrop-filter: blur(10px) saturate(125%); box-shadow: inset 0 1px 0 #ffffff55, 0 3px 12px #00000010; }
 html body .app-shell[data-pcm-workspace="true"][data-pcm-surface-effect="gradient"] .pcm-planning-entry { background-image: linear-gradient(125deg, color-mix(in srgb, var(--pcm-shell-panel) 75%, white), var(--pcm-shell-panel)); }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-heading { padding-bottom: 12px; border-bottom: 1px solid var(--pcm-shell-line); }
+/* Recursos do PCM: abas de listas, ações discretas e colunas alinhadas. */
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-summary { display: flex; flex-wrap: wrap; gap: 4px; background: transparent; border-bottom: 1px solid var(--pcm-shell-line); padding-bottom: 8px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-summary > button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; min-height: 34px; padding: 7px 12px; border: 0; border-radius: 4px; box-shadow: none; font-size: 13px; background: transparent !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-summary > button.is-active { background: color-mix(in srgb, var(--pcm-shell-ink) 10%, var(--pcm-shell-panel)) !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-panel { padding: 16px 0; border: 0; border-radius: 0; background: transparent !important; box-shadow: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-panel > header { padding: 0 0 12px; background: transparent !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-panel > header > div:first-child { display: flex; align-items: center; gap: 8px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace h2 { font-size: 16px; margin: 0; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-resource-help { width: 23px; height: 23px; border-radius: 50%; border: 1px solid var(--pcm-shell-line); background: transparent; color: var(--pcm-shell-muted); cursor: help; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .primary-button { min-height: 32px; padding: 7px 12px; border-radius: 4px; box-shadow: none; background: color-mix(in srgb, var(--pcm-shell-ink) 12%, var(--pcm-shell-panel)); border: 1px solid var(--pcm-shell-line); color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-technical-search, .admin-technical-role-table > header, .admin-technical-layout-toolbar, .admin-checklist-search) { background: var(--pcm-shell-panel); color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-technical-structure .admin-technical-panel { border-radius: 4px; padding: 14px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-technical-structure .admin-technical-panel h2 { font-size: 15px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-technical-structure :is(.admin-technical-search, .admin-technical-role-table > header) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-technical-structure .admin-technical-search input { background: transparent !important; box-shadow: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .manager-live-sync { display: none; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-table table { width: 100%; table-layout: fixed; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-catalog-workspace .admin-catalog-table :is(th, td) { overflow-wrap: anywhere; white-space: normal; vertical-align: middle; padding: 12px 10px; }

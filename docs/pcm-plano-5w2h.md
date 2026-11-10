@@ -44,6 +44,6 @@ Manter Dark, Ice e Light consistentes entre lousa, avisos, consultas e planejame
 - Validar edição de áreas/cargos com uma conta autorizada e recusa pela API com uma conta sem a capacidade exigida.
 - Validar o encadeamento checklist → plano → OS com Samuel antes de ampliar o fluxo funcional.
 
-## Próxima etapa — interface própria do PCM
+## Interface própria do PCM
 
-Áreas e cargos técnicos deverão ter uma apresentação própria do PCM, reutilizando os contratos e regras de autorização existentes. A interface do TI deve permanecer independente: não alterar o componente administrativo compartilhado para redesenhar o PCM. A entrega atual mantém esse editor existente; sua substituição visual será uma etapa específica.
+Catálogos e áreas/cargos técnicos do PCM possuem componentes de apresentação próprios: PcmCatalogWorkspace e PcmTechnicalStructure. Eles reutilizam os serviços e contratos existentes, sem alterar os componentes visuais do TI. Novas regras de negócio devem continuar nos serviços e na API; as duas apresentações precisam ser verificadas quando esses contratos mudarem. O editor de checklists ainda reutiliza o componente existente, com estilos restritos ao contêiner PCM.
