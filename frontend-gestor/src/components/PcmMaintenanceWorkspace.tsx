@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, CalendarCheck2, ClipboardList, CircleHelp, Network, Package, Settings2 } from 'lucide-react'
 import { PcmCatalogWorkspace } from './PcmCatalogWorkspace'
-import { AdminChecklistBuilder } from './AdminChecklistBuilder'
+import { PcmChecklistBuilder } from './PcmChecklistBuilder'
 import { PcmTechnicalStructure } from './PcmTechnicalStructure'
 
 type MaintenanceModule = 'plans' | 'checklists' | 'technical-structure' | 'assets' | 'materials'
@@ -28,7 +28,7 @@ export function PcmMaintenanceWorkspace({ onSessionExpired }: { onSessionExpired
 
       <div className="pcm-planning-page" key={module}>
         {module === 'plans' ? <PcmCatalogWorkspace scope="maintenance" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
-        {module === 'checklists' ? <AdminChecklistBuilder onSessionExpired={onSessionExpired} allowCustomValidators={false} /> : null}
+        {module === 'checklists' ? <PcmChecklistBuilder onSessionExpired={onSessionExpired} allowCustomValidators={false} /> : null}
         {module === 'technical-structure' ? <PcmTechnicalStructure onSessionExpired={onSessionExpired} /> : null}
         {module === 'assets' ? <PcmCatalogWorkspace scope="assets" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
         {module === 'materials' ? <PcmCatalogWorkspace scope="inventory" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}

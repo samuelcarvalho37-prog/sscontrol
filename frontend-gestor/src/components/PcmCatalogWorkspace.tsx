@@ -464,14 +464,15 @@ export function PcmCatalogWorkspace({
     intervalMs: 20_000,
   })
 
+  const [assetContext, setAssetContext] = useState<AdminEntityRecord | null>(null)
   const definition = ENTITY_DEFINITIONS[selectedEntity]
   const editingReadOnly = approvalOnly || (selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing)))
   const visibleRecords = useMemo(() => {
     const term = search.trim().toLowerCase()
     return (records[selectedEntity] ?? []).filter((record) => (
-      !term || Object.values(record).some((value) => valueText(value).toLowerCase().includes(term))
+      (!assetContext || selectedEntity !== 'componentes' || String(record.ativo_id) === String(assetContext.id)) && (!term || Object.values(record).some((value) => valueText(value).toLowerCase().includes(term)))
     ))
-  }, [records, search, selectedEntity])
+  }, [records, search, selectedEntity, assetContext])
 
   function referenceLabel(entity: AdminEntity, id: unknown): string {
     const item = (records[entity] ?? []).find((record) => String(record.id) === String(id))
@@ -503,7 +504,7 @@ export function PcmCatalogWorkspace({
   }
 
   function openEditor(record?: AdminEntityRecord) {
-    const base = record ? { ...record } : { ...definition.defaults }
+    const base: AdminEntityRecord = record ? { ...record } : { ...definition.defaults, ...(selectedEntity === 'componentes' && assetContext ? { ativo_id: assetContext.id } : {}) }
     const normalizedBase = selectedEntity === 'ativos'
       ? {
           ...base,
@@ -740,13 +741,14 @@ export function PcmCatalogWorkspace({
       <section className="admin-catalog-summary" aria-label="Listas disponíveis">
         {scopeEntities.map((entity) => {
           const item = ENTITY_DEFINITIONS[entity]
-          return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setSearch(''); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
+          return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setAssetContext(null); setSearch(''); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
         })}
         {showImports ? (
           <button type="button" className="admin-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
         ) : null}
       </section>
 
+      {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos'); setSearch('') }}>Voltar aos ativos</button></div> : null}
       <section className="admin-catalog-panel">
         <header>
           <div><h2>{definition.label}</h2><button type="button" className="pcm-resource-help" aria-label="Ajuda desta lista" title={definition.description}>?</button></div>
@@ -757,7 +759,7 @@ export function PcmCatalogWorkspace({
         <div className="admin-catalog-table">
           <table>
             <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Ações</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}><span className={column.key === 'status' || column.key === 'workflow_status' ? `admin-catalog-chip admin-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span></td>)}<td><button className="admin-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Gerenciar'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="admin-empty-state admin-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setSearch(''); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `admin-catalog-chip admin-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="admin-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Gerenciar'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="admin-empty-state admin-catalog-empty"><AssetIcon /><strong>{EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{!approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>

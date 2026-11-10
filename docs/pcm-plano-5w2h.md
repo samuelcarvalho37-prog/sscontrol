@@ -46,4 +46,4 @@ Manter Dark, Ice e Light consistentes entre lousa, avisos, consultas e planejame
 
 ## Interface própria do PCM
 
-Catálogos e áreas/cargos técnicos do PCM possuem componentes de apresentação próprios: PcmCatalogWorkspace e PcmTechnicalStructure. Eles reutilizam os serviços e contratos existentes, sem alterar os componentes visuais do TI. Novas regras de negócio devem continuar nos serviços e na API; as duas apresentações precisam ser verificadas quando esses contratos mudarem. O editor de checklists ainda reutiliza o componente existente, com estilos restritos ao contêiner PCM.
+Catálogos e áreas/cargos técnicos do PCM possuem componentes de apresentação próprios: PcmCatalogWorkspace e PcmTechnicalStructure. Eles reutilizam os serviços e contratos existentes, sem alterar os componentes visuais do TI. Novas regras de negócio devem continuar nos serviços e na API; as duas apresentações precisam ser verificadas quando esses contratos mudarem. O editor de checklists também possui apresentação própria em PcmChecklistBuilder, preservando os serviços e as regras de assinatura. O fluxo conferido está descrito em pcm-fluxo-revisao.md.
