@@ -624,6 +624,7 @@ export class PlanningRepository {
           version.segregation_required AS segregacao_exigida,
           version.manager_guidance AS orientacao_gestor,
           version.safety_requirements AS requisitos_seguranca,
+          version.execution_defaults AS pre_configuracao,
           version.content_hash_sha256 AS hash_conteudo,
           version.source_version_id AS versao_origem_id,
           version.submitted_at AS submetida_em,
@@ -688,10 +689,10 @@ export class PlanningRepository {
           id, tenant_id, checklist_template_id, revision, status,
           technical_area_id, technical_role_id, signature_policy,
           required_signatures, segregation_required, manager_guidance,
-          safety_requirements, content_hash_sha256, created_by
+          safety_requirements, content_hash_sha256, created_by, execution_defaults
         )
         VALUES (
-          $1, $2, $3, 1, 'DRAFT', $4, $5, $6, $7, $8, $9, $10, $11, $12
+          $1, $2, $3, 1, 'DRAFT', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
         )
       `,
       [
@@ -707,6 +708,7 @@ export class PlanningRepository {
         JSON.stringify(input.safetyRequirements),
         initialHash,
         userId,
+        JSON.stringify(input.executionDefaults ?? {}),
       ],
     );
   }
@@ -747,7 +749,8 @@ export class PlanningRepository {
           required_signatures = $5,
           segregation_required = $6,
           manager_guidance = $7,
-          safety_requirements = $8
+          safety_requirements = $8,
+          execution_defaults = $9
         WHERE id = $1
       `,
       [
@@ -769,6 +772,7 @@ export class PlanningRepository {
             (currentVersion.safety_requirements as readonly string[] | undefined) ??
             [],
         ),
+        JSON.stringify(patch.executionDefaults ?? currentVersion.execution_defaults ?? {}),
       ],
     );
   }
@@ -810,7 +814,8 @@ export class PlanningRepository {
             required_signatures = $5,
             segregation_required = $6,
             manager_guidance = $7,
-            safety_requirements = $8
+            safety_requirements = $8,
+          execution_defaults = $9
         WHERE id = $1
       `,
       [
@@ -822,6 +827,7 @@ export class PlanningRepository {
         input.segregationRequired,
         input.managerGuidance,
         JSON.stringify(input.safetyRequirements),
+        JSON.stringify(input.executionDefaults ?? {}),
       ],
     );
   }
@@ -1263,11 +1269,11 @@ export class PlanningRepository {
           technical_area_id, technical_role_id, signature_policy,
           required_signatures, segregation_required, manager_guidance,
           safety_requirements, content_hash_sha256, source_version_id,
-          replaces_version_id, created_by
+          replaces_version_id, created_by, execution_defaults
         )
         VALUES (
           $1, $2, $3, $4, 'DRAFT', $5, $6, $7, $8, $9, $10, $11,
-          $12, $13, $13, $14
+          $12, $13, $13, $14, $15
         )
       `,
       [
@@ -1285,6 +1291,7 @@ export class PlanningRepository {
         sourceVersion.content_hash_sha256,
         sourceVersion.id,
         userId,
+        JSON.stringify(sourceVersion.execution_defaults ?? {}),
       ],
     );
     await client.query(

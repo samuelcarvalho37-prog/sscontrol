@@ -2150,3 +2150,18 @@ html body .app-shell--manager .pcm-canvas .pcm-canvas__widget[data-card-effect^=
 html body .app-shell--manager .pcm-canvas .pcm-canvas__widget[data-card-effect="glass-blue"] { background-image: linear-gradient(125deg, rgb(195 229 255 / var(--pcm-glass-highlight, .2)), transparent 38%, color-mix(in srgb, #4cace5 15%, transparent)) !important; }
 html body .app-shell--manager .pcm-canvas .pcm-canvas__widget[data-card-effect="glass-mint"] { background-image: linear-gradient(125deg, rgb(195 255 231 / var(--pcm-glass-highlight, .2)), transparent 38%, color-mix(in srgb, #48c5a2 15%, transparent)) !important; }
 html body .app-shell--manager .pcm-canvas .pcm-canvas__widget[data-card-effect^="glass"] .pcm-canvas__widget-body :is(.pcm-metric, .pcm-time-comparison__item) { background: var(--pcm-content-surface, transparent) !important; }
+/* Editor do grupo segue a hierarquia e o tema do editor de cards. */
+html body .pcm-canvas__group-editor { --group-editor-line: #d5e1e9; --group-editor-ink: #23445e; width: min(360px, calc(100vw - 24px)); gap: 10px; padding: 14px; font-size: 12px; }
+html[data-pcm-dashboard-theme="dark"] body .pcm-canvas__group-editor { --group-editor-line: #3b566b; --group-editor-ink: #e5eef5; }
+html body .pcm-canvas__group-editor[data-panel-side="left"] { left: 16px; right: auto; }
+html body .pcm-canvas__group-editor > header { border-color: var(--group-editor-line); padding-bottom: 10px; }
+html body .pcm-canvas__group-editor > header strong { font-size: 14px; }
+html body .pcm-canvas__group-editor .pcm-canvas__editor-section { border: 1px solid var(--group-editor-line); border-radius: 7px; min-width: 0; }
+html body .pcm-canvas__group-editor summary { padding: 12px; color: var(--group-editor-ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+html body .pcm-canvas__group-editor .pcm-group-fields { display: grid; gap: 12px; padding: 0 12px 12px; }
+html body .pcm-canvas__group-editor label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; color: var(--group-editor-ink); font-size: 11px; }
+html body .pcm-canvas__group-editor label:has(input[type="range"]) { grid-template-columns: minmax(0, 1fr); }
+html body .pcm-canvas__group-editor input:not([type="range"]):not([type="checkbox"]), html body .pcm-canvas__group-editor select { width: 100%; box-sizing: border-box; min-width: 0; min-height: 32px; padding: 6px 8px; border: 1px solid var(--group-editor-line); border-radius: 5px; background-color: transparent; color: var(--group-editor-ink); font: inherit; }
+html body .pcm-canvas__group-editor .pcm-canvas__group-heading-toggle { display: flex; justify-content: space-between; align-items: center; }
+html body .pcm-canvas__group-editor input[type="range"] { width: 100%; }
+html body .pcm-canvas__group-editor button { font-size: 11px; min-height: 30px; }

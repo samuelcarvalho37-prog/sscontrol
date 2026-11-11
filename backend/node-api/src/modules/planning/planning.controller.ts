@@ -5,6 +5,7 @@ import { successEnvelope } from '../../core/http/envelope.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import type { PlanningService } from './planning.service.js';
 import type {
+  ChecklistExecutionDefaults,
   ChecklistResponseType,
   ChecklistVersionStatus,
   Criticality,
@@ -44,6 +45,7 @@ interface ChecklistBody {
   readonly segregacao_exigida: boolean;
   readonly orientacao_gestor: string | null;
   readonly requisitos_seguranca: readonly string[];
+  readonly pre_configuracao?: ChecklistExecutionDefaults;
 }
 
 interface ChecklistPatchBody {
@@ -58,6 +60,7 @@ interface ChecklistPatchBody {
   readonly segregacao_exigida?: boolean;
   readonly orientacao_gestor?: string | null;
   readonly requisitos_seguranca?: readonly string[];
+  readonly pre_configuracao?: ChecklistExecutionDefaults;
 }
 
 interface ChecklistItemBody {
@@ -263,6 +266,9 @@ export class PlanningController {
           segregationRequired: request.body.segregacao_exigida,
           managerGuidance: request.body.orientacao_gestor,
           safetyRequirements: request.body.requisitos_seguranca,
+          ...(request.body.pre_configuracao
+            ? { executionDefaults: request.body.pre_configuracao }
+            : {}),
         },
         auditMetadata(request),
       ),
@@ -293,6 +299,9 @@ export class PlanningController {
             segregationRequired: checklist.segregacao_exigida,
             managerGuidance: checklist.orientacao_gestor,
             safetyRequirements: checklist.requisitos_seguranca,
+            ...(checklist.pre_configuracao
+              ? { executionDefaults: checklist.pre_configuracao }
+              : {}),
           },
           items: body.itens.map((item) => ({
             ...checklistItem(item),
@@ -338,6 +347,7 @@ export class PlanningController {
           ...(body.orientacao_gestor === undefined
             ? {}
             : { managerGuidance: body.orientacao_gestor }),
+          ...(body.pre_configuracao ? { executionDefaults: body.pre_configuracao } : {}),
           ...(body.requisitos_seguranca === undefined
             ? {}
             : { safetyRequirements: body.requisitos_seguranca }),

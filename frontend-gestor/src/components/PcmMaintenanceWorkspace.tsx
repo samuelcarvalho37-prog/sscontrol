@@ -1,8 +1,9 @@
+import './PcmPlanning.css'
 import { useState } from 'react'
 import { ArrowLeft, CalendarCheck2, ClipboardList, CircleHelp, Network, Package, Settings2 } from 'lucide-react'
-import { AdminCatalogWorkspace } from './AdminCatalogWorkspace'
-import { AdminChecklistBuilder } from './AdminChecklistBuilder'
-import { AdminTechnicalStructure } from './AdminTechnicalStructure'
+import { PcmCatalogWorkspace } from './PcmCatalogWorkspace'
+import { PcmChecklistBuilder } from './PcmChecklistBuilder'
+import { PcmTechnicalStructure } from './PcmTechnicalStructure'
 
 type MaintenanceModule = 'plans' | 'checklists' | 'technical-structure' | 'assets' | 'materials'
 const MODULES = [
@@ -18,20 +19,20 @@ export function PcmMaintenanceWorkspace({ onSessionExpired }: { onSessionExpired
   const selected = MODULES.find(item => item.id === module)
   return <main className="content pcm-maintenance-workspace" aria-label="Planejamento da manutenção">
     <header className="pcm-planning-heading">
-      <div>{selected ? <button type="button" className="pcm-planning-back" onClick={() => setModule(null)}><ArrowLeft size={15} /> Planejamento</button> : <span className="eyebrow">MANUTENÇÃO</span>}<h1>{selected?.label ?? 'Planejamento'}</h1></div>
+      <div>{selected ? <button type="button" className="pcm-planning-back" onClick={() => setModule(null)}><ArrowLeft size={15} /><span className="pcm-back-label">Voltar</span></button> : null}<h1>{selected?.label ?? 'Manutenção'}</h1></div>
       <button type="button" className="pcm-planning-help" aria-label="Ajuda desta área" title={selected?.help ?? 'Comece pela estrutura dos ativos e pelas áreas técnicas. Depois prepare checklists, planos e materiais. Os indicadores da lousa mostram o que precisa de atenção.'}><CircleHelp size={18} /></button>
     </header>
     {!selected ? <div className="pcm-planning-sections">{[1, 2, 3].map(step => {
       const items = MODULES.filter(item => item.step === step)
       return <section key={step} className="pcm-planning-section" aria-labelledby={`pcm-planning-step-${step}`}><header><span>{String(step).padStart(2, '0')}</span><h2 id={`pcm-planning-step-${step}`}>{items[0].group}</h2></header><div>{items.map(item => <button key={item.id} type="button" className="pcm-planning-entry" onClick={() => setModule(item.id)} title={item.help}><item.Icon size={23} /><span>{item.label}</span><span aria-hidden="true">→</span></button>)}</div></section>
     })}</div> : <>
-      <nav className="pcm-planning-shortcuts" aria-label="Outras páginas do planejamento">{MODULES.map(item => <button key={item.id} type="button" aria-current={module === item.id ? 'page' : undefined} onClick={() => setModule(item.id)} title={item.help}>{item.label}</button>)}</nav>
+
       <div className="pcm-planning-page" key={module}>
-        {module === 'plans' ? <AdminCatalogWorkspace scope="maintenance" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
-        {module === 'checklists' ? <AdminChecklistBuilder onSessionExpired={onSessionExpired} allowCustomValidators={false} /> : null}
-        {module === 'technical-structure' ? <AdminTechnicalStructure onSessionExpired={onSessionExpired} /> : null}
-        {module === 'assets' ? <AdminCatalogWorkspace scope="assets" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
-        {module === 'materials' ? <AdminCatalogWorkspace scope="inventory" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
+        {module === 'plans' ? <PcmCatalogWorkspace scope="maintenance" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
+        {module === 'checklists' ? <PcmChecklistBuilder onSessionExpired={onSessionExpired} allowCustomValidators={false} /> : null}
+        {module === 'technical-structure' ? <PcmTechnicalStructure onSessionExpired={onSessionExpired} /> : null}
+        {module === 'assets' ? <PcmCatalogWorkspace scope="assets" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
+        {module === 'materials' ? <PcmCatalogWorkspace scope="inventory" onSessionExpired={onSessionExpired} onOpenImports={() => undefined} showImports={false} /> : null}
       </div>
     </>}
   </main>
