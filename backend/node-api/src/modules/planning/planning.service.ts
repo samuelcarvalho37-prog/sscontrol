@@ -1477,6 +1477,9 @@ export class PlanningService {
         segregation_required: version.segregation_required,
         manager_guidance: version.manager_guidance,
         safety_requirements: version.safety_requirements,
+        ...(version.execution_defaults && Object.keys(version.execution_defaults as object).length
+          ? { execution_defaults: version.execution_defaults }
+          : {}),
       },
       items,
     });

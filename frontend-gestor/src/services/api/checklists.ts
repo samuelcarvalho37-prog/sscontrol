@@ -130,3 +130,8 @@ export async function deleteAdminChecklistDraft(planId: string): Promise<void> {
     )
   }
 }
+
+export async function publishPcmChecklist(planId: string, submitFirst: boolean): Promise<void> {
+  if (submitFirst) await callApi('pcm.submeter_checklist_sem_assinatura', { token: adminToken(), plano_id: planId });
+  await callApi('pcm.publicar_checklist', { token: adminToken(), plano_id: planId });
+}

@@ -33,7 +33,8 @@ export type PlanType =
   | 'INSPECTION'
   | 'LUBRICATION'
   | 'CORRECTIVE'
-  | 'CONDITION_BASED';
+  | 'CONDITION_BASED'
+  | 'IMPROVEMENT';
 export type TriggerType = 'PERIODICITY' | 'HOUR_METER' | 'CONDITION' | 'MANUAL' | 'OCCURRENCE';
 export type StopMode = 'NO_STOP' | 'MANDATORY_STOP' | 'EXECUTOR_DECISION';
 export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REJECTED';
@@ -43,6 +44,13 @@ export interface RequestAuditMetadata {
   readonly userAgent: string | null;
   readonly ipAddress: string;
   readonly roleSnapshot: string;
+}
+
+export interface ChecklistExecutionDefaults {
+  readonly modo_parada?: StopMode;
+  readonly requer_bloqueio?: boolean;
+  readonly tempo_estimado_min?: number;
+  readonly estimativa_automatica?: boolean;
 }
 
 export interface ChecklistInput {
@@ -59,6 +67,7 @@ export interface ChecklistInput {
   readonly segregationRequired: boolean;
   readonly managerGuidance: string | null;
   readonly safetyRequirements: readonly string[];
+  readonly executionDefaults?: ChecklistExecutionDefaults;
 }
 
 export interface ChecklistPatch {
@@ -73,6 +82,7 @@ export interface ChecklistPatch {
   readonly segregationRequired?: boolean;
   readonly managerGuidance?: string | null;
   readonly safetyRequirements?: readonly string[];
+  readonly executionDefaults?: ChecklistExecutionDefaults;
 }
 
 export interface ChecklistItemInput {

@@ -1,9 +1,9 @@
 import './PcmChecklistRefinement.css'
+import { estimateChecklistMinutes } from './pcmChecklistEstimate'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   listAdminTechnicalAnalyses,
-  listAdminUsers,
-  listTechnicalRoles,
+  listAllTechnicalAreas,
 } from '../services/api/admin'
 import { listAdminEntity } from '../services/api/catalog'
 import {
@@ -14,14 +14,14 @@ import {
   listAdminChecklistModels,
   saveAdminChecklistModel,
   sendAdminChecklistForValidation,
+  publishPcmChecklist,
 } from '../services/api/checklists'
 import { isGestorAuthenticationError } from '../services/api/gestor'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type {
   AdminNotificationTarget,
   AdminTechnicalAnalysis,
-  AdminUser,
-  TechnicalRole,
+  TechnicalArea,
 } from '../types/admin'
 import type { AdminEntityRecord } from '../types/catalog'
 import type { AdminChecklistItem, AdminChecklistPlan, ChecklistResponseType } from '../types/checklists'
@@ -43,7 +43,7 @@ import {
   TrashIcon,
   WrenchIcon,
 } from './Icons'
-import { ValidationPolicySelector } from './ValidationPolicySelector'
+
 
 interface PcmChecklistBuilderProps {
   onSessionExpired: () => void
@@ -319,7 +319,6 @@ function checklistDraftFromAnalysis(analysis: AdminTechnicalAnalysis): {
 export function PcmChecklistBuilder({
   onSessionExpired,
   focusTarget,
-  allowCustomValidators = true,
 }: PcmChecklistBuilderProps) {
   const [view, setView] = useState<'home' | 'library' | 'editor'>('home')
   const [stage, setStage] = useState(0)
@@ -328,8 +327,7 @@ export function PcmChecklistBuilder({
   const [models, setModels] = useState<AdminChecklistPlan[]>([])
   const [assets, setAssets] = useState<AdminEntityRecord[]>([])
   const [components, setComponents] = useState<AdminEntityRecord[]>([])
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [roles, setRoles] = useState<TechnicalRole[]>([])
+  const [areas, setAreas] = useState<TechnicalArea[]>([])
   const [plan, setPlan] = useState<AdminChecklistPlan>(emptyPlan)
   const [items, setItems] = useState<AdminChecklistItem[]>([emptyItem(1)])
   const [activeItemIndex, setActiveItemIndex] = useState(0)
@@ -341,13 +339,15 @@ export function PcmChecklistBuilder({
   const [sourceAnalysis, setSourceAnalysis] = useState<AdminTechnicalAnalysis | null>(null)
   const [libraryBusy, setLibraryBusy] = useState(false)
   const [modelToDelete, setModelToDelete] = useState<AdminChecklistPlan | null>(null)
+  const estimatedMinutes = estimateChecklistMinutes(items, plan.criticidade)
+  const signaturesRequired = Number(plan.assinaturas_exigidas ?? 1) > 0
   const [routingOpen, setRoutingOpen] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [routing, setRouting] = useState<ValidationRouteDraft>({
     politica_assinatura: 'QUALIDADE_OU_SEGURANCA',
     comentario: '',
-    exige_segregacao: 'SIM',
+    exige_segregacao: 'NAO',
     responsavel_atual_id: '',
     usuarios_validadores: [] as string[],
   })
@@ -361,17 +361,15 @@ export function PcmChecklistBuilder({
   }, [onSessionExpired])
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
-    const [nextModels, assetList, componentList, nextUsers, nextRoles] = await Promise.all([
+    const [nextModels, assetList, componentList, nextAreas] = await Promise.all([
       listAdminChecklistModels(signal), listAdminEntity('ativos', signal), listAdminEntity('componentes', signal),
-      allowCustomValidators ? listAdminUsers({ perfil: 'GESTOR', status: 'ATIVO' }, signal) : Promise.resolve([]),
-      listTechnicalRoles('', signal),
+      listAllTechnicalAreas(signal),
     ])
     setModels(nextModels)
     setAssets(assetList.rows)
     setComponents(componentList.rows)
-    setUsers(nextUsers)
-    setRoles(nextRoles)
-  }, [allowCustomValidators])
+    setAreas(nextAreas)
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -633,9 +631,10 @@ export function PcmChecklistBuilder({
       const normalizedItems = items.map((item, index) => ({
         ...item, ordem: index + 1, opcoes_json: cleanOptions(item.opcoes_texto),
       }))
+      const configuredPlan = { ...plan, orientacao_gestor: routing.comentario.trim() || plan.orientacao_gestor, tempo_estimado_min: estimatedMinutes, estimativa_automatica: true }
       const result = sourceAnalysis && !plan.id
-        ? await convertAdminTechnicalAnalysisToChecklist(sourceAnalysis.id, plan, normalizedItems)
-        : await saveAdminChecklistModel(plan, normalizedItems)
+        ? await convertAdminTechnicalAnalysisToChecklist(sourceAnalysis.id, configuredPlan, normalizedItems)
+        : await saveAdminChecklistModel(configuredPlan, normalizedItems)
       setPlan(result.plano)
       setItems(result.itens.map((item, index) => ({ ...item, ordem: index + 1, opcoes_texto: parseOptions(item.opcoes_json) })))
       const convertedFromAnalysis = Boolean(sourceAnalysis && !plan.id)
@@ -644,7 +643,7 @@ export function PcmChecklistBuilder({
       setModels(nextModels)
       setNotice(convertedFromAnalysis
         ? 'Análise convertida em checklist rastreável. O modelo continua inativo até a assinatura técnica.'
-        : 'Rascunho salvo. O modelo continua inativo até a validação técnica.')
+        : 'Rascunho salvo. Use Publicar ou solicitar assinatura para liberar o modelo.')
       return result.plano
     } catch (cause) {
       handleFailure(cause, 'Não foi possível salvar o checklist.')
@@ -655,23 +654,27 @@ export function PcmChecklistBuilder({
   }
 
   async function sendForValidation() {
-    if (
+    if (signaturesRequired &&
       routing.politica_assinatura === 'PERSONALIZADA' &&
       !routing.responsavel_atual_id
     ) {
       setError('Selecione a pessoa autorizada que fará a validação.')
       return
     }
-    if (!routing.comentario.trim()) {
+    if (signaturesRequired && !routing.comentario.trim()) {
       setError('Descreva o que o Gestor deve validar.')
       return
     }
+    let publicationId = plan.id
     setSending(true)
     setError('')
     try {
       const saved = await saveModel()
       if (!saved) return
-      await sendAdminChecklistForValidation({
+      publicationId = saved.id
+      if (!signaturesRequired) {
+        await publishPcmChecklist(saved.id, true)
+      } else await sendAdminChecklistForValidation({
         plano_id: saved.id,
         comentario: routing.comentario.trim(),
         politica_assinatura: routing.politica_assinatura,
@@ -682,11 +685,12 @@ export function PcmChecklistBuilder({
       const nextModels = await listAdminChecklistModels()
       setModels(nextModels)
       const sent = nextModels.find((model) => model.id === saved.id)
-      setPlan(sent ?? { ...saved, workflow_status: 'EM_VALIDACAO_GESTAO' })
+      setPlan(sent ?? { ...saved, workflow_status: signaturesRequired ? 'EM_VALIDACAO_GESTAO' : 'VALIDADO', operacional: !signaturesRequired })
       setRoutingOpen(false)
-      setNotice('Checklist enviado para assinatura de Qualidade/Segurança. O Operador receberá somente após a validação.')
+      setNotice(signaturesRequired ? 'Checklist enviado para as assinaturas escolhidas.' : 'Checklist publicado e disponível para uso no planejamento. A execução acontece por uma ordem de serviço.')
     } catch (cause) {
-      handleFailure(cause, 'Não foi possível enviar o checklist para validação.')
+      if (publicationId) { try { const detail = await getAdminChecklistDetail(publicationId); setPlan(detail.plano) } catch { /* Mantém o erro original para permitir nova tentativa. */ } }
+      handleFailure(cause, 'Não foi possível concluir a liberação do checklist.')
     } finally {
       setSending(false)
     }
@@ -836,7 +840,9 @@ export function PcmChecklistBuilder({
                 <label><span>Ativo *</span><select value={plan.ativo_id} onChange={event => updatePlan('ativo_id', event.target.value)}><option value="">Selecione o equipamento…</option>{assets.filter(asset => isAvailable(asset) || String(asset.id) === String(plan.ativo_id)).map(asset => <option value={asset.id} key={asset.id}>{String(asset.tag || asset.id)} · {String(asset.nome)}</option>)}</select></label>
                 <label><span>Componente opcional</span><select value={plan.componente_id || ''} onChange={event => updatePlan('componente_id', event.target.value)}><option value="">Ativo completo</option>{availableComponents.map(component => <option value={component.id} key={component.id}>{String(component.tag || component.id)} · {String(component.nome)}</option>)}</select></label>
                 <label><span>Criticidade</span><select value={plan.criticidade} onChange={event => updatePlan('criticidade', event.target.value)}><option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select></label>
-                <p className="is-wide pcm-checklist-scheduling-note">Periodicidade, tempo estimado, bloqueio LOTO e modo de parada são configurados no plano vinculado ao checklist publicado.</p>
+                <label><span>Modo de parada sugerido</span><select value={plan.modo_parada_manutencao || 'DECISAO_EXECUTOR'} onChange={event => updatePlan('modo_parada_manutencao', event.target.value)}><option value="DECISAO_EXECUTOR">Decisão do executor</option><option value="OBRIGATORIA">Parada obrigatória</option><option value="SEM_PARADA">Executar sem parada</option></select></label>
+                <label><span>Requer bloqueio LOTO?</span><select value={plan.requer_bloqueio || 'SIM'} onChange={event => updatePlan('requer_bloqueio', event.target.value)}><option value="SIM">Sim</option><option value="NAO">Não</option></select></label>
+                <p className="is-wide pcm-checklist-scheduling-note">Estas pré-configurações acompanham a versão do checklist. O plano define quando executar e permite revisar esses valores.</p>
               </fieldset>
 
               <section className="pcm-resource-checklist-items">
@@ -883,11 +889,11 @@ export function PcmChecklistBuilder({
                 ))}
               </section>
 
-              {stage === 4 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Tipo</dt><dd>{plan.tipo.replaceAll('_', ' ')}</dd><dt>Criticidade</dt><dd>{plan.criticidade}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd></dl><p>Salvar mantém o rascunho. O envio para validação segue as regras atuais do sistema.</p></section> : null}
+              {stage === 4 ? <section className="pcm-checklist-review"><h3>Conferir modelo</h3><dl><dt>Nome</dt><dd>{plan.nome || 'Não informado'}</dd><dt>Tipo</dt><dd>{plan.tipo.replaceAll('_', ' ')}</dd><dt>Criticidade</dt><dd>{plan.criticidade}</dd><dt>Ativo</dt><dd>{String(assets.find(asset => String(asset.id) === String(plan.ativo_id))?.nome || 'Não selecionado')}</dd><dt>Componente</dt><dd>{String(components.find(component => String(component.id) === String(plan.componente_id))?.nome || 'Ativo inteiro')}</dd><dt>Etapas</dt><dd>{items.length}</dd><dt>Tempo estimado</dt><dd>{estimatedMinutes} min · estimativa automática indicativa</dd></dl><p>Confira os dados. Depois publique diretamente ou solicite as assinaturas necessárias.</p></section> : null}
               <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 4 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending || (stage === 1 && !plan.nome.trim()) || (stage === 2 && !plan.ativo_id)} onClick={() => setStage(current => Math.min(4, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
               <footer className="pcm-resource-checklist-actions">
-                <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A assinatura técnica libera esta versão.</small></span>
-                {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Enviar para validação</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
+                <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A publicação libera esta versão.</small></span>
+                {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Publicar ou solicitar assinatura</button></div> : normalizedWorkflow(plan.workflow_status) === 'VALIDADO' && !plan.operacional ? <div><button type="button" disabled={sending} onClick={async () => { setSending(true); setError(''); try { await publishPcmChecklist(plan.id, false); await openModel(plan.id); setModels(await listAdminChecklistModels()); setNotice('Checklist publicado.') } catch (cause) { handleFailure(cause, 'Não foi possível publicar o checklist.') } finally { setSending(false) } }}>Publicar versão aprovada</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
               </footer>
             </>
           )}
@@ -905,25 +911,25 @@ export function PcmChecklistBuilder({
           <section role="dialog" aria-modal="true" aria-labelledby="checklist-routing-title">
             <header>
               <div>
-                <span className="eyebrow">ENVIO PARA VALIDAÇÃO</span>
-                <h2 id="checklist-routing-title">Definir filtro técnico</h2>
+                <span className="eyebrow">LIBERAÇÃO DO CHECKLIST</span>
+                <h2 id="checklist-routing-title">Publicação</h2>
               </div>
               <button type="button" disabled={sending} aria-label="Fechar" onClick={() => setRoutingOpen(false)}>×</button>
             </header>
             <div className="pcm-resource-checklist-routing">
-              <header><ShieldIcon /><span><strong>Filtro de assinatura</strong><small>Somente os validadores escolhidos poderão aprovar esta versão.</small></span></header>
+              <header><ShieldIcon /><span><strong>Liberar modelo</strong><small>Escolha se esta versão precisa de assinatura antes de ser publicada.</small></span></header>
               {error ? <div className="dashboard-error" role="alert"><strong>Revise o envio.</strong><span>{error}</span></div> : null}
               <div>
-                <ValidationPolicySelector value={routing} users={users} roles={roles} onChange={setRouting} allowCustom={allowCustomValidators} />
-                <label><span>Separar criador e aprovador</span><select value={routing.exige_segregacao} onChange={(event) => setRouting((current) => ({ ...current, exige_segregacao: event.target.value }))}>{YES_NO.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-                <label className="is-wide"><span>Orientação ao Gestor *</span><textarea rows={3} value={routing.comentario} onChange={(event) => setRouting((current) => ({ ...current, comentario: event.target.value }))} placeholder="Explique o risco, o objetivo e os pontos que precisam ser validados." /></label>
+                <label><span>Exigir assinatura?</span><select value={signaturesRequired ? 'SIM' : 'NAO'} onChange={event => updatePlan('assinaturas_exigidas', event.target.value === 'SIM' ? 1 : 0)}><option value="NAO">Não · publicar diretamente</option><option value="SIM">Sim · solicitar revisão</option></select></label>
+                {signaturesRequired ? <label><span>Quem deve assinar?</span><select value={routing.politica_assinatura} onChange={event => setRouting(current => ({ ...current, politica_assinatura: event.target.value as ValidationRouteDraft['politica_assinatura'] }))}><option value="QUALIDADE_OU_SEGURANCA">Qualidade ou Segurança · uma assinatura</option><option value="QUALIDADE">Somente Qualidade</option><option value="SEGURANCA">Somente Segurança</option><option value="QUALIDADE_E_SEGURANCA">Qualidade e Segurança · duas assinaturas</option></select></label> : <label><span>Área de destino do modelo</span><select value={String(plan.area_tecnica_id || '')} onChange={event => updatePlan('area_tecnica_id', event.target.value)}><option value="">Biblioteca geral de manutenção</option>{areas.filter(area => area.status === 'ATIVO').map(area => <option key={area.id} value={area.id}>{area.nome}</option>)}</select><small>Classifica o modelo para uso. Não inicia uma ordem de serviço.</small></label>}
+                <label><span>{signaturesRequired ? 'Orientação para revisão *' : 'Observação opcional'}</span><textarea rows={3} value={routing.comentario} onChange={event => setRouting(current => ({ ...current, comentario: event.target.value }))} /></label>
               </div>
             </div>
             <footer>
-              <span>O checklist permanece inativo até a decisão técnica do Gestor.</span>
+              <span>{signaturesRequired ? 'A publicação depende das assinaturas escolhidas.' : 'Sem assinaturas: a versão será publicada após a conferência do servidor.'}</span>
               <div>
                 <button type="button" disabled={sending} onClick={() => setRoutingOpen(false)}>Cancelar</button>
-                <button className="primary-button" type="button" disabled={saving || sending} onClick={() => void sendForValidation()}>{sending ? 'Enviando…' : 'Confirmar e enviar'}</button>
+                <button className="primary-button" type="button" disabled={saving || sending} onClick={() => void sendForValidation()}>{sending ? 'Processando…' : signaturesRequired ? 'Solicitar assinaturas' : 'Publicar checklist'}</button>
               </div>
             </footer>
           </section>

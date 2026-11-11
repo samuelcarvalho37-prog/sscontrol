@@ -52,6 +52,7 @@ const planType = Type.Union([
   Type.Literal('LUBRICATION'),
   Type.Literal('CORRECTIVE'),
   Type.Literal('CONDITION_BASED'),
+  Type.Literal('IMPROVEMENT'),
 ]);
 const triggerType = Type.Union([
   Type.Literal('PERIODICITY'),
@@ -85,6 +86,22 @@ export const checklistListQuerySchema = Type.Object(
   { additionalProperties: false },
 );
 
+const executionDefaults = Type.Object(
+  {
+    modo_parada: Type.Optional(
+      Type.Union([
+        Type.Literal('NO_STOP'),
+        Type.Literal('MANDATORY_STOP'),
+        Type.Literal('EXECUTOR_DECISION'),
+      ]),
+    ),
+    requer_bloqueio: Type.Optional(Type.Boolean()),
+    tempo_estimado_min: Type.Optional(Type.Integer({ minimum: 1, maximum: 10080 })),
+    estimativa_automatica: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
 const checklistFields = Type.Object({
   codigo: shortCode,
   nome: shortName,
@@ -98,6 +115,7 @@ const checklistFields = Type.Object({
   assinaturas_exigidas: Type.Integer({ minimum: 0, maximum: 10 }),
   segregacao_exigida: Type.Boolean(),
   orientacao_gestor: nullableText,
+  pre_configuracao: Type.Optional(executionDefaults),
   requisitos_seguranca: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), {
     maxItems: 50,
   }),
@@ -116,6 +134,7 @@ export const updateChecklistBodySchema = Type.Partial(
     assinaturas_exigidas: Type.Integer({ minimum: 0, maximum: 10 }),
     segregacao_exigida: Type.Boolean(),
     orientacao_gestor: nullableText,
+    pre_configuracao: Type.Optional(executionDefaults),
     requisitos_seguranca: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), {
       maxItems: 50,
     }),

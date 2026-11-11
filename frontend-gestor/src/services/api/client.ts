@@ -722,11 +722,12 @@ function checklistPlan(value: unknown): JsonRecord {
     gatilho_valor: item.gatilho_valor ?? 30,
     unidade: item.unidade ?? "dias",
     recorrencia_dias: item.recorrencia_dias ?? 30,
-    tempo_estimado_min: item.tempo_estimado_min ?? 60,
-    requer_bloqueio: item.requer_bloqueio ?? "SIM",
+    tempo_estimado_min: record(version.pre_configuracao).tempo_estimado_min ?? item.tempo_estimado_min ?? 60,
+    requer_bloqueio: typeof record(version.pre_configuracao).requer_bloqueio === 'boolean' ? record(version.pre_configuracao).requer_bloqueio ? 'SIM' : 'NAO' : item.requer_bloqueio ?? "SIM",
     requer_evidencia: item.requer_evidencia ?? "NAO",
     max_sessoes: item.max_sessoes ?? 1,
-    modo_parada_manutencao: item.modo_parada_manutencao ?? "DECISAO_EXECUTOR",
+    modo_parada_manutencao: record(version.pre_configuracao).modo_parada === 'MANDATORY_STOP' ? 'OBRIGATORIA' : record(version.pre_configuracao).modo_parada === 'NO_STOP' ? 'SEM_PARADA' : item.modo_parada_manutencao ?? "DECISAO_EXECUTOR",
+    estimativa_automatica: record(version.pre_configuracao).estimativa_automatica === true,
   };
 }
 
@@ -804,7 +805,7 @@ function checklistAggregateBody(payload: JsonRecord): JsonRecord {
       area_tecnica_id: plan.area_tecnica_id || null,
       cargo_tecnico_id: plan.cargo_tecnico_id || null,
       politica_assinatura: policy,
-      assinaturas_exigidas:
+      assinaturas_exigidas: Number(plan.assinaturas_exigidas) === 0 ? 0 :
         requiredByPolicy[policy] ??
         Math.max(1, Number(plan.assinaturas_exigidas ?? 1)),
       segregacao_exigida:
@@ -812,6 +813,12 @@ function checklistAggregateBody(payload: JsonRecord): JsonRecord {
           ? true
           : yes(plan.segregacao_exigida),
       orientacao_gestor: plan.orientacao_gestor || null,
+      pre_configuracao: {
+        modo_parada: plan.modo_parada_manutencao === 'OBRIGATORIA' ? 'MANDATORY_STOP' : plan.modo_parada_manutencao === 'SEM_PARADA' ? 'NO_STOP' : 'EXECUTOR_DECISION',
+        requer_bloqueio: yes(plan.requer_bloqueio ?? 'SIM'),
+        tempo_estimado_min: Math.max(1, Math.min(10080, Math.round(Number(plan.tempo_estimado_min) || 60))),
+        estimativa_automatica: plan.estimativa_automatica === true,
+      },
       requisitos_seguranca: Array.isArray(plan.requisitos_seguranca)
         ? plan.requisitos_seguranca
         : [],
@@ -1697,6 +1704,14 @@ export function nodeActionRequest(
             workflow_status: plan.workflow_status,
           };
         },
+      };
+    case "pcm.submeter_checklist_sem_assinatura":
+    case "pcm.publicar_checklist":
+      return {
+        method: "POST",
+        path: `/v1/maintenance/checklists/${encodeURIComponent(String(payload.plano_id))}/${action === 'pcm.publicar_checklist' ? 'publish' : 'submit'}`,
+        token,
+        transform: data => adminChecklistDetail(data),
       };
     case "admin.enviar_modelo_checklist_validacao":
       return {

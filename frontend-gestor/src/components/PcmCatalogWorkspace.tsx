@@ -3,7 +3,7 @@ import { filterPcmCatalog } from './pcmCatalogFilters'
 import type { PcmColumnRules, PcmColumnRule } from './pcmCatalogFilters'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { actionAdminEntity, listAdminEntity, saveAdminEntity } from '../services/api/catalog'
-import { listAdminChecklistModels } from '../services/api/checklists'
+import { listAdminChecklistModels, getAdminChecklistDetail } from '../services/api/checklists'
 import { isGestorAuthenticationError } from '../services/api/gestor'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
 import type { AdminEntity, AdminEntityRecord } from '../types/catalog'
@@ -307,9 +307,9 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
       { key: 'componente_id', label: 'Componente (opcional)', type: 'reference', reference: 'componentes', referenceLabel: 'nome', dependsOn: { field: 'ativo_id', targetField: 'ativo_id' } },
       { key: 'checklist_versao_id', label: 'Checklist validado', type: 'checklist', required: true, help: 'Somente modelos publicados, com etapas e compatíveis com o ativo selecionado.' },
       { key: 'nome', label: 'Nome do plano', required: true },
-      { key: 'tipo', label: 'Tipo', type: 'select', options: [{ value: 'PREVENTIVA', label: 'Preventiva' }, { value: 'PREDITIVA', label: 'Preditiva' }, { value: 'INSPECAO', label: 'Inspeção' }], required: true },
+      { key: 'tipo', label: 'Tipo', type: 'select', options: [{ value: 'PREVENTIVA', label: 'Preventiva' }, { value: 'PREDITIVA', label: 'Preditiva' }, { value: 'INSPECAO', label: 'Inspeção' }, { value: 'CORRETIVA', label: 'Corretiva planejada' }, { value: 'MELHORIA', label: 'Melhoria planejada' }, { value: 'LUBRIFICACAO', label: 'Lubrificação planejada' }, { value: 'BASEADA_CONDICAO', label: 'Baseada em condição' }], required: true },
       { key: 'criticidade', label: 'Criticidade', type: 'select', options: CRITICALITY_OPTIONS, required: true },
-      { key: 'gatilho_tipo', label: 'Tipo de gatilho', type: 'select', options: [{ value: 'HORAS', label: 'Horímetro' }, { value: 'DIAS', label: 'Periodicidade em dias' }, { value: 'PARAMETRO', label: 'Parâmetro técnico' }], required: true },
+      { key: 'gatilho_tipo', label: 'Tipo de gatilho', type: 'select', options: [{ value: 'HORAS', label: 'Por horas acumuladas do equipamento' }, { value: 'DIAS', label: 'A cada intervalo de dias' }, { value: 'PARAMETRO', label: 'Quando um parâmetro atingir o limite' }], required: true },
       { key: 'gatilho_valor', label: 'Valor do gatilho', type: 'number', required: true },
       { key: 'unidade', label: 'Unidade', type: 'select', options: TRIGGER_UNIT_OPTIONS, help: 'Preenchida automaticamente ao trocar o gatilho; pode ser ajustada.' },
       { key: 'recorrencia_dias', label: 'Periodicidade', type: 'select', options: RECURRENCE_OPTIONS },
@@ -408,6 +408,9 @@ export function PcmCatalogWorkspace({
   const [checklistModels, setChecklistModels] = useState<AdminChecklistPlan[]>([])
   const [columnFilters, setColumnFilters] = useState<PcmColumnRules>({})
   const [filterKey, setFilterKey] = useState<string | null>(null)
+  const [previewPlan, setPreviewPlan] = useState(false)
+  const [planStep, setPlanStep] = useState(0)
+  const [loadingChecklistDefaults, setLoadingChecklistDefaults] = useState(false)
   const [editing, setEditing] = useState<AdminEntityRecord | null | undefined>(undefined)
   const [draft, setDraft] = useState<AdminEntityRecord>({ id: '' })
   const [loading, setLoading] = useState(true)
@@ -538,6 +541,7 @@ export function PcmCatalogWorkspace({
           }
         : base
     const next = addLocationContext(normalizedBase)
+    setPlanStep(0)
     setEditing(record ?? null)
     setDraft(next)
     setError('')
@@ -591,11 +595,32 @@ export function PcmCatalogWorkspace({
           next.recorrencia_dias = 0
         }
       }
+      if (field.key === 'gatilho_valor' && String(next.gatilho_tipo) === 'DIAS') next.recorrencia_dias = Number(rawValue)
       if (field.key === 'recorrencia_dias' && String(next.gatilho_tipo) === 'DIAS') {
         next.gatilho_valor = Number(rawValue)
       }
       return next
     })
+  }
+
+  async function chooseChecklist(versionId: string) {
+    updateDraftField({ key: 'checklist_versao_id', label: 'Checklist' }, versionId)
+    const model = checklistModels.find(item => String(item.versao_id) === versionId)
+    if (!model) return
+    setLoadingChecklistDefaults(true)
+    try {
+      const detail = await getAdminChecklistDetail(model.id)
+      setDraft(current => String(current.checklist_versao_id) !== versionId ? current : { ...current, tempo_estimado_min: detail.plano.tempo_estimado_min ?? current.tempo_estimado_min, requer_bloqueio: detail.plano.requer_bloqueio ?? current.requer_bloqueio, modo_parada_manutencao: detail.plano.modo_parada_manutencao ?? current.modo_parada_manutencao })
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as pré-configurações do checklist.') }
+    finally { setLoadingChecklistDefaults(false) }
+  }
+  function planFieldStep(key: string): number {
+    return ['nome', 'tipo', 'criticidade'].includes(key) ? 0 : ['planta_contexto', 'setor_contexto', 'linha_contexto', 'ativo_id', 'componente_id', 'checklist_versao_id'].includes(key) ? 1 : 2
+  }
+  function advancePlanStep() {
+    const missing = definition.fields.filter(field => planFieldStep(field.key) === planStep && field.required && valueText(draft[field.key]) === '—')
+    if (missing.length) { setError(`Preencha: ${missing.map(field => field.label).join(', ')}.`); return }
+    setError(''); setPlanStep(current => Math.min(3, current + 1))
   }
 
   function referenceOptions(field: FieldDefinition): AdminEntityRecord[] {
@@ -770,9 +795,10 @@ export function PcmCatalogWorkspace({
 
       {assetContext ? <div className="pcm-asset-context"><strong>Componentes de {String(assetContext.nome)}</strong><button type="button" onClick={() => { setAssetContext(null); setSelectedEntity('ativos') }}>Ativos</button></div> : null}
       <section className="pcm-resource-catalog-panel">
+        {selectedEntity === 'planos' && previewPlan ? <section className="pcm-plan-example" aria-label="Plano de exemplo"><header><strong>Exemplo fictício · não salvo</strong><button type="button" onClick={() => setPreviewPlan(false)}>Fechar exemplo</button></header><dl><dt>Plano</dt><dd>Inspeção mensal do compressor</dd><dt>Tipo</dt><dd>Preventiva</dd><dt>Programação</dt><dd>A cada 30 dias</dd><dt>Checklist</dt><dd>Inspeção técnica · 6 etapas</dd><dt>Tempo sugerido</dt><dd>35 min · estimativa indicativa</dd><dt>Parada</dt><dd>Decisão do executor</dd></dl><p>Este exemplo não gera ordens nem altera os dados da empresa.</p></section> : null}
         <header>
           <div><h2>{definition.label}</h2><button type="button" className="pcm-resource-help" aria-label="Ajuda desta lista" title={definition.description}>?</button></div>
-          <div>{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
+          <div>{selectedEntity === 'planos' ? <button type="button" onClick={() => setPreviewPlan(current => !current)}>Ver exemplo</button> : null}{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
         </header>
         {selectedEntity === 'planos' ? <p className="pcm-resource-rule" title="O plano nasce em rascunho e só pode ser publicado com um checklist validado. As assinaturas configuradas continuam obrigatórias."><CheckIcon />Publicação vinculada a checklist validado</p> : null}
         {filterKey && activeFilter && activeColumn ? <section className="pcm-column-filter" onKeyDown={event => { if (event.key === 'Escape') setFilterKey(null) }} aria-label={`Filtrar ${activeColumn.label}`}>
@@ -858,8 +884,10 @@ export function PcmCatalogWorkspace({
         <div className="pcm-resource-page">
           <section role="region" aria-label={`${editing ? 'Editar' : 'Novo'} ${definition.singular}`}>
             <header><div><h2>{editingReadOnly ? `Consultar ${definition.singular}` : editing ? `Editar ${definition.singular}` : `Novo ${definition.singular}`}</h2></div></header>
-            <fieldset className="pcm-resource-catalog-form" disabled={editingReadOnly || saving}>
-              {definition.fields.map((field) => {
+            {selectedEntity === 'planos' && !editingReadOnly ? <nav className="pcm-plan-steps" aria-label="Cadastro do plano">{['Nome e tipo', 'Aplicação e checklist', 'Programação', 'Revisão'].map((label, index) => <span key={label} aria-current={planStep === index ? 'step' : undefined}>{index + 1}. {label}</span>)}</nav> : null}
+            {selectedEntity === 'planos' && planStep === 3 && !editingReadOnly ? <dl className="pcm-plan-review">{definition.fields.map(field => <div key={field.key}><dt>{field.label}</dt><dd>{field.key === 'checklist_versao_id' ? checklistModels.find(model => String(model.versao_id) === String(draft[field.key]))?.nome : displayCell(field.key, draft[field.key])}</dd></div>)}</dl> : null}
+            <fieldset className="pcm-resource-catalog-form" disabled={editingReadOnly || saving || loadingChecklistDefaults}>
+              {definition.fields.filter(field => selectedEntity !== 'planos' || editingReadOnly || (planStep < 3 && planFieldStep(field.key) === planStep)).filter(field => selectedEntity !== 'planos' || field.key !== 'recorrencia_dias').map((field) => {
                 const fieldValue = draft[field.key] ?? ''
                 if (field.type === 'select') {
                   const hasCurrentOption = field.options?.some((option) => option.value === String(fieldValue))
@@ -898,8 +926,8 @@ export function PcmCatalogWorkspace({
                       <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select
                         value={String(fieldValue)}
-                        disabled={!draft.ativo_id}
-                        onChange={(event) => updateDraftField(field, event.target.value)}
+                        disabled={!draft.ativo_id || loadingChecklistDefaults}
+                        onChange={(event) => void chooseChecklist(event.target.value)}
                       >
                         <option value="">{draft.ativo_id ? 'Selecione um checklist publicado…' : 'Selecione primeiro o ativo…'}</option>
                         {options.map((option) => (
@@ -928,7 +956,7 @@ export function PcmCatalogWorkspace({
                 )
               })}
             </fieldset>
-            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O plano será salvo como rascunho. A publicação exige um checklist validado.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{!editingReadOnly ? <button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
+            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'O plano será salvo como rascunho. A publicação exige um checklist validado.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{selectedEntity === 'planos' && !editingReadOnly && planStep > 0 ? <button type="button" onClick={() => setPlanStep(current => current - 1)}>Voltar</button> : null}{selectedEntity === 'planos' && !editingReadOnly && planStep < 3 ? <button type="button" disabled={saving || loadingChecklistDefaults} onClick={advancePlanStep}>Continuar</button> : null}{!editingReadOnly && (selectedEntity !== 'planos' || planStep === 3) ? <button className="primary-button" type="button" disabled={saving || loadingChecklistDefaults} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
           </section>
         </div>
       ) : null}
