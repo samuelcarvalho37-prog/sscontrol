@@ -24,7 +24,7 @@ html body .pcm-maintenance-workspace .pcm-planning-page button {
   border: 1px solid var(--pr-line); border-radius: 5px; background: transparent !important;
   color: var(--pr-ink) !important; font: inherit; line-height: 1.4; box-shadow: none; cursor: pointer;
 }
-html body .pcm-maintenance-workspace .pcm-planning-page button:hover:not(:disabled) { background: var(--pr-surface) !important; }
+html body .pcm-maintenance-workspace .pcm-planning-page button:hover:not(:disabled) { background-color: var(--pr-surface) !important; }
 html body .pcm-maintenance-workspace .pcm-planning-page button:focus-visible { outline: 2px solid var(--pr-ink); outline-offset: 2px; }
 html body .pcm-maintenance-workspace .pcm-planning-page button:disabled { opacity: .45; cursor: default; }
 html body .pcm-maintenance-workspace .pcm-planning-page button.primary-button { background: var(--pr-surface) !important; font-weight: 600; }
@@ -204,6 +204,11 @@ html body .pcm-maintenance-workspace .pcm-plan-steps [aria-current="step"] { col
 .pcm-maintenance-workspace .pcm-plan-review { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .pcm-maintenance-workspace .pcm-plan-review dt { color: var(--pr-muted); font-size: 11px; }
 .pcm-maintenance-workspace .pcm-plan-review dd { margin: 4px 0; overflow-wrap: anywhere; }
+.pcm-maintenance-workspace .pcm-plan-review-sections { display: grid; gap: 20px; padding-block: 12px; }
+.pcm-maintenance-workspace .pcm-plan-review-sections > section { padding: 14px 16px; border-inline-start: 2px solid var(--pr-line); }
+.pcm-maintenance-workspace .pcm-plan-review-sections h3 { margin-bottom: 12px !important; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-technical-select:is(:hover, :focus-visible) { background: transparent !important; text-decoration: underline; text-underline-offset: 4px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-resource-technical-list > article:has(.pcm-resource-technical-select:hover) { outline: 1px solid var(--pr-line); outline-offset: 2px; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-order { flex: 0 0 auto; min-width: 70px; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-order > label { width: 190px !important; max-width: none; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-order select { width: 100%; min-width: 160px; }

@@ -18,6 +18,18 @@ A estimativa é indicativa: cinco minutos de preparação, pesos por tipo de eta
 
 O cadastro foi dividido em nome e tipo, aplicação, programação e revisão. Inclui corretiva planejada e melhoria planejada. O exemplo fictício da lista é somente uma prévia e não grava dados.
 
+## Fluxo atual de plano e ordem de serviço
+
+O repositório atual separa publicação de plano de liberação de OS. A configuração de homologação concede ao PCM gerenciamento de planos e gerenciamento, revisão e liberação de OS, mas remove explicitamente `maintenance.plans.publish` desse perfil. Essa capacidade pertence ao Administrador. Por isso o PCM não deve receber um botão de publicação que resultaria em erro de permissão.
+
+1. PCM prepara e salva o plano em rascunho.
+2. Administrador publica a versão, vinculada a um checklist publicado.
+3. PCM cria a OS a partir do plano ativo e publicado.
+4. A OS passa pelas regras de aprovação aplicáveis.
+5. PCM libera a OS aprovada; o servidor cria a ação e notifica os técnicos elegíveis.
+
+Esse comportamento foi verificado em `load-foundation.ts`, `seed.cli.ts`, `planning.routes.ts` e `operations.service.ts`. Transferir também a publicação do plano ao PCM seria uma mudança de autorização e fluxo, além da apresentação. Esta correção preserva as permissões existentes.
+
 ## Ativação
 
 Esta entrega exige a migração `0058_checklist_execution_defaults.sql` antes de executar a nova API. Ela adiciona `execution_defaults` às versões de checklist e aceita planos do tipo `IMPROVEMENT`.
