@@ -91,6 +91,31 @@ export class MonitoringService {
     );
   }
 
+  async decideOccurrence(user: AuthenticatedUser, occurrenceId: string, input: { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR'; observacao: string; agendada_para?: string }, audit: RequestAuditMetadata) {
+    const note = input.observacao.trim();
+    if (note.length < 10) throw new AppError({ code: 'OCCURRENCE_NOTE_REQUIRED', message: 'Informe o motivo da decisão com pelo menos 10 caracteres.', statusCode: 400 });
+    const scheduled = input.decisao === 'AGENDAR' ? new Date(input.agendada_para ?? '') : null;
+    if (scheduled && (!Number.isFinite(scheduled.getTime()) || scheduled.getTime() <= Date.now())) throw new AppError({ code: 'OCCURRENCE_DATE_REQUIRED', message: 'Escolha uma data futura para o tratamento.', statusCode: 400 });
+    return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
+      const occurrence = await this.repository.findOccurrence(client, occurrenceId, true);
+      if (!occurrence) throw new AppError({ code: 'OCCURRENCE_NOT_FOUND', message: 'Ocorrência não encontrada.', statusCode: 404 });
+      if (!['OPEN','IN_TREATMENT'].includes(text(occurrence,'status')) || occurrence.work_order_id) throw new AppError({ code: 'OCCURRENCE_ALREADY_TREATED', message: 'A ocorrência já foi encerrada ou possui uma OS. Consulte o acompanhamento da ordem.', statusCode: 409 });
+      await client.query(`UPDATE maintenance.operational_occurrences SET status=$2,treatment_status='UNDER_ANALYSIS',treatment_scheduled_for=$3,
+        treatment_decision_note=$4,treatment_decided_by=$5,treatment_decided_at=clock_timestamp(),updated_at=clock_timestamp(),
+        closed_at=CASE WHEN $2='CANCELLED' THEN clock_timestamp() ELSE NULL END WHERE id=$1`,
+        [occurrenceId, input.decisao === 'RECUSAR' ? 'CANCELLED' : 'IN_TREATMENT', scheduled?.toISOString() ?? null, note, user.id]);
+      await client.query("UPDATE workflow.notifications SET status='RETRACTED' WHERE entity_id=$1 AND notification_type='PCM_OCCURRENCE_TREATMENT_DUE' AND status='ACTIVE'",[occurrenceId]);
+      const message = input.decisao === 'AGENDAR' ? `Tratamento agendado para ${scheduled!.toISOString()}. ${note}` : input.decisao === 'RECUSAR' ? `Ocorrência recusada. ${note}` : `Tratamento iniciado pelo PCM. ${note}`;
+      const notification = await client.query<{id:string}>(`INSERT INTO workflow.notifications (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience)
+        VALUES ($1,'PCM_OCCURRENCE_DECISION',$2,$3,'OCORRENCIAS_OPERACIONAIS',$4,'INFO','/home',$5::jsonb,$6::jsonb) RETURNING id`,
+        [user.tenantId, text(occurrence,'title'), message, occurrenceId, JSON.stringify({ occurrenceId }), JSON.stringify({ userIds: [occurrence.reported_by] })]);
+      await client.query(`INSERT INTO workflow.notification_recipients (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+        VALUES ($1,$2,$3,'DELIVERED',clock_timestamp(),clock_timestamp(),1)`, [user.tenantId,notification.rows[0]!.id,occurrence.reported_by]);
+      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'PCM_OCCURRENCE_DECISION', 'OPERATIONAL_OCCURRENCE', occurrenceId, { decision: input.decisao, note, scheduledFor: scheduled?.toISOString() ?? null });
+      return this.requiredOccurrenceDetail(client, occurrenceId);
+    });
+  }
+
   async getOccurrence(user: AuthenticatedUser, occurrenceId: string) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
@@ -1002,12 +1027,15 @@ export class MonitoringService {
 
   async listNotifications(user: AuthenticatedUser, query: NotificationListQuery) {
     return this.database.withTransaction(
-      { tenantId: user.tenantId, userId: user.id, readOnly: true },
-      async (client) => ({
+      { tenantId: user.tenantId, userId: user.id, readOnly: !user.capabilities.includes('maintenance.occurrences.triage') },
+      async (client) => {
+        if (user.capabilities.includes('maintenance.occurrences.triage')) await this.repository.notifyDueOccurrenceTreatments(client,user.tenantId,user.id);
+        return {
         itens: await this.repository.listNotifications(client, user.id, query),
         contadores: await this.repository.notificationCounters(client, user.id),
         limite: query.limit,
-      }),
+        };
+      },
     );
   }
 

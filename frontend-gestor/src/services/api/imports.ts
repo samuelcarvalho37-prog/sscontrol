@@ -48,6 +48,16 @@ export function getAdminImportCatalog(signal?: AbortSignal): Promise<AdminImport
   return readImportData<AdminImportCatalog>('admin.importacao.modelos', {}, signal)
 }
 
+export function getPcmImportCatalog(signal?: AbortSignal): Promise<AdminImportCatalog> {
+  return readImportData('pcm.importacao.modelos', {}, signal)
+}
+export function validatePcmImport(input: { tipo: string; arquivo_nome: string; aba_nome: string; cabecalhos: string[]; linhas: AdminImportRow[] }): Promise<AdminImportBatch> {
+  return writeImportData('pcm.importacao.validar', input)
+}
+export function confirmPcmImport(batchId: string, hash: string): Promise<AdminImportBatch> {
+  return writeImportData('pcm.importacao.confirmar', { lote_id: batchId, validacao_hash: hash })
+}
+
 export async function listAdminImportBatches(
   signal?: AbortSignal,
 ): Promise<AdminImportBatch[]> {

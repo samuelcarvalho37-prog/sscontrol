@@ -7,6 +7,17 @@ function adminToken(): string {
   if (token) return token
   throw new ApiRequestError('Sessão administrativa não encontrada. Entre novamente.', 'GESTOR_SESSION_MISSING')
 }
+
+export async function decidePcmOccurrence(id: string, decision: 'TRATAR' | 'AGENDAR' | 'RECUSAR', note: string, scheduledFor?: string): Promise<void> {
+  const response = await callApi('pcm.occurrences.decision', { token: adminToken(), ocorrencia_id: id, decisao: decision, observacao: note, agendada_para: scheduledFor }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  if (!response.data) throw new ApiRequestError('A decisão não foi confirmada.', 'OCCURRENCE_DECISION_EMPTY')
+}
+
+export async function getPcmTracking(filter: string, search: string, sectorId: string, page: number, signal?: AbortSignal): Promise<{itens:AdminIntervention[];contadores:Record<string,number>;setores:{id:string;nome:string}[]}> {
+  const response = await callApi<{itens:AdminIntervention[];contadores:Record<string,number>;setores:{id:string;nome:string}[]}>('pcm.tracking',{token:adminToken(),filtro:filter,busca:search,setor_id:sectorId,pagina:page},signal,{timeoutMs:API_TIMEOUT_MS.DETAIL_READ})
+  if(!response.data) throw new ApiRequestError('Acompanhamento não retornado.','TRACKING_EMPTY')
+  return response.data
+}
 export async function listAdminInterventions(signal?: AbortSignal): Promise<AdminIntervention[]> {
   const response = await callApi<{ total: number; intervencoes: AdminIntervention[] }>(
     'admin.intervencoes.listar',

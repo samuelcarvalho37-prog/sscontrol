@@ -30,6 +30,7 @@ import {
   technicalDemandListQuerySchema,
   transferActionBodySchema,
   workOrderListQuerySchema,
+  trackingListQuerySchema,
 } from './operations.schemas.js';
 
 const secured = {
@@ -110,6 +111,15 @@ export function createOperationsRoutes(
         summary: 'Aprova ou devolve uma execucao concluida pelo Operador.',
       },
       handler: controller.reviewMaintenanceAction,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/followup', {
+      preHandler: (request) => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema, body: requestChangesBodySchema, summary: 'Solicita atualização ao responsável e ao executor da OS.' },
+      handler: controller.requestWorkOrderUpdate,
+    });
+    app.get('/v1/pcm/tracking', {
+      preHandler: (request) => app.authorize(request,'maintenance.work-orders.read'),
+      schema: {...secured,querystring:trackingListQuerySchema,summary:'Acompanhamento paginado com contadores completos.'}, handler:controller.tracking,
     });
     app.get('/v1/maintenance/work-orders', {
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),

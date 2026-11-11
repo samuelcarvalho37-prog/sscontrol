@@ -11,6 +11,7 @@ import {
   monitoringIdentifierParamsSchema,
   notificationListQuerySchema,
   occurrenceListQuerySchema,
+  occurrenceDecisionBodySchema,
   parameterActionRequestBodySchema,
   stopListQuerySchema,
   technicalAnalysisBodySchema,
@@ -27,6 +28,11 @@ export function createMonitoringRoutes(
   controller: MonitoringController,
 ): FastifyPluginAsyncTypebox {
   return (app) => {
+    app.post('/v1/maintenance/occurrences/:occurrenceId/decision', {
+      preHandler: (request) => app.authorize(request, 'maintenance.occurrences.triage'),
+      schema: { ...secured, params: monitoringIdentifierParamsSchema, body: occurrenceDecisionBodySchema, summary: 'PCM decide tratar, agendar ou recusar uma ocorrência.' },
+      handler: controller.decideOccurrence,
+    });
     app.get('/v1/maintenance/occurrences', {
       preHandler: (request) => app.authorize(request, 'maintenance.occurrences.read'),
       schema: {

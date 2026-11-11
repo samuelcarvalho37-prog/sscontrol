@@ -5,7 +5,7 @@ import {
   ValidationIcon,
 } from './Icons'
 
-export type GestorSection = 'home' | 'validations' | 'maintenance' | 'scan' | 'admin' | 'more'
+export type GestorSection = 'home' | 'validations' | 'maintenance' | 'tracking' | 'scan' | 'admin' | 'more'
 
 export interface AppNavigationProps {
   active: GestorSection

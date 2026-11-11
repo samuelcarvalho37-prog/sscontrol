@@ -51,6 +51,11 @@ export interface AdminIntervention {
   plano_itens_count?: number | string
   acao_id?: string
   acao_status?: string
+  executor_nome?: string
+  execucao_status?: string
+  execucao_iniciada_em?: string
+  motivo_pausa?: string
+  detalhe_pausa?: string
   demanda?: AdminTechnicalDemandSummary | null
   auditoria?: {
     acao: string
@@ -81,6 +86,7 @@ export interface AdminIntervention {
 }
 
 export interface AdminInterventionInput {
+  checklist_versao_id?: string
   origem?: string
   entidade_origem_id?: string
   exige_liberacao_pos_intervencao?: boolean

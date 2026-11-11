@@ -24,3 +24,8 @@ export async function releaseMaintenanceWorkOrder(workOrderId: string): Promise<
   const response = await callApi('maintenance.work-orders.release', { token: token(), ordem_id: workOrderId }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   if (!response.data) throw new ApiRequestError('A API não confirmou a liberação da OS.', 'WORK_ORDER_RELEASE_EMPTY')
 }
+
+export async function requestWorkOrderUpdate(workOrderId: string, message: string): Promise<void> {
+  const response = await callApi<{ sent: boolean }>('maintenance.work-orders.followup', { token: token(), ordem_id: workOrderId, motivo: message }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
+  if (!response.data?.sent) throw new ApiRequestError('A API não confirmou a solicitação.', 'FOLLOWUP_EMPTY')
+}

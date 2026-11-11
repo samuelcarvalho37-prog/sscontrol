@@ -14,6 +14,8 @@ interface Params {
   readonly notificationId?: string;
 }
 
+interface OccurrenceDecisionBody { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR'; observacao: string; agendada_para?: string }
+
 interface OccurrenceQuery {
   readonly busca?: string;
   readonly status?: string;
@@ -160,6 +162,9 @@ export class MonitoringController {
         limit: request.query.limite ?? 50,
       }),
     );
+
+  decideOccurrence = async (request: FastifyRequest<{ Params: Params; Body: OccurrenceDecisionBody }>) =>
+    successEnvelope(request, 'pcm.occurrences.decision', await this.service.decideOccurrence(user(request), identifier(request.params, 'occurrenceId'), request.body, audit(request)));
 
   getOccurrence = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(

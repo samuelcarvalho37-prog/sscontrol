@@ -328,7 +328,7 @@ async function seedIdentities(
       'cmms.readings.create',
       'maintenance.checklists.read', 'maintenance.checklists.manage',
       'maintenance.checklists.review', 'maintenance.checklists.publish',
-      'maintenance.plans.read', 'maintenance.plans.manage',
+      'maintenance.plans.read', 'maintenance.plans.manage', 'maintenance.plans.publish', 'cmms.imports.manage',
       'maintenance.work-orders.read', 'maintenance.work-orders.manage',
       'maintenance.work-orders.review', 'maintenance.work-orders.release',
       'maintenance.actions.assign', 'maintenance.executions.read',
@@ -339,16 +339,7 @@ async function seedIdentities(
     ]],
   );
 
-  await client.query(
-    `DELETE FROM iam.role_capabilities role_capability
-     USING iam.capabilities capability
-     WHERE role_capability.tenant_id = $1
-       AND role_capability.role_id = $2
-       AND capability.id = role_capability.capability_id
-       AND capability.code = 'maintenance.plans.publish'
-       AND role_capability.effect = 'ALLOW'`,
-    [tenantId, ids.pcmRole],
-  );
+
 
   await client.query(
     `

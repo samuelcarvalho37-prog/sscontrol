@@ -63,6 +63,22 @@ export function createGovernanceRoutes(
       },
       handler: controller.openDocumentFile,
     });
+    app.get('/v1/pcm/imports/models', {
+      preHandler: (request) => app.authorize(request, 'cmms.imports.manage'),
+      schema: secured,
+      handler: imports.pcmCatalog,
+    });
+    app.post('/v1/pcm/imports/validate', {
+      preHandler: (request) => app.authorize(request, 'cmms.imports.manage'),
+      bodyLimit: 3_000_000,
+      schema: { ...secured, body: importValidateBodySchema },
+      handler: imports.pcmValidate,
+    });
+    app.post('/v1/pcm/imports/:batchId/confirm', {
+      preHandler: (request) => app.authorize(request, 'cmms.imports.manage'),
+      schema: { ...secured, params: importBatchParamsSchema, body: importConfirmBodySchema },
+      handler: imports.pcmConfirm,
+    });
     app.get('/v1/admin/imports/models', {
       preHandler: (request) => app.authorize(request, 'admin.governance.read'),
       schema: secured,

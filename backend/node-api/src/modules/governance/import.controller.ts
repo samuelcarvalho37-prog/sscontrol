@@ -71,6 +71,37 @@ export class ImportController {
   catalog = (request: FastifyRequest) =>
     successEnvelope(request, 'admin.imports.catalog', this.service.catalog());
 
+  pcmCatalog = (request: FastifyRequest) =>
+    successEnvelope(request, 'pcm.imports.catalog', this.service.pcmCatalog(user(request)));
+  pcmValidate = async (request: FastifyRequest<{ Body: ValidateBody }>) =>
+    successEnvelope(
+      request,
+      'pcm.imports.validate',
+      await this.service.validatePcm(
+        user(request),
+        {
+          type: request.body.tipo,
+          fileName: request.body.arquivo_nome,
+          sheetName: request.body.aba_nome,
+          headers: request.body.cabecalhos,
+          rows: rows(request.body.linhas),
+        },
+        audit(request),
+      ),
+    );
+  pcmConfirm = async (request: FastifyRequest<{ Params: BatchParams; Body: ConfirmBody }>) =>
+    successEnvelope(
+      request,
+      'pcm.imports.confirm',
+      await this.service.confirm(
+        user(request),
+        request.params.batchId,
+        request.body.validacao_hash,
+        audit(request),
+        true,
+      ),
+    );
+
   list = async (request: FastifyRequest<{ Querystring: ListQuery }>) =>
     successEnvelope(
       request,

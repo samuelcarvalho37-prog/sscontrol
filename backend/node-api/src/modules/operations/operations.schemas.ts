@@ -7,6 +7,12 @@ const nullableText = Type.Union([Type.Null(), Type.String({ maxLength: 4_000 })]
 const nullableNumber = Type.Union([Type.Null(), Type.Number()]);
 const nullableBoolean = Type.Union([Type.Null(), Type.Boolean()]);
 
+export const trackingListQuerySchema = Type.Object({
+  busca: Type.Optional(Type.String({maxLength:160})), setor_id: Type.Optional(uuid),
+  filtro: Type.Optional(Type.Union(['all','running','blocked','late','completed','queued'].map(value => Type.Literal(value)))),
+  pagina: Type.Optional(Type.Integer({minimum:0,maximum:100000})),
+}, {additionalProperties:false});
+
 export const operationsIdentifierParamsSchema = Type.Object(
   {
     workOrderId: Type.Optional(uuid),
@@ -69,6 +75,7 @@ export const assignActionBodySchema = Type.Object(
 
 export const createWorkOrderBodySchema = Type.Object(
   {
+    checklist_versao_id: Type.Optional(uuid),
     plano_versao_id: Type.Optional(uuid),
     ativo_id: Type.Optional(uuid),
     ativo_tag: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),

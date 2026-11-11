@@ -10,6 +10,7 @@ import {
 } from '../../infrastructure/storage/object-storage.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import { GovernanceRepository, type GovernanceRow } from './governance.repository.js';
+import { archiveSignedRecords } from './signed-record-archive.js';
 import type {
   DocumentFileInput,
   DocumentMetadataInput,
@@ -157,7 +158,8 @@ export class GovernanceService {
     private readonly objectStorage: ObjectStorage,
   ) {}
 
-  async listDocuments(user: AuthenticatedUser, filters: DocumentFilters) {
+  async listDocuments(user: AuthenticatedUser, filters: DocumentFilters, audit: GovernanceAuditMetadata) {
+    await archiveSignedRecords(this.database,this.objectStorage,user,audit);
     const rows = await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       (client) => this.repository.listDocuments(client),

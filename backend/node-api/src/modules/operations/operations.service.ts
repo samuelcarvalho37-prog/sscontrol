@@ -167,6 +167,13 @@ export class OperationsService {
     private readonly objectStorage: ObjectStorage,
   ) {}
 
+  async tracking(user: AuthenticatedUser, search: string, sectorId: string | null, filter: string, page: number) {
+    return this.database.withTransaction({tenantId:user.tenantId,userId:user.id,readOnly:true}, async client => {
+      const summary = await this.repository.trackingSummary(client,search,sectorId);
+      return { ...summary,itens:await this.repository.listWorkOrders(client,{search,status:null,assetId:null,limit:50,offset:page*50,sectorId,trackingFilter:filter}),pagina:page,limite:50 };
+    });
+  }
+
   async listWorkOrders(user: AuthenticatedUser, query: WorkOrderListQuery) {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
@@ -517,6 +524,12 @@ export class OperationsService {
         let context = input.planVersionId
           ? await this.repository.findPublishedPlanContext(client, input.planVersionId)
           : null;
+        if (!context && input.checklistVersionId) {
+          context = await this.repository.ensurePlanFromChecklist(client,user.tenantId,user.id,input.checklistVersionId);
+          if (!context) throw error('WORK_ORDER_CHECKLIST_NOT_EXECUTABLE','O checklist precisa estar publicado antes de ser enviado para execução.',422);
+          if (input.assetId && input.assetId !== context.asset_id) throw error('WORK_ORDER_ASSET_MISMATCH','O checklist não pertence ao ativo desta ocorrência.',422);
+          input = {...input,planVersionId:text(context,'id')};
+        }
         let generatedCorrectivePlan = false;
         if (!context && ['CORRECTIVE', 'IMPROVEMENT'].includes(input.workType) && input.assetId) {
           const generated = await this.repository.ensurePublishedAdHocPlanContext(
@@ -531,6 +544,9 @@ export class OperationsService {
           input = { ...input, planVersionId: text(context, 'id') };
         }
         const totalChecklistItems = context ? integer(context, 'total_items') : 0;
+        if (context && input.assetId && input.assetId !== context.asset_id) {
+          throw error('WORK_ORDER_ASSET_MISMATCH','O plano ou checklist não pertence ao ativo selecionado.',422);
+        }
         if (
           context?.status !== 'PUBLISHED' ||
           context.checklist_status !== 'PUBLISHED' ||
@@ -1095,6 +1111,37 @@ export class OperationsService {
         return detail;
       },
     );
+  }
+
+  async requestWorkOrderUpdate(user: AuthenticatedUser, workOrderId: string, message: string, audit: RequestAuditMetadata) {
+    const normalized = message.trim();
+    if (normalized.length < 10) throw error('FOLLOWUP_MESSAGE_REQUIRED', 'Descreva a solicitação com pelo menos 10 caracteres.', 400);
+    return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
+      const order = await this.repository.findWorkOrder(client, workOrderId, true);
+      if (!order) throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada.', 404);
+      if (['COMPLETED', 'CANCELLED'].includes(text(order, 'status'))) throw error('WORK_ORDER_CLOSED', 'A ordem já foi encerrada.', 409);
+      const recipients = await client.query<{ user_id: string }>(
+        `SELECT DISTINCT candidate.user_id FROM (
+          SELECT execution.operator_id AS user_id FROM maintenance.executions execution
+          WHERE execution.work_order_id=$1 AND execution.status IN ('OPEN','IN_PROGRESS','PAUSED','BLOCKED')
+          UNION SELECT responsible_id FROM maintenance.work_orders WHERE id=$1
+          UNION SELECT responsible_id FROM maintenance.work_order_actions WHERE work_order_id=$1
+        ) candidate JOIN iam.users account ON account.id=candidate.user_id
+        WHERE account.deleted_at IS NULL AND account.tenant_id=$2`, [workOrderId, user.tenantId]);
+      if (!recipients.rows.length) throw error('FOLLOWUP_NO_RECIPIENT', 'Atribua um responsável ou aguarde um técnico assumir a ordem antes de solicitar uma atualização.', 409);
+      const action = await client.query<{ id: string }>('SELECT id FROM maintenance.work_order_actions WHERE work_order_id=$1 ORDER BY updated_at DESC,id DESC LIMIT 1', [workOrderId]);
+      const actionId = action.rows[0]?.id;
+      const code = text(order, 'operational_code') || text(order, 'code');
+      const notification = await client.query<{ id: string }>(
+        `INSERT INTO workflow.notifications (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience)
+        VALUES ($1,'PCM_WORK_ORDER_FOLLOWUP',$2,$3,$8,$4,'HIGH',$5,$6::jsonb,$7::jsonb) RETURNING id`,
+        [user.tenantId, `Atualização solicitada · ${code}`, normalized, actionId || workOrderId, '/home', JSON.stringify({ workOrderId, actionId }), JSON.stringify({ userIds: recipients.rows.map(row => row.user_id) }), actionId ? 'WORK_ORDER_ACTION' : 'WORK_ORDER']);
+      for (const recipient of recipients.rows) await client.query(
+        `INSERT INTO workflow.notification_recipients (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+        VALUES ($1,$2,$3,'DELIVERED',clock_timestamp(),clock_timestamp(),1)`, [user.tenantId, notification.rows[0]!.id, recipient.user_id]);
+      await this.repository.writeAudit(client, user.tenantId, user.id, audit, 'WORK_ORDER_UPDATE_REQUESTED', 'WORK_ORDER', workOrderId, { message: normalized, recipients: recipients.rows.map(row => row.user_id) });
+      return { sent: true, recipients: recipients.rows.length };
+    });
   }
 
   async releaseWorkOrder(

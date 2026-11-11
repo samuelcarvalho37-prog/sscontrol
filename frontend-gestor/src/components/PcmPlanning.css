@@ -217,3 +217,11 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .pcm-column-o
 .pcm-maintenance-workspace .pcm-plan-example dd { margin: 0; }
 html body .pcm-maintenance-workspace .pcm-resource-checklist-routing > header { display: none; }
 html body .pcm-maintenance-workspace .pcm-resource-checklist-routing label { display: grid; gap: 6px; }
+.pcm-maintenance-workspace .pcm-import-entry { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.pcm-maintenance-workspace .pcm-import-backdrop { position: fixed; inset: 0; z-index: 1800; background: #0008; display: grid; place-items: center; padding: 20px; }
+html body .pcm-maintenance-workspace .pcm-planning-page .pcm-import-dialog { width: min(620px, 100%); max-height: 85dvh; overflow: auto; padding: 20px; background: var(--pr-bg); color: var(--pr-ink); border: 1px solid var(--pr-line); border-radius: 8px; display: grid; gap: 14px; box-shadow: 0 16px 50px #0004; }
+.pcm-maintenance-workspace .pcm-import-dialog :is(header, footer) { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pcm-maintenance-workspace .pcm-import-dialog label { display: grid; gap: 6px; }
+.pcm-maintenance-workspace .pcm-import-result { max-height: 220px; overflow: auto; display: grid; gap: 8px; }
+.pcm-maintenance-workspace .pcm-plan-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page .pcm-import-dialog { background: var(--pr-bg, var(--pcm-shell-bg, #102234)) !important; isolation: isolate; }
