@@ -708,32 +708,6 @@ function MonthlyMttrChart({ items, loading, mode = 'bar', palette, chartStyle = 
   )
 }
 
-function PcmReports({ report, onExport, onPrint, onOpenWorkOrder }: { report: NonNullable<PcmData['relatorios']>; onExport: () => void; onPrint: () => void; onOpenWorkOrder: (workOrderId: string, publicCode: string) => void }) {
-  const technicians = report.tecnicos ?? []
-  const executions = report.execucoes_detalhadas ?? []
-  const materialCosts = report.custos_materiais ?? {}
-  const lowStock = report.estoque_baixo ?? {}
-
-  return <section className="pcm-reports" aria-label="Relatórios do PCM">
-    <header className="pcm-panel__heading pcm-reports__heading">
-      <div><span className="pcm-section-kicker">RELATÓRIOS</span><h2>Resultado do período</h2><p>Consolidação de OS, preventivas e horas apontadas pela equipe.</p></div>
-      <div className="pcm-reports__actions"><button type="button" className="pcm-orders__export" onClick={onExport}>Exportar CSV</button><button type="button" className="pcm-reports__print" onClick={onPrint}>Imprimir / PDF</button></div>
-    </header>
-    <article className="pcm-reports__team"><div><span className="pcm-section-kicker">EQUIPE TÉCNICA</span><h3>Horas apontadas</h3></div>
-      {technicians.length === 0 ? <EmptyState>Não há execuções concluídas no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>Técnico</th><th>OS concluídas</th><th>Horas apontadas</th></tr></thead><tbody>{technicians.map(item => <tr key={item.id}><td>{item.nome}</td><td>{item.execucoes}</td><td>{duration(item.segundos_apontados)}</td></tr>)}</tbody></table></div>}
-    </article>
-    <article className="pcm-reports__team"><div><span className="pcm-section-kicker">ESTOQUE</span><h3>Reposição necessária</h3></div>
-      {(lowStock.itens ?? []).length === 0 ? <EmptyState>Não há SKU no estoque mínimo para repor.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>SKU</th><th>Material</th><th>Saldo</th><th>Mínimo</th></tr></thead><tbody>{lowStock.itens?.map(item => <tr key={item.sku}><td><strong>{item.sku}</strong></td><td>{item.nome}</td><td>{item.estoque_atual} {item.unidade}</td><td><strong>{item.estoque_minimo} {item.unidade}</strong></td></tr>)}</tbody></table></div>}
-    </article>
-    <article className="pcm-reports__team"><div><span className="pcm-section-kicker">CUSTOS DE MATERIAIS</span><h3>Maior consumo por ativo</h3></div>
-      {(materialCosts.por_ativo ?? []).length === 0 ? <EmptyState>Não houve consumo de material no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>Ativo</th><th>SKUs consumidos</th><th>Custo total</th></tr></thead><tbody>{materialCosts.por_ativo?.map(item => <tr key={item.ativo_tag}><td><strong>{item.ativo_tag}</strong><br /><small>{item.ativo_nome}</small></td><td>{item.itens_consumidos}</td><td><strong>{formatCurrency(item.custo_total)}</strong></td></tr>)}</tbody></table></div>}
-    </article>
-    <article className="pcm-reports__team"><div><span className="pcm-section-kicker">EXECUÇÕES CONCLUÍDAS</span><h3>Horários e tempo líquido</h3></div>
-      {executions.length === 0 ? <EmptyState>Não há horários de execução concluída no período selecionado.</EmptyState> : <div className="pcm-reports__table-wrap"><table><thead><tr><th>OS</th><th>Técnico</th><th>Início</th><th>Conclusão</th><th>Tempo líquido</th><th>Pausas</th><th>Materiais / custo</th></tr></thead><tbody>{executions.map(item => <tr key={item.id} className="pcm-execution-row" tabIndex={0} aria-label={`Abrir informações da OS ${item.ordem_codigo}`} onClick={() => onOpenWorkOrder(item.ordem_id, item.ordem_codigo)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenWorkOrder(item.ordem_id, item.ordem_codigo) } }}><td><button type="button" className="pcm-order-link" aria-label={`Abrir detalhes da ordem ${item.ordem_codigo}`} onClick={event => { event.stopPropagation(); onOpenWorkOrder(item.ordem_id, item.ordem_codigo) }}><strong>{item.ordem_codigo}</strong></button><br /><small>{item.ativo_tag} · {item.titulo}</small></td><td>{item.tecnico_nome}</td><td>{formatDateTime(item.iniciada_em)}</td><td>{formatDateTime(item.concluida_em)}</td><td>{duration(item.duracao_segundos)}</td><td>{duration(item.segundos_pausados)}</td><td>{item.itens_materiais > 0 ? <><strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(item.custo_materiais_total))}</strong><br /><small>{item.itens_materiais} SKU(s)</small></> : <small>Sem consumo</small>}</td></tr>)}</tbody></table></div>}
-    </article>
-  </section>
-}
-
 function displaySectorName(value: string | null | undefined) {
   const name = value?.trim() ?? ''
   const normalized = name.toLocaleUpperCase('pt-BR')
@@ -2217,8 +2191,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
               </section>
             </aside>
           </div>
-
-          {displayData?.relatorios ? <PcmReports report={displayData.relatorios} onExport={exportPcmReport} onPrint={printPcmReport} onOpenWorkOrder={(workOrderId, publicCode) => void openWorkOrderById(workOrderId, publicCode)} /> : null}
 
 
           {!demoMode && improvementRequests.some(request => request.status === 'OPEN') ? <section className="pcm-panel pcm-orders" aria-labelledby="pcm-improvement-requests-title">
