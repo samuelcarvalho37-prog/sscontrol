@@ -636,7 +636,7 @@ export class OperationsRepository {
     occurrenceId: string,
   ): Promise<OperationsRow | null> {
     const result = await client.query<OperationsRow>(
-      `SELECT id,tenant_id,asset_id,component_id,status,treatment_status,
+      `SELECT id,tenant_id,asset_id,component_id,status,treatment_status,request_kind,requested_quality,requested_safety,request_returned,
               work_order_id,work_order_action_id
        FROM maintenance.operational_occurrences
        WHERE id=$1

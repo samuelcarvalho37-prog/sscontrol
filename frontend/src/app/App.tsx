@@ -1,3 +1,4 @@
+import { SharedWorkPanel } from '../components/SharedWorkPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppHeader, type ConnectionState } from '../components/AppHeader'
 import { BottomNavigation, type AppSection } from '../components/BottomNavigation'
@@ -1016,6 +1017,7 @@ export function App() {
                   onOpenQr={() => setSection('qr')}
                 />
               )}
+              {section === 'shared' && operatorSession.user.capacidades?.includes('maintenance.shared.read') && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} />}
               {section === 'qr' && <QrPage onNotify={notify} onOpenAction={openActionById} />}
               {section === 'settings' && (
                 <SettingsPage
@@ -1036,7 +1038,7 @@ export function App() {
           )}
         </main>
 
-        {view === 'navigation' && <BottomNavigation active={section} onChange={changeSection} />}
+        {view === 'navigation' && <BottomNavigation canShared={operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false} active={section} onChange={changeSection} />}
 
         {detailRefreshing && actionDetail && (
           <div className="background-refresh" role="status">Atualizando dados…</div>

@@ -89,6 +89,9 @@ export function PcmTrackingWorkspace({
   const [detail, setDetail] = useState<GestorActionDetail | null>(null);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"orders" | "occurrences">("orders");
+  const [qualityValidation, setQualityValidation] = useState(false);
+  const [safetyValidation, setSafetyValidation] = useState(false);
+  const [validationReason, setValidationReason] = useState('');
   const [origin, setOrigin] = useState<GestorOccurrence | null>(null);
   const [plans, setPlans] = useState<AdminEntityRecord[]>([]);
   const [checklists, setChecklists] = useState<AdminChecklistPlan[]>([]);
@@ -208,6 +211,9 @@ export function PcmTrackingWorkspace({
   ) {
     setView("orders");
     setOrigin(occurrence);
+    setQualityValidation(occurrence?.qualidade_solicitada === true);
+    setSafetyValidation(occurrence?.seguranca_solicitada === true);
+    setValidationReason('');
     setCreating(true);
     setSelected(null);
     setError("");
@@ -268,7 +274,7 @@ export function PcmTrackingWorkspace({
         intervencao_id: current.id,
         politica_assinatura: "QUALIDADE_OU_SEGURANCA",
         comentario:
-          "Encaminhamento operacional do PCM sem exigir validação pós-intervenção.",
+          "Encaminhamento operacional do PCM com validações conforme análise da solicitação.",
         exige_segregacao: "NAO",
       });
       current = await getAdminIntervention(current.id);
@@ -329,7 +335,8 @@ export function PcmTrackingWorkspace({
             plan.modo_parada ||
             "EXECUTOR_DECISION",
         ),
-        exige_liberacao_pos_intervencao: false,
+        exige_liberacao_pos_intervencao: qualityValidation || safetyValidation,
+        analise_tecnica: { validacao_qualidade: qualityValidation, validacao_seguranca: safetyValidation, justificativa_validacao: validationReason },
       });
       await dispatch(saved);
       setCreating(false);
@@ -474,7 +481,12 @@ export function PcmTrackingWorkspace({
                 onChange={(event) => setDescription(event.target.value)}
                 disabled={busy}
               />
-            </label>
+            </label>              <fieldset className="wide"><legend>Validação após a conclusão técnica</legend>
+                <label><input type="checkbox" checked={qualityValidation} onChange={event => setQualityValidation(event.target.checked)} /> Qualidade</label>
+                <label><input type="checkbox" checked={safetyValidation} onChange={event => setSafetyValidation(event.target.checked)} /> Segurança</label>
+                <p>Acompanhamento não bloqueia o início. As áreas selecionadas assinam após a conclusão técnica.</p>
+                <label>Justificativa se alterar a indicação do solicitante<textarea value={validationReason} onChange={event => setValidationReason(event.target.value)} maxLength={4000} /></label>
+              </fieldset>
             <label>
               Prioridade
               <select

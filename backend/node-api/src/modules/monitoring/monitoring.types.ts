@@ -29,6 +29,7 @@ export interface OccurrenceListQuery extends PageQuery {
 }
 
 export interface CreateOccurrenceInput {
+  readonly sharedRequest?: { kind:string; quality:boolean; safety:boolean; submissionKey:string };
   readonly assessment?: OccurrenceAssessment;
   readonly photo?: string;
   readonly assetId: string;

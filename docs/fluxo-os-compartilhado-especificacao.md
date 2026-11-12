@@ -1,7 +1,7 @@
 # Fluxo compartilhado de solicitação e acompanhamento de OS
 
 Preparação da mudança acordada com Samuel em 11/11/2026.
-Status: especificação preparada para implementação; funcionalidades abaixo ainda não implementadas por este documento. Base: integração local da entrega Natan1bdd8ee.
+Status: implementação entregue em 12/11/2026; ver `fluxo-os-compartilhado-entrega.md` para alterações, verificações e aceite restante. Base: integração local da entrega Natan1bdd8ee.
 
 ## Comportamento acordado
 

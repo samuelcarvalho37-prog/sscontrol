@@ -86,6 +86,7 @@ export interface AdminIntervention {
 }
 
 export interface AdminInterventionInput {
+  analise_tecnica?: Record<string, unknown>
   checklist_versao_id?: string
   origem?: string
   entidade_origem_id?: string

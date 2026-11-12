@@ -188,7 +188,7 @@ export class MonitoringRepository {
     const result = await client.query<MonitoringRow>(
       `SELECT occurrence.id, occurrence.occurrence_type AS tipo, occurrence.title AS titulo,
               occurrence.description AS descricao, occurrence.severity AS severidade,
-              occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
+              occurrence.request_kind AS tipo_solicitado, occurrence.requested_quality AS qualidade_solicitada, occurrence.requested_safety AS seguranca_solicitada, occurrence.request_returned AS devolvida, occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
               occurrence.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.reported_by AS registrada_por_id,
@@ -208,6 +208,7 @@ export class MonitoringRepository {
          AND ($3::text IS NULL OR occurrence.treatment_status = $3)
          AND ($4::text IS NULL OR occurrence.severity = $4)
          AND ($5::uuid IS NULL OR occurrence.asset_id = $5)
+         AND (occurrence.request_kind IS NULL OR maintenance.shared_asset_visible(occurrence.asset_id,nullif(current_setting('app.user_id',true),'')::uuid))
        ORDER BY CASE occurrence.severity WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                 occurrence.created_at DESC, occurrence.id DESC
        LIMIT $6`,
@@ -284,7 +285,7 @@ export class MonitoringRepository {
     const result = await client.query<MonitoringRow>(
       `SELECT occurrence.id, occurrence.occurrence_type AS tipo, occurrence.title AS titulo,
               occurrence.description AS descricao, occurrence.severity AS severidade,
-              occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
+              occurrence.request_kind AS tipo_solicitado, occurrence.requested_quality AS qualidade_solicitada, occurrence.requested_safety AS seguranca_solicitada, occurrence.request_returned AS devolvida, occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
               occurrence.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.created_at AS criada_em,
@@ -318,7 +319,7 @@ export class MonitoringRepository {
        LEFT JOIN maintenance.equipment_stops stop ON stop.id=occurrence.equipment_stop_id
        LEFT JOIN workflow.technical_analyses analysis ON analysis.id=occurrence.technical_analysis_id
        LEFT JOIN maintenance.work_orders work_order ON work_order.id=occurrence.work_order_id
-       WHERE occurrence.id=$1`,
+       WHERE occurrence.id=$1 AND (occurrence.request_kind IS NULL OR maintenance.shared_asset_visible(occurrence.asset_id,nullif(current_setting('app.user_id',true),'')::uuid))`,
       [occurrenceId],
     );
     return first(result.rows);
@@ -646,6 +647,7 @@ export class MonitoringRepository {
     roleTypes: readonly string[],
     excludedUserId: string | null,
     roleCodes: readonly string[] = [],
+    assetId: string | null = null,
   ): Promise<void> {
     await client.query(
       `INSERT INTO workflow.notification_recipients
@@ -658,10 +660,11 @@ export class MonitoringRepository {
          AND (role.role_type=ANY($3::text[]) OR role.code=ANY($5::text[]))
          AND user_account.status='ACTIVE' AND user_account.deleted_at IS NULL
          AND ($4::uuid IS NULL OR user_account.id<>$4)
+         AND ($6::uuid IS NULL OR maintenance.shared_asset_visible($6,user_account.id))
        ON CONFLICT (tenant_id,notification_id,user_id) DO UPDATE
        SET delivery_status='DELIVERED',delivered_at=COALESCE(workflow.notification_recipients.delivered_at,clock_timestamp()),
            last_notified_at=clock_timestamp(),delivery_attempts=workflow.notification_recipients.delivery_attempts+1`,
-      [tenantId, notificationId, roleTypes, excludedUserId, roleCodes],
+      [tenantId, notificationId, roleTypes, excludedUserId, roleCodes, assetId],
     );
   }
 

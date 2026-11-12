@@ -12,7 +12,7 @@ export function PcmOccurrences({
 }) {
   const [items, setItems] = useState<GestorOccurrence[]>([]);
   const [selected, setSelected] = useState<GestorOccurrence | null>(null);
-  const [decision, setDecision] = useState<"TRATAR" | "AGENDAR" | "RECUSAR">(
+  const [decision, setDecision] = useState<"TRATAR" | "AGENDAR" | "RECUSAR" | "DEVOLVER">(
     "TRATAR",
   );
   const [note, setNote] = useState("");
@@ -44,7 +44,7 @@ export function PcmOccurrences({
   return (
     <section className="pcm-tracking-occurrences">
       <header>
-        <h2>Ocorrências da produção</h2>
+        <h2>Solicitações e ocorrências</h2>
         <button
           type="button"
           disabled={busy || loading}
@@ -99,7 +99,7 @@ export function PcmOccurrences({
             >
               <option value="TRATAR">Tratar agora</option>
               <option value="AGENDAR">Agendar tratamento</option>
-              <option value="RECUSAR">Recusar ocorrência</option>
+              <option value="RECUSAR">Recusar com justificativa</option>{selected.tipo_solicitado ? <option value="DEVOLVER">Devolver para correção</option> : null}
             </select>
           </label>
           {decision === "AGENDAR" ? (
@@ -115,7 +115,7 @@ export function PcmOccurrences({
             </label>
           ) : null}
           <label className="wide">
-            Motivo e orientação à produção
+            Motivo e orientação ao solicitante
             <textarea
               required
               minLength={10}
@@ -147,7 +147,7 @@ export function PcmOccurrences({
             return (
               <article key={item.id} className="pcm-occurrence-row">
                 <div>
-                  <strong>{item.titulo}</strong>
+                  <strong>{item.titulo}</strong>{item.tipo_solicitado ? <p>Solicitação: {String(item.tipo_solicitado)} · Qualidade: {item.qualidade_solicitada ? "Sim" : "Não"} · Segurança: {item.seguranca_solicitada ? "Sim" : "Não"}{item.devolvida ? " · Devolvida para correção" : ""}</p> : null}
                   <p>
                     {[item.ativo_tag, item.ativo_nome]
                       .filter(Boolean)
@@ -184,7 +184,7 @@ export function PcmOccurrences({
                     >
                       Analisar
                     </button>
-                    <button type="button" onClick={() => onCreateOrder(item)}>
+                    <button type="button" disabled={Boolean(item.devolvida)} onClick={() => onCreateOrder(item)}>
                       Criar OS
                     </button>
                   </div>

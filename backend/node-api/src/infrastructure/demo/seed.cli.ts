@@ -1881,6 +1881,19 @@ async function main(): Promise<void> {
       [environment.defaultTenantId, ids.admin],
     );
     await seedCatalog(client, environment.defaultTenantId);
+    // Demo identities are explicitly bound to the demo plant, never TENANT.
+    await client.query(`INSERT INTO iam.user_scope_assignments(tenant_id,user_id,plant_id,scope_type,assigned_by)
+      SELECT $1,u.id,$2,'PLANT',$3 FROM iam.users u
+      WHERE u.tenant_id=$1 AND u.id=ANY($4::uuid[]) AND NOT EXISTS
+      (SELECT 1 FROM iam.user_scope_assignments scope WHERE scope.tenant_id=$1 AND scope.user_id=u.id AND scope.plant_id=$2 AND scope.scope_type='PLANT' AND scope.status='ACTIVE')`,
+      [environment.defaultTenantId,ids.plant,ids.admin,[ids.quality,ids.safety,ids.maintenance,ids.mechanicalMaintenance,ids.electricalMaintenance,ids.operator,ids.pcm,ids.production]]);
+    await client.query(`INSERT INTO iam.role_capabilities(tenant_id,role_id,capability_id,effect)
+      SELECT r.tenant_id,r.id,c.id,'ALLOW' FROM iam.roles r CROSS JOIN iam.capabilities c
+      WHERE r.tenant_id=$1 AND r.status='ACTIVE' AND r.deleted_at IS NULL AND
+      ((r.code IN ('PCM','PRODUCAO','OPERADOR','TECNICO','QUALIDADE','SEGURANCA','GESTOR_TECNICO') AND c.code IN ('maintenance.shared.request','maintenance.shared.read'))
+      OR (r.code='PCM' AND c.code='maintenance.occurrences.triage')
+      OR (r.code='QUALIDADE' AND c.code='maintenance.shared.observe.quality') OR (r.code='SEGURANCA' AND c.code='maintenance.shared.observe.safety'))
+      ON CONFLICT(tenant_id,role_id,capability_id) DO UPDATE SET effect='ALLOW'`,[environment.defaultTenantId]);
     await seedMaterials(client, environment.defaultTenantId);
     await seedParameters(client, environment.defaultTenantId);
     await seedChecklistsAndPlans(client, environment.defaultTenantId);

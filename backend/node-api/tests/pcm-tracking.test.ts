@@ -268,7 +268,7 @@ test(
         tenantId: account.tenant_id,
         roles: ['PCM'],
         capabilities: ['maintenance.work-orders.manage', 'maintenance.work-orders.release'],
-      } as AuthenticatedUser;
+      } as unknown as AuthenticatedUser;
       const audit = {
         traceId: randomUUID(),
         userAgent: null,

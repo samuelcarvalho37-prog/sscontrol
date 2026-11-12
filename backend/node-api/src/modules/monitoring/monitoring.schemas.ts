@@ -1,7 +1,7 @@
 import { Type } from '@fastify/type-provider-typebox';
 
 export const occurrenceDecisionBodySchema = Type.Object({
-  decisao: Type.Union([Type.Literal('TRATAR'), Type.Literal('AGENDAR'), Type.Literal('RECUSAR')]),
+  decisao: Type.Union([Type.Literal('TRATAR'), Type.Literal('AGENDAR'), Type.Literal('RECUSAR'), Type.Literal('DEVOLVER')]),
   observacao: Type.String({ minLength: 10, maxLength: 4000 }),
   agendada_para: Type.Optional(Type.String({ format: 'date-time' })),
 }, { additionalProperties: false });

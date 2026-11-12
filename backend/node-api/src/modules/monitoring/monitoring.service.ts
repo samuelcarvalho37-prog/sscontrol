@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assertSharedAsset } from '../operations/shared-workflow.js';
 import { suggestOccurrencePriority } from './occurrence-assessment.js';
 import { loadPcmDashboard } from './pcm-dashboard.js';
 import { loadPcmReports } from './pcm-reports.js';
@@ -91,7 +92,7 @@ export class MonitoringService {
     );
   }
 
-  async decideOccurrence(user: AuthenticatedUser, occurrenceId: string, input: { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR'; observacao: string; agendada_para?: string }, audit: RequestAuditMetadata) {
+  async decideOccurrence(user: AuthenticatedUser, occurrenceId: string, input: { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR' | 'DEVOLVER'; observacao: string; agendada_para?: string }, audit: RequestAuditMetadata) {
     const note = input.observacao.trim();
     if (note.length < 10) throw new AppError({ code: 'OCCURRENCE_NOTE_REQUIRED', message: 'Informe o motivo da decisão com pelo menos 10 caracteres.', statusCode: 400 });
     const scheduled = input.decisao === 'AGENDAR' ? new Date(input.agendada_para ?? '') : null;
@@ -99,13 +100,16 @@ export class MonitoringService {
     return this.database.withTransaction({ tenantId: user.tenantId, userId: user.id }, async client => {
       const occurrence = await this.repository.findOccurrence(client, occurrenceId, true);
       if (!occurrence) throw new AppError({ code: 'OCCURRENCE_NOT_FOUND', message: 'Ocorrência não encontrada.', statusCode: 404 });
+      if(occurrence.request_kind) await assertSharedAsset(client,text(occurrence,'asset_id'),user.id);
+      if(input.decisao==='DEVOLVER'&&!occurrence.request_kind) throw appError('NOT_A_WORK_REQUEST','Apenas solicitações de OS podem ser devolvidas para correção.',422);
       if (!['OPEN','IN_TREATMENT'].includes(text(occurrence,'status')) || occurrence.work_order_id) throw new AppError({ code: 'OCCURRENCE_ALREADY_TREATED', message: 'A ocorrência já foi encerrada ou possui uma OS. Consulte o acompanhamento da ordem.', statusCode: 409 });
       await client.query(`UPDATE maintenance.operational_occurrences SET status=$2,treatment_status='UNDER_ANALYSIS',treatment_scheduled_for=$3,
         treatment_decision_note=$4,treatment_decided_by=$5,treatment_decided_at=clock_timestamp(),updated_at=clock_timestamp(),
         closed_at=CASE WHEN $2='CANCELLED' THEN clock_timestamp() ELSE NULL END WHERE id=$1`,
         [occurrenceId, input.decisao === 'RECUSAR' ? 'CANCELLED' : 'IN_TREATMENT', scheduled?.toISOString() ?? null, note, user.id]);
+      await client.query('UPDATE maintenance.operational_occurrences SET request_returned=$2 WHERE id=$1',[occurrenceId,input.decisao==='DEVOLVER']);
       await client.query("UPDATE workflow.notifications SET status='RETRACTED' WHERE entity_id=$1 AND notification_type='PCM_OCCURRENCE_TREATMENT_DUE' AND status='ACTIVE'",[occurrenceId]);
-      const message = input.decisao === 'AGENDAR' ? `Tratamento agendado para ${scheduled!.toISOString()}. ${note}` : input.decisao === 'RECUSAR' ? `Ocorrência recusada. ${note}` : `Tratamento iniciado pelo PCM. ${note}`;
+      const message = input.decisao === 'DEVOLVER' ? `Pedido devolvido para correção. ${note}` : input.decisao === 'AGENDAR' ? `Tratamento agendado para ${scheduled!.toISOString()}. ${note}` : input.decisao === 'RECUSAR' ? `Ocorrência recusada. ${note}` : `Tratamento iniciado pelo PCM. ${note}`;
       const notification = await client.query<{id:string}>(`INSERT INTO workflow.notifications (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience)
         VALUES ($1,'PCM_OCCURRENCE_DECISION',$2,$3,'OCORRENCIAS_OPERACIONAIS',$4,'INFO','/home',$5::jsonb,$6::jsonb) RETURNING id`,
         [user.tenantId, text(occurrence,'title'), message, occurrenceId, JSON.stringify({ occurrenceId }), JSON.stringify({ userIds: [occurrence.reported_by] })]);
@@ -159,6 +163,17 @@ export class MonitoringService {
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
         await this.requireActiveAssetContext(client, input.assetId, input.componentId);
+        if (input.sharedRequest) {
+          await assertSharedAsset(client,input.assetId,user.id);
+          await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`${user.tenantId}:${user.id}:${input.sharedRequest.submissionKey}`]);
+          const previous=await client.query('SELECT id,asset_id,title,description,request_kind,requested_quality,requested_safety FROM maintenance.operational_occurrences WHERE reported_by=$1 AND request_submission_key=$2',[user.id,input.sharedRequest.submissionKey]);
+          const prior=previous.rows[0];
+          if(prior){
+            if(prior.asset_id!==input.assetId||prior.title!==input.title||prior.description!==input.description||prior.request_kind!==input.sharedRequest.kind||prior.requested_quality!==input.sharedRequest.quality||prior.requested_safety!==input.sharedRequest.safety)
+              throw appError('REQUEST_KEY_CONFLICT','Este envio já foi registrado com outro conteúdo. Consulte a solicitação antes de abrir outro pedido.',409);
+            return this.requiredOccurrenceDetail(client,prior.id);
+          }
+        }
         const occurrenceId = randomUUID();
         await this.repository.createOccurrence(
           client,
@@ -170,6 +185,9 @@ export class MonitoringService {
         );
 
         let stopId: string | null = null;
+        if(input.sharedRequest) await client.query(`UPDATE maintenance.operational_occurrences SET request_kind=$2,
+          requested_quality=$3,requested_safety=$4,request_submission_key=$5 WHERE id=$1`,
+          [occurrenceId,input.sharedRequest.kind,input.sharedRequest.quality,input.sharedRequest.safety,input.sharedRequest.submissionKey]);
         if (input.equipmentStopped) {
           const existingStop = await this.repository.findOpenStopForAsset(
             client,
@@ -230,6 +248,7 @@ export class MonitoringService {
           priority: input.severity,
           actionRoute: `/maintenance/occurrences/${occurrenceId}`,
           deduplicationKey: `occurrence:${occurrenceId}:reported`,
+          assetId: input.sharedRequest ? input.assetId : null,
           // Operational occurrence triage belongs to PCM, never to ADMIN.
           roles: [],
           roleCodes: ['PCM'],
@@ -1182,6 +1201,7 @@ export class MonitoringService {
       readonly deduplicationKey: string;
       readonly roles: readonly string[];
       readonly roleCodes?: readonly string[];
+      readonly assetId?: string | null;
     },
   ): Promise<void> {
     const notificationId = await this.repository.createNotification(client, user.tenantId, {
@@ -1203,6 +1223,7 @@ export class MonitoringService {
       input.roles,
       user.id,
       input.roleCodes ?? [],
+      input.assetId ?? null,
     );
   }
 }

@@ -14,7 +14,7 @@ interface Params {
   readonly notificationId?: string;
 }
 
-interface OccurrenceDecisionBody { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR'; observacao: string; agendada_para?: string }
+interface OccurrenceDecisionBody { decisao: 'TRATAR' | 'AGENDAR' | 'RECUSAR' | 'DEVOLVER'; observacao: string; agendada_para?: string }
 
 interface OccurrenceQuery {
   readonly busca?: string;

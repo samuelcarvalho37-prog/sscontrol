@@ -1,3 +1,4 @@
+import { SharedWorkPanel } from '../../../frontend/src/components/SharedWorkPanel'
 import { adaptPcmAppearance } from '../components/pcmAppearance'
 import type { CSSProperties } from 'react'
 import '../styles/pcm-workspace-shell.css'
@@ -313,6 +314,7 @@ function TenantApp() {
   }
 
   function handleOpenNotification(notification: GestorNotification) {
+    if (String(notification.tipo ?? '').startsWith('SHARED_WORK_ORDER_') && session?.user.capacidades?.includes('maintenance.shared.read')) { setSection('shared'); setNotificationOpen(false); return }
     const entityType = String(notification.entidade_tipo ?? '').trim().toUpperCase()
     const entityId = String(notification.entidade_id ?? '').trim()
     if (!entityId) {
@@ -518,7 +520,7 @@ function TenantApp() {
           </button>
         </div>
         {canViewPcmDashboard ? <>
-          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canReadWork ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
+          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'shared' ? 'page' : undefined} onClick={() => handleNavigate('shared')}>Solicitar / acompanhar OS</button><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canReadWork ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
           <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
         </> : null}
         </header>
@@ -601,6 +603,7 @@ function TenantApp() {
             }
             </>
           ) : null}
+          {section === 'shared' && session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : null}
           {section === 'tracking' && canReadWork ? <PcmTrackingWorkspace key={trackingChecklistId || 'tracking'} initialChecklistId={trackingChecklistId} canManage={Boolean(session.user.capacidades?.includes('maintenance.work-orders.manage'))} onSessionExpired={expireSession} /> : null}
           {section === 'maintenance' && canManageMaintenance ? (
             <PcmMaintenanceWorkspace onSessionExpired={expireSession} onCreateOrder={id => { setTrackingChecklistId(id); handleNavigate('tracking') }} />
@@ -621,6 +624,7 @@ function TenantApp() {
           validationCount={validationCount}
           showAdmin={false}
           canValidate={technicalContext?.pode_validar ?? false}
+          canShared={session.user.capacidades?.includes('maintenance.shared.read') ?? false}
           canReportOccurrence={canReportOccurrence}
           isTechnician={isTechnician}
           canReadAnalytics={canReadAnalytics}

@@ -8,7 +8,7 @@ function adminToken(): string {
   throw new ApiRequestError('Sessão administrativa não encontrada. Entre novamente.', 'GESTOR_SESSION_MISSING')
 }
 
-export async function decidePcmOccurrence(id: string, decision: 'TRATAR' | 'AGENDAR' | 'RECUSAR', note: string, scheduledFor?: string): Promise<void> {
+export async function decidePcmOccurrence(id: string, decision: 'TRATAR' | 'AGENDAR' | 'RECUSAR' | 'DEVOLVER', note: string, scheduledFor?: string): Promise<void> {
   const response = await callApi('pcm.occurrences.decision', { token: adminToken(), ocorrencia_id: id, decisao: decision, observacao: note, agendada_para: scheduledFor }, undefined, { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE })
   if (!response.data) throw new ApiRequestError('A decisão não foi confirmada.', 'OCCURRENCE_DECISION_EMPTY')
 }

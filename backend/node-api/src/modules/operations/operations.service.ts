@@ -1,3 +1,4 @@
+import { assertSharedAsset, notifySharedObservers } from './shared-workflow.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { requiresPostInterventionRelease } from './post-intervention-policy.js';
 
@@ -454,9 +455,22 @@ export class OperationsService {
               404,
             );
           }
+          if (occurrence.request_kind) {
+            await assertSharedAsset(client,text(occurrence,'asset_id'),user.id);
+            if (occurrence.request_returned || ['CANCELLED','CLOSED'].includes(text(occurrence,'status')))
+              throw error('REQUEST_NOT_APPROVABLE','O pedido foi devolvido ou rejeitado. Aguarde a correção.',409);
+            const previousQuality=occurrence.requested_quality===true, previousSafety=occurrence.requested_safety===true;
+            const analysis=input.technicalAnalysis;
+            const quality=typeof analysis.validacao_qualidade==='boolean'?analysis.validacao_qualidade:previousQuality;
+            const safety=typeof analysis.validacao_seguranca==='boolean'?analysis.validacao_seguranca:previousSafety;
+            if ((previousQuality!==quality||previousSafety!==safety)&&String(analysis.justificativa_validacao??'').trim().length<10)
+              throw error('VALIDATION_CHANGE_REASON_REQUIRED','Justifique a alteração das validações indicadas pelo solicitante.',422);
+            input={...input,technicalAnalysis:{...analysis,shared_request:true,validacao_qualidade:quality,validacao_seguranca:safety,
+              exige_liberacao_pos_intervencao:quality||safety}};
+          }
           const reverseLinked = await this.repository.findWorkOrdersByOriginEntity(
             client,
-            input.originEntityId,
+            text(occurrence, 'id'),
           );
           const linkedIds = new Set(reverseLinked.map((workOrder) => text(workOrder, 'id')));
           const directWorkOrderId = nullableRowText(occurrence, 'work_order_id');
@@ -784,6 +798,11 @@ export class OperationsService {
             detail,
           );
           return detail;
+        }
+        const sharedAnalysis=workOrder.technical_analysis as Record<string,unknown>;
+        if(sharedAnalysis?.shared_request===true){
+          const quality=sharedAnalysis.validacao_qualidade===true,safety=sharedAnalysis.validacao_seguranca===true;
+          input={...input,signaturePolicy:quality&&safety?'QUALIDADE_E_SEGURANCA':quality?'QUALIDADE':'SEGURANCA',requiredSignatures:quality&&safety?2:1};
         }
         this.validateSignaturePolicy(input);
         const areas = await this.repository.findTechnicalAreas(client);
@@ -1207,6 +1226,7 @@ export class OperationsService {
           actionId,
         );
         await this.repository.linkOccurrenceReleaseAction(client, workOrderId, actionId);
+        await notifySharedObservers(client,user.tenantId,workOrderId,'RELEASED');
         const detail = await this.requiredWorkOrderDetail(client, workOrderId);
         await this.repository.writeAudit(
           client,
@@ -1443,6 +1463,7 @@ export class OperationsService {
         const alreadyStarted = executionStatus === 'IN_PROGRESS';
         if (executionStatus === 'OPEN') {
           await this.repository.startExecution(client, execution.id, stopMode);
+          await notifySharedObservers(client,user.tenantId,text(execution,'work_order_id'),'STARTED');
           await this.repository.openParticipantWorkInterval(client, user.tenantId, execution.id, user.id);
           if (stopMode === 'STOPPED') {
             await this.repository.openEquipmentStopForExecution(
@@ -1995,6 +2016,7 @@ export class OperationsService {
         if (text(execution, 'status') !== 'OPEN')
           throw error('EXECUTION_NOT_OPEN', 'A execução já foi iniciada ou encerrada.', 409);
         await this.repository.startExecution(client, executionId, stopMode);
+        await notifySharedObservers(client,user.tenantId,text(execution,'work_order_id'),'STARTED');
         await this.repository.openParticipantWorkInterval(client, user.tenantId, executionId, user.id);
         if (stopMode === 'STOPPED') {
           await this.repository.openEquipmentStopForExecution(client, user.tenantId, user.id, executionId);
