@@ -1,5 +1,11 @@
 import { Type } from '@fastify/type-provider-typebox';
 
+export const occurrenceDecisionBodySchema = Type.Object({
+  decisao: Type.Union([Type.Literal('TRATAR'), Type.Literal('AGENDAR'), Type.Literal('RECUSAR')]),
+  observacao: Type.String({ minLength: 10, maxLength: 4000 }),
+  agendada_para: Type.Optional(Type.String({ format: 'date-time' })),
+}, { additionalProperties: false });
+
 const uuid = Type.String({ format: 'uuid' });
 const nullableUuid = Type.Union([Type.Null(), uuid]);
 const nullableText = Type.Union([Type.Null(), Type.String({ maxLength: 4_000 })]);

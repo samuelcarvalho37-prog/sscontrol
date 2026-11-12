@@ -21,6 +21,8 @@ function requireRow<T extends QueryResultRow>(rows: readonly T[], message: strin
 
 function table(entity: ImportEntity): string {
   const tables: Readonly<Record<ImportEntity, string>> = {
+    areas_tecnicas: 'iam.technical_areas',
+    cargos_tecnicos: 'iam.technical_roles',
     plantas: 'cmms.plants',
     setores: 'cmms.sectors',
     linhas: 'cmms.lines',
@@ -150,14 +152,14 @@ export class ImportRepository {
 
   async resolveReference(
     client: PoolClient,
-    entity: 'plantas' | 'setores' | 'linhas' | 'ativos',
+    entity: 'plantas' | 'setores' | 'linhas' | 'ativos' | 'areas_tecnicas',
     requested: string,
   ): Promise<readonly string[]> {
     const referenceTable = table(entity);
     const result = await client.query<{ id: string } & QueryResultRow>(
       `SELECT id FROM ${referenceTable}
        WHERE deleted_at IS NULL
-         AND (id::text=$1 OR legacy_id=$1 OR upper(tag)=upper($1))
+         AND (id::text=$1 OR legacy_id=$1 OR upper(${entity === 'areas_tecnicas' ? 'code' : 'tag'})=upper($1))
        ORDER BY id LIMIT 2`,
       [requested],
     );
@@ -169,20 +171,27 @@ export class ImportRepository {
     entity: ImportEntity,
     requestedId: string | null,
     naturalKey: string,
+    areaId: string | null = null,
   ): Promise<readonly ImportRow[]> {
     const entityTable = table(entity);
-    const key = entity === 'materiais' ? 'sku' : entity === 'fontes_valores' ? 'source_url' : 'tag';
-    const idMatch = entity === 'fontes_valores'
-      ? 'item.id::text=$1'
-      : '(item.id::text=$1 OR item.legacy_id=$1)';
+    const key = ['areas_tecnicas', 'cargos_tecnicos'].includes(entity)
+      ? 'code'
+      : entity === 'materiais'
+        ? 'sku'
+        : entity === 'fontes_valores'
+          ? 'source_url'
+          : 'tag';
+    const idMatch =
+      entity === 'fontes_valores' ? 'item.id::text=$1' : '(item.id::text=$1 OR item.legacy_id=$1)';
     const result = await client.query<ImportRow>(
       `SELECT id, to_jsonb(item.*) - 'tenant_id' AS snapshot
        FROM ${entityTable} item
        WHERE item.deleted_at IS NULL
          AND (($1::text IS NOT NULL AND ${idMatch})
               OR upper(item.${key})=upper($2))
+         ${entity === 'cargos_tecnicos' ? 'AND item.technical_area_id=$3::uuid' : ''}
        ORDER BY item.id LIMIT 2`,
-      [requestedId, naturalKey],
+      entity === 'cargos_tecnicos' ? [requestedId, naturalKey, areaId] : [requestedId, naturalKey],
     );
     return result.rows;
   }
@@ -325,6 +334,8 @@ export class ImportRepository {
 
   private insertQuery(entity: ImportEntity): string {
     const queries: Readonly<Record<ImportEntity, string>> = {
+      areas_tecnicas: `INSERT INTO iam.technical_areas (id,tenant_id,code,name,description,status) VALUES ($2,$1,$3,$4,$5,$6) RETURNING to_jsonb(iam.technical_areas.*)-'tenant_id' AS snapshot`,
+      cargos_tecnicos: `INSERT INTO iam.technical_roles (id,tenant_id,technical_area_id,code,name,description,status) VALUES ($2,$1,$3,$4,$5,$6,$7) RETURNING to_jsonb(iam.technical_roles.*)-'tenant_id' AS snapshot`,
       plantas: `INSERT INTO cmms.plants (id,tenant_id,tag,name,status)
         VALUES ($2,$1,$3,$4,$5) RETURNING to_jsonb(cmms.plants.*)-'tenant_id' AS snapshot`,
       setores: `INSERT INTO cmms.sectors (id,tenant_id,plant_id,tag,name,status)
@@ -356,6 +367,8 @@ export class ImportRepository {
 
   private updateQuery(entity: ImportEntity): string {
     const queries: Readonly<Record<ImportEntity, string>> = {
+      areas_tecnicas: `UPDATE iam.technical_areas SET code=$2,name=$3,description=$4,status=$5,updated_at=clock_timestamp() WHERE id=$1 RETURNING to_jsonb(iam.technical_areas.*)-'tenant_id' AS snapshot`,
+      cargos_tecnicos: `UPDATE iam.technical_roles SET technical_area_id=$2,code=$3,name=$4,description=$5,status=$6,updated_at=clock_timestamp() WHERE id=$1 RETURNING to_jsonb(iam.technical_roles.*)-'tenant_id' AS snapshot`,
       plantas: `UPDATE cmms.plants SET tag=$2,name=$3,status=$4,updated_at=clock_timestamp()
         WHERE id=$1 RETURNING to_jsonb(cmms.plants.*)-'tenant_id' AS snapshot`,
       setores: `UPDATE cmms.sectors SET plant_id=$2,tag=$3,name=$4,status=$5,updated_at=clock_timestamp()
@@ -391,6 +404,15 @@ export class ImportRepository {
   ): readonly unknown[] {
     const prefix = includeTenant ? [tenantId, data.id] : [data.id];
     const values: Readonly<Record<ImportEntity, readonly unknown[]>> = {
+      areas_tecnicas: [...prefix, data.code, data.name, data.description, data.status],
+      cargos_tecnicos: [
+        ...prefix,
+        data.technical_area_id,
+        data.code,
+        data.name,
+        data.description,
+        data.status,
+      ],
       plantas: [...prefix, data.tag, data.name, data.status],
       setores: [...prefix, data.plant_id, data.tag, data.name, data.status],
       linhas: [...prefix, data.sector_id, data.tag, data.name, data.status],

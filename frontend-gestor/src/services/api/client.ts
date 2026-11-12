@@ -372,6 +372,7 @@ function workOrderBody(data: JsonRecord, creating: boolean): JsonRecord {
     ...(data.plano_versao_id || data.plano_id
       ? { plano_versao_id: data.plano_versao_id || data.plano_id }
       : {}),
+    ...(data.checklist_versao_id ? {checklist_versao_id:data.checklist_versao_id} : {}),
     ...(data.ativo_id ? { ativo_id: data.ativo_id } : {}),
     ...(data.ativo_tag ? { ativo_tag: data.ativo_tag } : {}),
     tipo_origem: data.origem || "ADMIN",
@@ -446,6 +447,7 @@ function maintenancePlanRow(value: unknown): JsonRecord {
   return mapCatalogRow("planos", {
     ...item,
     ...current,
+    id: item.id,
     versao_id: current.id ?? item.versao_id,
     versao_status: current.status ?? item.status,
     plano_itens_count: item.plano_itens_count ?? current.plano_itens_count,
@@ -1170,6 +1172,8 @@ export function nodeActionRequest(
         body: { responsavel_id: payload.responsavel_id, tecnicos_apoio_ids: payload.tecnicos_apoio_ids },
         token,
       };
+    case "maintenance.work-orders.followup":
+      return { method: "POST", path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/followup`, body: { motivo: payload.motivo }, token };
     case "maintenance.work-orders.release":
       return {
         method: "POST",
@@ -1403,6 +1407,8 @@ export function nodeActionRequest(
           return { total: stops.length, paradas: stops };
         },
       };
+    case "pcm.occurrences.decision":
+      return { method: "POST", path: `/v1/maintenance/occurrences/${encodeURIComponent(String(payload.ocorrencia_id))}/decision`, body: { decisao: payload.decisao, observacao: payload.observacao, ...(payload.agendada_para ? { agendada_para: payload.agendada_para } : {}) }, token };
     case "gestor.listar_ocorrencias": {
       const requestedStatus = String(payload.status ?? "").toUpperCase();
       const nodeStatus =
@@ -1619,6 +1625,8 @@ export function nodeActionRequest(
             ] ?? record(data.versao_atual).status ?? data.status,
         }),
       };
+    case "pcm.tracking":
+      return {method:'GET',path:queryPath('/v1/pcm/tracking',{busca:payload.busca,setor_id:payload.setor_id || undefined,filtro:payload.filtro,pagina:payload.pagina}),token,transform:data=>({...record(data),itens:records(record(data).itens).map(workOrderRow)})};
     case "admin.intervencoes.listar":
       return {
         method: "GET",
@@ -2102,6 +2110,8 @@ export function nodeActionRequest(
         token,
       };
     }
+    case "pcm.importacao.modelos":
+      return { method: "GET", path: "/v1/pcm/imports/models", token };
     case "admin.importacao.modelos":
       return { method: "GET", path: "/v1/admin/imports/models", token };
     case "admin.importacao.lotes":
@@ -2116,10 +2126,11 @@ export function nodeActionRequest(
         path: `/v1/admin/imports/${encodeURIComponent(String(payload.lote_id))}`,
         token,
       };
+    case "pcm.importacao.validar":
     case "admin.importacao.validar":
       return {
         method: "POST",
-        path: "/v1/admin/imports/validate",
+        path: action === 'pcm.importacao.validar' ? '/v1/pcm/imports/validate' : "/v1/admin/imports/validate",
         body: {
           tipo: payload.tipo,
           arquivo_nome: payload.arquivo_nome,
@@ -2129,10 +2140,11 @@ export function nodeActionRequest(
         },
         token,
       };
+    case "pcm.importacao.confirmar":
     case "admin.importacao.confirmar":
       return {
         method: "POST",
-        path: `/v1/admin/imports/${encodeURIComponent(String(payload.lote_id))}/confirm`,
+        path: `/v1/${action === 'pcm.importacao.confirmar' ? 'pcm' : 'admin'}/imports/${encodeURIComponent(String(payload.lote_id))}/confirm`,
         body: { validacao_hash: payload.validacao_hash },
         token,
       };

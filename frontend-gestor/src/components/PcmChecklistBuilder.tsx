@@ -47,6 +47,7 @@ import {
 
 interface PcmChecklistBuilderProps {
   onSessionExpired: () => void
+  onCreateOrder?: (checklistId: string) => void
   focusTarget?: AdminNotificationTarget | null
   allowCustomValidators?: boolean
 }
@@ -319,6 +320,7 @@ function checklistDraftFromAnalysis(analysis: AdminTechnicalAnalysis): {
 export function PcmChecklistBuilder({
   onSessionExpired,
   focusTarget,
+  onCreateOrder,
 }: PcmChecklistBuilderProps) {
   const [view, setView] = useState<'home' | 'library' | 'editor'>('home')
   const [stage, setStage] = useState(0)
@@ -893,6 +895,7 @@ export function PcmChecklistBuilder({
               <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 4 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending || (stage === 1 && !plan.nome.trim()) || (stage === 2 && !plan.ativo_id)} onClick={() => setStage(current => Math.min(4, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
               <footer className="pcm-resource-checklist-actions">
                 <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A publicação libera esta versão.</small></span>
+                {plan.operacional && onCreateOrder ? <button type="button" onClick={() => onCreateOrder(plan.id)}>Criar OS com este checklist</button> : null}
                 {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Publicar ou solicitar assinatura</button></div> : normalizedWorkflow(plan.workflow_status) === 'VALIDADO' && !plan.operacional ? <div><button type="button" disabled={sending} onClick={async () => { setSending(true); setError(''); try { await publishPcmChecklist(plan.id, false); await openModel(plan.id); setModels(await listAdminChecklistModels()); setNotice('Checklist publicado.') } catch (cause) { handleFailure(cause, 'Não foi possível publicar o checklist.') } finally { setSending(false) } }}>Publicar versão aprovada</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
               </footer>
             </>

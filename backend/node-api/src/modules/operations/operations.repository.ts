@@ -37,6 +37,33 @@ function nonEmptyText(value: unknown): string | null {
 }
 
 export class OperationsRepository {
+  async ensurePlanFromChecklist(client: PoolClient, tenantId: string, userId: string, checklistVersionId: string): Promise<OperationsRow | null> {
+    const checklist = await client.query<OperationsRow>(`SELECT version.id,template.asset_id,template.component_id,template.name,template.checklist_type,
+      template.criticality,version.execution_defaults,
+      EXISTS (SELECT 1 FROM maintenance.checklist_items item WHERE item.checklist_template_version_id=version.id AND item.status='ACTIVE' AND item.evidence_required) AS evidence_required
+      FROM maintenance.checklist_template_versions version JOIN maintenance.checklist_templates template ON template.id=version.checklist_template_id
+      WHERE version.id=$1 AND version.status='PUBLISHED' AND template.lifecycle_status='ACTIVE' AND template.deleted_at IS NULL FOR UPDATE OF version`, [checklistVersionId]);
+    const source = checklist.rows[0];
+    if (!source) return null;
+    const code = `PCM-CHK-${checklistVersionId}`;
+    const existing = await client.query<{id:string}>(`SELECT version.id FROM maintenance.maintenance_plans plan JOIN maintenance.maintenance_plan_versions version ON version.maintenance_plan_id=plan.id
+      WHERE plan.code=$1 AND plan.deleted_at IS NULL AND version.status='PUBLISHED' ORDER BY version.revision DESC LIMIT 1`,[code]);
+    if (existing.rows[0]) return this.findPublishedPlanContext(client,existing.rows[0].id);
+    const planId = randomUUID(), versionId = randomUUID();
+    const hash = createHash('sha256').update(`${tenantId}:${checklistVersionId}:${versionId}`).digest('hex');
+    const defaults = source.execution_defaults as Record<string,unknown>;
+    const kind = ['PREVENTIVE','PREDICTIVE','INSPECTION','LUBRICATION','CORRECTIVE','CONDITION_BASED','IMPROVEMENT'].includes(String(source.checklist_type)) ? source.checklist_type : 'INSPECTION';
+    await client.query(`INSERT INTO maintenance.maintenance_plans (id,tenant_id,code,name,asset_id,component_id,plan_type,lifecycle_status,created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE',$8)`,[planId,tenantId,code,source.name,source.asset_id,source.component_id,kind,userId]);
+    await client.query(`INSERT INTO maintenance.maintenance_plan_versions
+      (id,tenant_id,maintenance_plan_id,checklist_template_version_id,revision,status,criticality,trigger_type,estimated_duration_minutes,
+      lockout_required,evidence_required,maximum_sessions,maintenance_stop_mode,technical_analysis,content_hash_sha256,created_by)
+      VALUES ($1,$2,$3,$4,1,'DRAFT',$5,'OCCURRENCE',$6,$7,$12,1,$8,$9::jsonb,$10,$11)`,
+      [versionId,tenantId,planId,checklistVersionId,source.criticality,defaults.tempo_estimado_min ?? 60,defaults.requer_bloqueio ?? false,defaults.modo_parada ?? 'EXECUTOR_DECISION',JSON.stringify({auto_generated:true,purpose:'PCM_CHECKLIST_WORK_ORDER'}),hash,userId,source.evidence_required]);
+    await client.query("UPDATE maintenance.maintenance_plan_versions SET status='APPROVED',submitted_at=clock_timestamp() WHERE id=$1",[versionId]);
+    await client.query("UPDATE maintenance.maintenance_plan_versions SET status='PUBLISHED',published_at=clock_timestamp() WHERE id=$1",[versionId]);
+    return this.findPublishedPlanContext(client,versionId);
+  }
   async findPublishedPlanContext(
     client: PoolClient,
     versionId: string,
@@ -707,7 +734,7 @@ export class OperationsRepository {
     await client.query(
       `UPDATE workflow.notifications
        SET status='RETRACTED'
-       WHERE entity_type='OPERATIONAL_OCCURRENCE' AND entity_id=$1 AND status='ACTIVE'`,
+       WHERE (entity_type='OPERATIONAL_OCCURRENCE' OR notification_type='PCM_OCCURRENCE_TREATMENT_DUE') AND entity_id=$1 AND status='ACTIVE'`,
       [occurrenceId],
     );
   }
@@ -796,7 +823,10 @@ export class OperationsRepository {
                demand.current_technical_role_id AS cargo_atual_id,
                technical_role.name AS cargo_atual_nome,
                action.id AS acao_id,
-               action.status AS acao_status
+               action.status AS acao_status,
+               execution.status AS execucao_status, operator.name AS executor_nome,
+               execution.started_at AS execucao_iniciada_em,
+               pause.reason_code AS motivo_pausa, pause.reason_detail AS detalhe_pausa
         FROM maintenance.work_orders work_order
         JOIN cmms.assets asset ON asset.id = work_order.asset_id
         JOIN cmms.lines line ON line.id = asset.line_id
@@ -822,16 +852,52 @@ export class OperationsRepository {
           ORDER BY latest_action.generated_at DESC, latest_action.id DESC
           LIMIT 1
         ) action ON true
-        WHERE ($1 = '' OR work_order.operational_code ILIKE '%' || $1 || '%' OR work_order.code ILIKE '%' || $1 || '%' OR work_order.title ILIKE '%' || $1 || '%' OR asset.tag ILIKE '%' || $1 || '%')
+        LEFT JOIN LATERAL (
+          SELECT current_execution.* FROM maintenance.executions current_execution
+          WHERE current_execution.work_order_action_id = action.id
+          ORDER BY current_execution.created_at DESC, current_execution.id DESC LIMIT 1
+        ) execution ON true
+        LEFT JOIN iam.users operator ON operator.id = execution.operator_id
+        LEFT JOIN LATERAL (
+          SELECT period.reason_code, period.reason_detail
+          FROM maintenance.execution_global_pause_periods period
+          WHERE period.execution_id = execution.id AND period.ended_at IS NULL
+          ORDER BY period.created_at DESC, period.id DESC LIMIT 1
+        ) pause ON true
+        WHERE ($1 = '' OR work_order.operational_code ILIKE '%' || $1 || '%' OR work_order.code ILIKE '%' || $1 || '%' OR work_order.title ILIKE '%' || $1 || '%' OR asset.tag ILIKE '%' || $1 || '%' OR asset.name ILIKE '%' || $1 || '%' OR responsible.name ILIKE '%' || $1 || '%')
           AND ($2::text IS NULL OR work_order.status = $2)
           AND ($3::uuid IS NULL OR work_order.asset_id = $3)
+          AND ($5::uuid IS NULL OR sector.id=$5)
+          AND ($6='all'
+            OR ($6='running' AND work_order.status='IN_PROGRESS')
+            OR ($6='blocked' AND work_order.status='BLOCKED')
+            OR ($6='completed' AND work_order.status='COMPLETED')
+            OR ($6='queued' AND work_order.status IN ('DRAFT','IN_TECHNICAL_REVIEW','CHANGES_REQUESTED','APPROVED','RELEASED','QUARANTINED'))
+            OR ($6='late' AND work_order.scheduled_for < clock_timestamp() AND work_order.status NOT IN ('DRAFT','COMPLETED','CANCELLED')))
         ORDER BY CASE work_order.priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END,
                  work_order.created_at DESC, work_order.id DESC
-        LIMIT $4
+        LIMIT $4 OFFSET $7
       `,
-      [query.search, query.status, query.assetId, query.limit],
+      [query.search, query.status, query.assetId, query.limit, query.sectorId ?? null, query.trackingFilter ?? 'all', query.offset ?? 0],
     );
     return result.rows;
+  }
+
+  async trackingSummary(client: PoolClient, search: string, sectorId: string | null) {
+    const result = await client.query(`SELECT count(*)::integer AS all,
+      count(*) FILTER (WHERE work_order.status='IN_PROGRESS')::integer AS running,
+      count(*) FILTER (WHERE work_order.status='BLOCKED')::integer AS blocked,
+      count(*) FILTER (WHERE work_order.status='COMPLETED')::integer AS completed,
+      count(*) FILTER (WHERE work_order.status IN ('DRAFT','IN_TECHNICAL_REVIEW','CHANGES_REQUESTED','APPROVED','RELEASED','QUARANTINED'))::integer AS queued,
+      count(*) FILTER (WHERE work_order.scheduled_for < clock_timestamp() AND work_order.status NOT IN ('DRAFT','COMPLETED','CANCELLED'))::integer AS late
+      FROM maintenance.work_orders work_order JOIN cmms.assets asset ON asset.id=work_order.asset_id
+      JOIN cmms.lines line ON line.id=asset.line_id JOIN cmms.sectors sector ON sector.id=line.sector_id
+      LEFT JOIN iam.users responsible ON responsible.id=work_order.responsible_id
+      WHERE ($1='' OR work_order.operational_code ILIKE '%'||$1||'%' OR work_order.code ILIKE '%'||$1||'%' OR work_order.title ILIKE '%'||$1||'%' OR asset.tag ILIKE '%'||$1||'%' OR asset.name ILIKE '%'||$1||'%' OR responsible.name ILIKE '%'||$1||'%')
+      AND ($2::uuid IS NULL OR sector.id=$2)`,[search,sectorId]);
+    const sectors = await client.query(`SELECT DISTINCT sector.id,sector.name AS nome FROM maintenance.work_orders work_order
+      JOIN cmms.assets asset ON asset.id=work_order.asset_id JOIN cmms.lines line ON line.id=asset.line_id JOIN cmms.sectors sector ON sector.id=line.sector_id ORDER BY sector.name,sector.id`);
+    return { contadores:result.rows[0],setores:sectors.rows };
   }
 
   async findWorkOrder(client: PoolClient, id: string, lock = false): Promise<OperationsRow | null> {

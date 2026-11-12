@@ -410,6 +410,8 @@ export function PcmCatalogWorkspace({
   const [filterKey, setFilterKey] = useState<string | null>(null)
   const [previewPlan, setPreviewPlan] = useState(false)
   const [planStep, setPlanStep] = useState(0)
+  const [planBusyId, setPlanBusyId] = useState('')
+  const [archivePlanId, setArchivePlanId] = useState('')
   const [loadingChecklistDefaults, setLoadingChecklistDefaults] = useState(false)
   const [editing, setEditing] = useState<AdminEntityRecord | null | undefined>(undefined)
   const [draft, setDraft] = useState<AdminEntityRecord>({ id: '' })
@@ -746,6 +748,23 @@ export function PcmCatalogWorkspace({
     }
   }
 
+  async function planAction(record: AdminEntityRecord, publish: boolean) {
+    setPlanBusyId(String(record.id)); setError('')
+    try {
+      const result = await actionAdminEntity({ entidade: 'planos', id: record.id, acao: publish ? 'PUBLICAR' : 'ALTERAR_STATUS', status: publish ? 'ATIVO' : 'INATIVO' })
+      if (!result.row) throw new Error('O servidor não retornou o plano atualizado.')
+      const updated = result.row
+      setRecords(current => ({ ...current, planos: (current.planos ?? []).map(item => item.id === updated.id ? updated : item) }))
+      setArchivePlanId(''); setNotice(publish ? 'Plano disponível para programação de trabalho.' : 'Rascunho arquivado.')
+    } catch (cause) { if (isGestorAuthenticationError(cause)) onSessionExpired(); setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o plano.') }
+    finally { setPlanBusyId('') }
+  }
+
+  function planRowActions(record: AdminEntityRecord) {
+    const draftPlan = upper(record.workflow_status) === 'RASCUNHO'
+    return <div className="pcm-plan-row-actions"><button type="button" disabled={Boolean(planBusyId)} onClick={() => openEditor(record)}>{draftPlan ? 'Editar' : 'Consultar'}</button>{draftPlan && upper(record.status) !== 'INATIVO' ? <><button type="button" disabled={Boolean(planBusyId)} onClick={() => void planAction(record, true)}>Disponibilizar</button><button type="button" disabled={Boolean(planBusyId)} onClick={() => { if (archivePlanId === record.id) void planAction(record, false); else setArchivePlanId(String(record.id)) }}>{archivePlanId === record.id ? 'Confirmar arquivamento' : 'Arquivar'}</button>{archivePlanId === record.id ? <button type="button" onClick={() => setArchivePlanId('')}>Cancelar</button> : null}</> : null}</div>
+  }
+
   async function save() {
     const missing = definition.fields.filter((field) => field.required && valueText(draft[field.key]) === '—')
     if (missing.length) {
@@ -764,7 +783,7 @@ export function PcmCatalogWorkspace({
         return { ...current, [selectedEntity]: next }
       })
       setEditing(undefined)
-      setNotice(`${definition.singular[0].toUpperCase()}${definition.singular.slice(1)} ${result.mode === 'insert' ? 'criado' : 'atualizado'} com auditoria.${selectedEntity === 'planos' ? ' O plano foi salvo em rascunho. No fluxo atual, o Administrador publica a versão.' : ''}`)
+      setNotice(`${definition.singular[0].toUpperCase()}${definition.singular.slice(1)} ${result.mode === 'insert' ? 'criado' : 'atualizado'} com auditoria.${selectedEntity === 'planos' ? ' Rascunho salvo. Use Disponibilizar na lista quando estiver pronto.' : ''}`)
     } catch (cause) {
       if (isGestorAuthenticationError(cause)) {
         onSessionExpired()
@@ -825,7 +844,7 @@ export function PcmCatalogWorkspace({
         <div className="pcm-resource-catalog-table">
           <table>
             <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.key === 'linha_id' ? column.label : <button type="button" className="pcm-column-trigger" aria-expanded={filterKey === column.key} aria-label={`Filtrar ${column.label}`} data-active={Boolean(columnFilters[column.key]?.value || columnFilters[column.key]?.order)} onClick={() => toggleColumnFilter(column.key)}>{column.label}<Filter size={12} /></button>}</th>)}<th>Detalhes</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td><button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button></td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{hasColumnFilters ? 'Nenhum resultado para esses filtros' : EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{hasColumnFilters ? 'Ajuste as colunas ou limpe os filtros para ver a lista completa.' : approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{hasColumnFilters ? <button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button> : !approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td>{selectedEntity === 'planos' && !approvalOnly ? planRowActions(record) : <button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button>}</td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{hasColumnFilters ? 'Nenhum resultado para esses filtros' : EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{hasColumnFilters ? 'Ajuste as colunas ou limpe os filtros para ver a lista completa.' : approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{hasColumnFilters ? <button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button> : !approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>
@@ -869,12 +888,12 @@ export function PcmCatalogWorkspace({
 
                 {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="pcm-resource-entity-actions__guidance"><CheckIcon /><span><strong>{approvalOnly ? 'Plano já homologado' : 'Versão protegida'}</strong><small>{approvalOnly ? 'A consulta é somente leitura. O PCM administra revisões técnicas e checklists.' : 'Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.'}</small></span></div> : null}
 
-                {approvalOnly && selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
+                {selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
                   <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO', 'PUBLICAR')}>
                     <CheckIcon /><span><strong>{approvalOnly ? 'Homologar e publicar plano' : 'Publicar plano'}</strong><small>{approvalOnly ? 'Confirma a revisão final, registra auditoria e libera o plano para o fluxo do PCM.' : 'Valida o vínculo com o checklist e disponibiliza o plano para criar intervenções.'}</small></span>
                   </button>
                 ) : null}
-                {!approvalOnly && selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? <div className="pcm-resource-entity-actions__guidance"><CheckIcon /><span><strong>Aguardando publicação pelo Administrador</strong><small>No fluxo atual, o PCM prepara o plano. Após a publicação, cria e libera as ordens para execução técnica.</small></span></div> : null}
+
 
                 {!approvalOnly && selectedEntity === 'planos' && selectedWorkflow === 'VALIDADO' ? (
                   selectedStatus === 'INATIVO'
@@ -970,7 +989,7 @@ export function PcmCatalogWorkspace({
                 )
               })}
             </fieldset>
-            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'Salvar cria um rascunho. No fluxo atual, o Administrador publica o plano com um checklist publicado.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{selectedEntity === 'planos' && !editingReadOnly && planStep > 0 ? <button type="button" onClick={() => setPlanStep(current => current - 1)}>Voltar</button> : null}{selectedEntity === 'planos' && !editingReadOnly && planStep < 3 ? <button type="button" disabled={saving || loadingChecklistDefaults} onClick={advancePlanStep}>Continuar</button> : null}{!editingReadOnly && (selectedEntity !== 'planos' || planStep === 3) ? <button className="primary-button" type="button" disabled={saving || loadingChecklistDefaults} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
+            <footer><span>{editingReadOnly ? 'Versões em validação, validadas ou obsoletas permanecem imutáveis.' : selectedEntity === 'planos' ? 'Salvar mantém o rascunho. Disponibilize pela lista para usá-lo na programação.' : 'A alteração será registrada na auditoria.'}</span><div><button type="button" disabled={saving} onClick={() => setEditing(undefined)}>{editingReadOnly ? 'Fechar' : 'Cancelar'}</button>{selectedEntity === 'planos' && !editingReadOnly && planStep > 0 ? <button type="button" onClick={() => setPlanStep(current => current - 1)}>Voltar</button> : null}{selectedEntity === 'planos' && !editingReadOnly && planStep < 3 ? <button type="button" disabled={saving || loadingChecklistDefaults} onClick={advancePlanStep}>Continuar</button> : null}{!editingReadOnly && (selectedEntity !== 'planos' || planStep === 3) ? <button className="primary-button" type="button" disabled={saving || loadingChecklistDefaults} onClick={() => void save()}>{saving ? 'Salvando…' : 'Salvar cadastro'}</button> : null}</div></footer>
           </section>
         </div>
       ) : null}

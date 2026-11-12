@@ -49,6 +49,7 @@ interface MaintenanceActionQuery {
 }
 interface AssignActionBody { readonly responsavel_id: string; readonly tecnicos_apoio_ids?: readonly string[]; }
 interface WorkOrderBody {
+  readonly checklist_versao_id?: string;
   readonly plano_versao_id?: string;
   readonly ativo_id?: string;
   readonly ativo_tag?: string;
@@ -218,6 +219,9 @@ function contentDisposition(fileName: string): string {
 export class OperationsController {
   constructor(private readonly service: OperationsService) {}
 
+  tracking = async (request: FastifyRequest<{ Querystring: {busca?:string;setor_id?:string;filtro?:string;pagina?:number} }>) =>
+    successEnvelope(request,'pcm.tracking',await this.service.tracking(user(request),request.query.busca?.trim() ?? '',request.query.setor_id ?? null,request.query.filtro ?? 'all',request.query.pagina ?? 0));
+
   listWorkOrders = async (request: FastifyRequest<{ Querystring: WorkOrderQuery }>) =>
     successEnvelope(
       request,
@@ -302,6 +306,7 @@ export class OperationsController {
         user(request),
         {
           planVersionId: request.body.plano_versao_id ?? null,
+          checklistVersionId: request.body.checklist_versao_id ?? null,
           assetId: request.body.ativo_id ?? null,
           assetTag: request.body.ativo_tag ?? null,
           originType: request.body.tipo_origem,
@@ -464,6 +469,9 @@ export class OperationsController {
         audit(request),
       ),
     );
+
+  requestWorkOrderUpdate = async (request: FastifyRequest<{ Params: Params; Body: ChangesBody }>) =>
+    successEnvelope(request, 'maintenance.work-orders.followup', await this.service.requestWorkOrderUpdate(user(request), id(request.params, 'workOrderId'), request.body.motivo, audit(request)));
 
   releaseWorkOrder = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(

@@ -20,19 +20,27 @@ O cadastro foi dividido em nome e tipo, aplicação, programação e revisão. I
 
 ## Fluxo atual de plano e ordem de serviço
 
-O repositório atual separa publicação de plano de liberação de OS. A configuração de homologação concede ao PCM gerenciamento de planos e gerenciamento, revisão e liberação de OS, mas remove explicitamente `maintenance.plans.publish` desse perfil. Essa capacidade pertence ao Administrador. Por isso o PCM não deve receber um botão de publicação que resultaria em erro de permissão.
+O repositório separa publicação de plano de liberação de OS. Após o esclarecimento da regra em 11/11/2026, o PCM também publica seus planos. A migração 0059 concede `maintenance.plans.publish`, `cmms.imports.manage` e edição de estrutura técnica ao PCM. O provisionamento deixa de remover a publicação desse perfil.
 
 1. PCM prepara e salva o plano em rascunho.
-2. Administrador publica a versão, vinculada a um checklist publicado.
+2. PCM disponibiliza a versão pela lista, vinculada a um checklist publicado.
 3. PCM cria a OS a partir do plano ativo e publicado.
 4. A OS passa pelas regras de aprovação aplicáveis.
 5. PCM libera a OS aprovada; o servidor cria a ação e notifica os técnicos elegíveis.
 
-Esse comportamento foi verificado em `load-foundation.ts`, `seed.cli.ts`, `planning.routes.ts` e `operations.service.ts`. Transferir também a publicação do plano ao PCM seria uma mudança de autorização e fluxo, além da apresentação. Esta correção preserva as permissões existentes.
+As ações Editar, Disponibilizar e Arquivar aparecem na própria linha de planos. Arquivar exige confirmação e preserva o registro. Publicar um plano não inicia uma OS automaticamente.
+
+## Importação pelo PCM
+
+Ativos e estrutura, Materiais e Áreas e cargos técnicos oferecem um diálogo de importação próprio. Ele lista campos obrigatórios, permite baixar um modelo de preenchimento, selecionar arquivo/aba, verificar linhas e confirmar o lote validado. Não oferece exportação de dados.
+
+As rotas `/v1/pcm/imports/models`, `/validate` e `/:batchId/confirm` exigem `cmms.imports.manage`. Cada tipo também exige a capacidade de edição correspondente. A confirmação só aceita o lote criado pelo próprio usuário, dentro do escopo da empresa. Rotas administrativas de backup, exportação e gestão de documentos não são concedidas por essa capacidade.
+
+Áreas e cargos usam os mesmos cadastros do TI, com interface PCM independente. Importe as áreas primeiro e depois seus cargos. Os modelos de cargos não alteram permissão de assinatura.
 
 ## Ativação
 
-Esta entrega exige a migração `0058_checklist_execution_defaults.sql` antes de executar a nova API. Ela adiciona `execution_defaults` às versões de checklist e aceita planos do tipo `IMPROVEMENT`.
+Esta entrega exige as migrações `0058_checklist_execution_defaults.sql` e `0059_pcm_operational_permissions.sql` e `0060_pcm_occurrence_treatment.sql` antes de executar a nova API. A primeira adiciona pré-configurações às versões; a segunda ajusta as capacidades do PCM.
 
 Use o procedimento de migração do ambiente, com a conexão do proprietário das tabelas, e execute `npm --prefix backend/node-api run db:migrate`. Não substitua a conexão de execução da API por uma conta proprietária permanente.
 
@@ -44,3 +52,7 @@ No ambiente local de Natan, a tentativa com a conta da API foi revertida por fal
 - Testes de contrato para assinatura zero, política de duas assinaturas e pré-configuração de execução.
 - Testes de parâmetros SQL para criação, atualização e revisão de checklist.
 - Integração com PostgreSQL após a migração ainda requer validação no ambiente de destino.
+
+## Acompanhamento
+
+Consulte [pcm-acompanhamento.md](pcm-acompanhamento.md) para o envio de OS, ocorrências, paginação, notificações e arquivamento dos registros aprovados.

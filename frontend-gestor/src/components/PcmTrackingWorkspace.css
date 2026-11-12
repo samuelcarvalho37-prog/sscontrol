@@ -1,0 +1,168 @@
+.pcm-tracking .pcm-planning-heading > div {
+  display: flex;
+  gap: 8px;
+}
+.pcm-tracking .pcm-planning-heading button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--pr-line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.pcm-tracking-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.pcm-tracking-kpis button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px !important;
+}
+.pcm-tracking-kpis strong {
+  font-size: 25px;
+}
+.pcm-tracking-kpis button[aria-pressed="true"] {
+  border-color: var(--pr-ink) !important;
+  background: var(--pr-surface) !important;
+}
+.pcm-tracking-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.pcm-tracking-filters label,
+.pcm-tracking-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pcm-tracking-filters label {
+  flex: 1 1 220px;
+  max-width: 400px;
+}
+.pcm-tracking-orders {
+  display: grid;
+  gap: 5px;
+}
+html body .pcm-tracking .pcm-planning-page .pcm-tracking-order {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  text-align: left;
+  padding: 14px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--pr-line);
+  border-radius: 0;
+}
+.pcm-tracking-order > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pcm-tracking-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.pcm-tracking-summary dt {
+  color: var(--pr-muted);
+}
+.pcm-tracking-summary dd {
+  margin: 3px 0;
+}
+.pcm-tracking-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  max-width: 1000px;
+}
+.pcm-tracking-form h2,
+.pcm-tracking-form .wide {
+  grid-column: 1/-1;
+}
+.pcm-tracking-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pcm-tracking-checklist {
+  list-style: none;
+  padding: 0;
+}
+.pcm-tracking-checklist li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pr-line);
+}
+.pcm-tracking {
+  container-type: inline-size;
+}
+html
+  body
+  .app-shell[data-pcm-workspace="true"]
+  .pcm-tracking
+  .pcm-tracking-kpis
+  button {
+  background-color: var(--pcm-shared-panel, var(--pr-surface)) !important;
+}
+html
+  body
+  .app-shell[data-pcm-surface-effect^="glass"]
+  .pcm-tracking
+  .pcm-tracking-kpis
+  button {
+  background-image: linear-gradient(
+    135deg,
+    #ffffff20,
+    transparent 45%,
+    #ffffff0a 50%,
+    transparent 72%
+  );
+  backdrop-filter: blur(8px);
+}
+html
+  body
+  .app-shell[data-pcm-surface-effect="gradient"]
+  .pcm-tracking
+  .pcm-tracking-kpis
+  button {
+  background-image: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--pr-ink) 9%, transparent),
+    transparent
+  );
+}
+.pcm-tracking-followup {
+  display: grid;
+  gap: 8px;
+  max-width: 700px;
+  margin: 20px 0;
+}
+.pcm-tracking-followup label {
+  display: grid;
+  gap: 6px;
+}
+.pcm-tracking-followup button {
+  justify-self: start;
+}
+@container (max-width:640px) {
+  html body .pcm-tracking .pcm-planning-page .pcm-tracking-order {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

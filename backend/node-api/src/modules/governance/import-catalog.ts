@@ -16,6 +16,8 @@ export interface ImportModel {
 }
 
 export type ImportEntity =
+  | 'areas_tecnicas'
+  | 'cargos_tecnicos'
   | 'plantas'
   | 'setores'
   | 'linhas'
@@ -38,6 +40,33 @@ export const IMPORT_MAX_ROWS = 250;
 export const IMPORT_MAX_CELL_CHARACTERS = 500;
 
 export const importModels: readonly ImportModel[] = Object.freeze([
+  {
+    type: 'areas_tecnicas',
+    entity: 'areas_tecnicas',
+    group: 'Técnico',
+    name: 'Áreas técnicas',
+    description: 'Cadastre as áreas antes de importar seus cargos.',
+    fields: [
+      field('codigo', 'Código', 'MECANICA', true),
+      field('nome', 'Nome', 'Mecânica', true),
+      field('descricao', 'Descrição', 'Manutenção mecânica'),
+      field('status', 'Status', 'ATIVO'),
+    ],
+  },
+  {
+    type: 'cargos_tecnicos',
+    entity: 'cargos_tecnicos',
+    group: 'Técnico',
+    name: 'Cargos técnicos',
+    description: 'Vincula cargos a uma área já cadastrada.',
+    fields: [
+      field('area_id', 'Área (código ou ID)', 'MECANICA', true),
+      field('codigo', 'Código', 'MECANICO', true),
+      field('nome', 'Nome', 'Mecânico', true),
+      field('descricao', 'Descrição', 'Técnico de manutenção'),
+      field('status', 'Status', 'ATIVO'),
+    ],
+  },
   {
     type: 'plantas',
     entity: 'plantas',

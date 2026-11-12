@@ -6,6 +6,7 @@ import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWiz
 import { getApiUrl, usesNodeApi } from '../services/api/config'
 import { PcmDashboard } from '../components/PcmDashboard'
 import { PcmMaintenanceWorkspace } from '../components/PcmMaintenanceWorkspace'
+import { PcmTrackingWorkspace } from '../components/PcmTrackingWorkspace'
 import { TechnicianDashboard } from '../components/TechnicianDashboard'
 import {
   AppNavigation,
@@ -108,6 +109,7 @@ function TenantApp() {
     () => new URLSearchParams(window.location.search).get('maintenance') === '1',
   )
   const [section, setSection] = useState<GestorSection>('home')
+  const [trackingChecklistId,setTrackingChecklistId] = useState('')
   const [decisionView, setDecisionView] = useState<GestorWorkView>('demands')
   const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(() => {
     const demandId = validationDemandFromSearch(window.location.search)
@@ -371,7 +373,7 @@ function TenantApp() {
     if (
       entityType === 'WORK_ORDER' ||
       entityType === 'ORDEM_SERVICO' ||
-      entityType === 'MAINTENANCE_WORK_ORDER'
+      entityType === 'MAINTENANCE_WORK_ORDER' || entityType === 'ORDENS_SERVICO'
     ) {
       handleOpenDecision('demands', { kind: 'workOrder', id: entityId })
       return
@@ -516,7 +518,7 @@ function TenantApp() {
           </button>
         </div>
         {canViewPcmDashboard ? <>
-          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
+          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canReadWork ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
           <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
         </> : null}
         </header>
@@ -599,8 +601,9 @@ function TenantApp() {
             }
             </>
           ) : null}
+          {section === 'tracking' && canReadWork ? <PcmTrackingWorkspace key={trackingChecklistId || 'tracking'} initialChecklistId={trackingChecklistId} canManage={Boolean(session.user.capacidades?.includes('maintenance.work-orders.manage'))} onSessionExpired={expireSession} /> : null}
           {section === 'maintenance' && canManageMaintenance ? (
-            <PcmMaintenanceWorkspace onSessionExpired={expireSession} />
+            <PcmMaintenanceWorkspace onSessionExpired={expireSession} onCreateOrder={id => { setTrackingChecklistId(id); handleNavigate('tracking') }} />
           ) : null}
           {section === 'scan' ? (
             <GestorQrWorkspace

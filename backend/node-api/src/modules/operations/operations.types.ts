@@ -20,6 +20,7 @@ export interface RequestAuditMetadata {
 }
 
 export interface WorkOrderInput {
+  readonly checklistVersionId?: string | null;
   readonly planVersionId: string | null;
   readonly assetId: string | null;
   readonly assetTag: string | null;
@@ -72,6 +73,9 @@ export interface WorkOrderListQuery {
   readonly status: string | null;
   readonly assetId: string | null;
   readonly limit: number;
+  readonly offset?: number;
+  readonly trackingFilter?: string;
+  readonly sectorId?: string | null;
 }
 
 export interface TechnicalDemandListQuery {

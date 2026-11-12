@@ -123,7 +123,7 @@ export class GovernanceController {
         search: request.query.busca ?? null,
         status: request.query.status ?? null,
         documentType: request.query.tipo ?? null,
-      }),
+      }, audit(request)),
     );
 
   documentDetail = async (request: FastifyRequest<{ Params: Params }>) =>

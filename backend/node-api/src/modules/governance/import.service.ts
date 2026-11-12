@@ -62,9 +62,14 @@ function numberValue(value: unknown, field: string, fallback: number | null): nu
   if (!normalized) return fallback;
   const result = Number(normalized);
   if (!Number.isFinite(result) || result < 0) {
-    throw error('IMPORT_NUMBER_INVALID', `${field} deve ser um número maior ou igual a zero.`, 422, {
-      campo: field,
-    });
+    throw error(
+      'IMPORT_NUMBER_INVALID',
+      `${field} deve ser um número maior ou igual a zero.`,
+      422,
+      {
+        campo: field,
+      },
+    );
   }
   return result;
 }
@@ -225,9 +230,10 @@ function rowError(
   model: ImportModel,
 ): { readonly codigo: string; readonly mensagem: string; readonly campo?: string } {
   const message = cause instanceof Error ? cause.message : 'A linha não atende ao modelo.';
-  const details = cause instanceof AppError && typeof cause.details === 'object' && cause.details !== null
-    ? cause.details as Record<string, unknown>
-    : {};
+  const details =
+    cause instanceof AppError && typeof cause.details === 'object' && cause.details !== null
+      ? (cause.details as Record<string, unknown>)
+      : {};
   const explicitField = typeof details.campo === 'string' ? details.campo : undefined;
   const normalizedMessage = normalizedHeader(message);
   const matchingField = model.fields.find((field) =>
@@ -241,7 +247,9 @@ function rowError(
     ativos: 'linha_id',
     componentes: 'ativo_id',
   };
-  const field = explicitField ?? matchingField?.key ??
+  const field =
+    explicitField ??
+    matchingField?.key ??
     (cause instanceof AppError && cause.code === 'IMPORT_REFERENCE_INVALID'
       ? referenceField[model.entity]
       : undefined);
@@ -308,6 +316,47 @@ export class ImportService {
         })),
       })),
     };
+  }
+
+  private assertPcmImport(user: AuthenticatedUser, type: string): void {
+    const permissions: Record<string, string> = {
+      ativos: 'cmms.assets.manage',
+      componentes: 'cmms.assets.manage',
+      materiais: 'cmms.materials.manage',
+      areas_tecnicas: 'admin.technical-structure.manage',
+      cargos_tecnicos: 'admin.technical-structure.manage',
+    };
+    const capability = permissions[type];
+    if (
+      !user.capabilities.includes('cmms.imports.manage') ||
+      !capability ||
+      !user.capabilities.includes(capability)
+    )
+      throw error('IMPORT_TYPE_FORBIDDEN', 'Seu perfil não permite importar este cadastro.', 403);
+  }
+
+  pcmCatalog(user: AuthenticatedUser) {
+    const catalog = this.catalog();
+    return {
+      ...catalog,
+      modelos: catalog.modelos.filter((model) => {
+        try {
+          this.assertPcmImport(user, model.tipo);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    };
+  }
+
+  async validatePcm(
+    user: AuthenticatedUser,
+    input: ValidateImportInput,
+    audit: ImportAuditContext,
+  ) {
+    this.assertPcmImport(user, input.type);
+    return this.validate(user, input, audit);
   }
 
   async listBatches(user: AuthenticatedUser, limit: number) {
@@ -506,6 +555,7 @@ export class ImportService {
     batchId: string,
     validationHash: string,
     audit: ImportAuditContext,
+    pcmOnly = false,
   ) {
     await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
@@ -513,6 +563,15 @@ export class ImportService {
         await this.repository.lockTenant(client, user.tenantId);
         const batch = await this.repository.findBatch(client, batchId, true);
         if (!batch) throw error('IMPORT_BATCH_NOT_FOUND', 'Lote não encontrado.', 404);
+        if (pcmOnly) {
+          this.assertPcmImport(user, text(batch, 'import_type'));
+          if (text(batch, 'created_by') !== user.id)
+            throw error(
+              'IMPORT_BATCH_FORBIDDEN',
+              'Confirme somente o lote enviado pela sua conta.',
+              403,
+            );
+        }
         if (text(batch, 'status') !== 'VALIDATED') {
           throw error(
             'IMPORT_BATCH_NOT_READY',
@@ -691,7 +750,11 @@ export class ImportService {
           );
         }
         if (batch.dismissed_at) {
-          throw error('IMPORT_BATCH_ALREADY_DISMISSED', 'Este lote já foi removido do histórico.', 409);
+          throw error(
+            'IMPORT_BATCH_ALREADY_DISMISSED',
+            'Este lote já foi removido do histórico.',
+            409,
+          );
         }
         await this.repository.dismissBatch(client, batchId, user.id);
         await this.repository.writeAudit(
@@ -720,10 +783,26 @@ export class ImportService {
     const { entity } = model;
     const requestedId = nullableText(source.id);
     const naturalKey = requiredText(
-      entity === 'materiais' ? source.sku : entity === 'fontes_valores' ? source.url : source.tag,
+      ['areas_tecnicas', 'cargos_tecnicos'].includes(entity)
+        ? source.codigo
+        : entity === 'materiais'
+          ? source.sku
+          : entity === 'fontes_valores'
+            ? source.url
+            : source.tag,
       entity === 'fontes_valores' ? 'URL' : 'código',
     );
-    const existing = await this.repository.findExisting(client, entity, requestedId, naturalKey);
+    const areaId =
+      entity === 'cargos_tecnicos'
+        ? await this.reference(client, 'areas_tecnicas', source.area_id)
+        : null;
+    const existing = await this.repository.findExisting(
+      client,
+      entity,
+      requestedId,
+      naturalKey,
+      areaId,
+    );
     if (existing.length > 1) {
       throw error(
         'IMPORT_REFERENCE_AMBIGUOUS',
@@ -738,7 +817,17 @@ export class ImportService {
     const before = found ? json(found, 'snapshot') : null;
     const shared = { id };
     let data: JsonObject;
-    if (entity === 'plantas') {
+    if (entity === 'areas_tecnicas' || entity === 'cargos_tecnicos') {
+      const status = statusValue(source.status);
+      data = {
+        ...shared,
+        code: naturalKey.toUpperCase(),
+        name: requiredText(source.nome, 'nome'),
+        description: nullableText(source.descricao) ?? '',
+        status: status === 'ARCHIVED' ? 'RETIRED' : status,
+        ...(entity === 'cargos_tecnicos' ? { technical_area_id: areaId } : {}),
+      };
+    } else if (entity === 'plantas') {
       data = {
         ...shared,
         tag: naturalKey.toUpperCase(),
@@ -861,7 +950,7 @@ export class ImportService {
 
   private async reference(
     client: PoolClient,
-    entity: 'plantas' | 'setores' | 'linhas' | 'ativos',
+    entity: 'plantas' | 'setores' | 'linhas' | 'ativos' | 'areas_tecnicas',
     value: unknown,
   ): Promise<string> {
     const requested = requiredText(value, entity);

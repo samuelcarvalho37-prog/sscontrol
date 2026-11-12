@@ -79,6 +79,21 @@ function first<T extends MonitoringRow>(rows: readonly T[]): T | null {
 }
 
 export class MonitoringRepository {
+  async notifyDueOccurrenceTreatments(client: PoolClient, tenantId: string, userId: string): Promise<void> {
+    await client.query(`WITH due AS (
+      INSERT INTO workflow.notifications (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience,deduplication_key)
+      SELECT occurrence.tenant_id,'PCM_OCCURRENCE_TREATMENT_DUE','Tratamento agendado · ' || occurrence.title,
+        'O tratamento desta ocorrência chegou à data programada. ' || COALESCE(occurrence.treatment_decision_note,''),
+        'OCORRENCIAS_OPERACIONAIS',occurrence.id,'HIGH','/home',jsonb_build_object('occurrenceId',occurrence.id),
+        jsonb_build_object('userIds',jsonb_build_array($2::text)),
+        'pcm-treatment:' || occurrence.id::text || ':' || occurrence.treatment_scheduled_for::text || ':' || $2::text
+      FROM maintenance.operational_occurrences occurrence
+      WHERE occurrence.tenant_id=$1 AND occurrence.status IN ('OPEN','IN_TREATMENT') AND occurrence.work_order_id IS NULL
+        AND occurrence.treatment_scheduled_for <= clock_timestamp()
+      ON CONFLICT (tenant_id,deduplication_key) WHERE deduplication_key IS NOT NULL AND status='ACTIVE' DO NOTHING RETURNING id
+    ) INSERT INTO workflow.notification_recipients (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+      SELECT $1::uuid,due.id,$2::uuid,'DELIVERED',clock_timestamp(),clock_timestamp(),1 FROM due`, [tenantId,userId]);
+  }
   async hasPendingPostInterventionRelease(client: PoolClient, assetId: string): Promise<boolean> {
     const result = await client.query(
       `SELECT 1 FROM maintenance.work_orders work_order
@@ -173,7 +188,7 @@ export class MonitoringRepository {
     const result = await client.query<MonitoringRow>(
       `SELECT occurrence.id, occurrence.occurrence_type AS tipo, occurrence.title AS titulo,
               occurrence.description AS descricao, occurrence.severity AS severidade,
-              occurrence.status, occurrence.treatment_status AS tratamento_status,
+              occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
               occurrence.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.reported_by AS registrada_por_id,
@@ -269,7 +284,7 @@ export class MonitoringRepository {
     const result = await client.query<MonitoringRow>(
       `SELECT occurrence.id, occurrence.occurrence_type AS tipo, occurrence.title AS titulo,
               occurrence.description AS descricao, occurrence.severity AS severidade,
-              occurrence.status, occurrence.treatment_status AS tratamento_status,
+              occurrence.status, occurrence.treatment_status AS tratamento_status, occurrence.treatment_scheduled_for AS tratamento_agendado_para, occurrence.treatment_decision_note AS decisao_observacao,
               occurrence.asset_id AS ativo_id, asset.tag AS ativo_tag, asset.name AS ativo_nome,
               occurrence.component_id AS componente_id, component.tag AS componente_tag,
               component.name AS componente_nome, occurrence.created_at AS criada_em,
