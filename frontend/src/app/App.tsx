@@ -1004,7 +1004,7 @@ export function App() {
             )
           ) : (
            <>
-              {section === 'home' && canReportOccurrence && !canReadExecutions && <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />}
+              {section === 'home' && canReportOccurrence && !canReadExecutions && (operatorSession.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />)}
               {section === 'home' && (canReadExecutions || !canReportOccurrence) && (
                 <OperatorHome
                   actions={actions}

@@ -561,7 +561,7 @@ function TenantApp() {
               </div>
             </section>
           ) : null}
-          {section === 'home' && canReportOccurrence && !canReadWork && <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />}
+          {section === 'home' && canReportOccurrence && !canReadWork && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} notificationFocus={technicianActionFocus} onNotificationFocusHandled={() => setTechnicianActionFocus(null)} /> : null}
           {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
             <GestorDecisionWorkspace

@@ -294,7 +294,7 @@ export class MonitoringRepository {
                        'regra_prioridade',history.payload->'regra_prioridade')
                FROM maintenance.history_events history
                WHERE history.tenant_id=occurrence.tenant_id AND history.asset_id=occurrence.asset_id
-                 AND history.event_type='OCCURRENCE_REPORTED'
+                 AND history.event_type IN ('OCCURRENCE_REPORTED','SHARED_REQUEST_CORRECTED')
                  AND history.payload->>'occurrenceId'=occurrence.id::text
                ORDER BY history.occurred_at DESC LIMIT 1) AS relato_producao,
               CASE WHEN stop.id IS NULL THEN NULL ELSE jsonb_build_object(

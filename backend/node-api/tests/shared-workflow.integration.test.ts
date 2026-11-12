@@ -167,6 +167,71 @@ test(
         [assetId],
       );
       assert.ok(plan.rows[0]);
+      await t.test(
+        'QR e seleção hierárquica respeitam unidade; relato completo persiste sem abrir parada',
+        async () => {
+          const assets = await call('USR-QUAL-DEMO', 'GET', '/v1/shared/assets?pagina=1');
+          assert.equal(assets.statusCode, 200);
+          const asset = assets.json().data.itens.find((row: { id: string }) => row.id === assetId);
+          assert.ok(asset.planta_id && asset.setor_id && asset.linha_id);
+          const qr = await pool.query('SELECT qr_payload FROM cmms.assets WHERE id=$1', [assetId]);
+          const resolved = await call(
+            'USR-QUAL-DEMO',
+            'GET',
+            '/v1/shared/resolve-code?' + new URLSearchParams({ codigo: qr.rows[0].qr_payload }),
+          );
+          assert.equal(resolved.statusCode, 200);
+          assert.equal(resolved.json().data.ativo_id, assetId);
+          const unknown = await call(
+            'USR-QUAL-DEMO',
+            'GET',
+            '/v1/shared/resolve-code?codigo=NAO-EXISTE',
+          );
+          assert.equal(unknown.statusCode, 404);
+          const assessment = {
+            situacao_atual: 'Vazamento simulado, equipamento parado apenas no relato.',
+            equipamento_parado: true,
+            risco_parada: true,
+            risco_seguranca: true,
+            impacto_producao: true,
+            impacto_qualidade: false,
+            existe_redundancia: false,
+          };
+          key = randomUUID();
+          const body = { ...requestBody(), triagem: assessment };
+          const created = await call('USR-QUAL-DEMO', 'POST', '/v1/shared/requests', body);
+          assert.equal(created.statusCode, 200);
+          const id = created.json().data.id;
+          const saved = await pool.query(
+            'SELECT severity,equipment_stop_id FROM maintenance.operational_occurrences WHERE id=$1',
+            [id],
+          );
+          assert.equal(saved.rows[0].severity, 'CRITICAL');
+          assert.equal(saved.rows[0].equipment_stop_id, null);
+          const detail = await call('USR-SEG-DEMO', 'GET', `/v1/shared/requests/${id}`);
+          assert.equal(detail.statusCode, 200, JSON.stringify(detail.json().error));
+          assert.deepEqual(detail.json().data.relato.triagem, assessment);
+          const changed = await call('USR-QUAL-DEMO', 'POST', '/v1/shared/requests', {
+            ...body,
+            triagem: { ...assessment, risco_seguranca: false },
+          });
+          assert.equal(changed.statusCode, 409);
+          const related = await call(
+            'USR-SEG-DEMO',
+            'GET',
+            `/v1/shared/requests?ativo_id=${assetId}&situacao=OPEN`,
+          );
+          assert.equal(related.statusCode, 200);
+          assert.ok(related.json().data.itens.some((row: { id: string }) => row.id === id));
+          const closed = await call(
+            'USR-SEG-DEMO',
+            'GET',
+            `/v1/shared/requests?ativo_id=${assetId}&situacao=CLOSED`,
+          );
+          assert.equal(closed.statusCode, 200);
+          assert.ok(!closed.json().data.itens.some((row: { id: string }) => row.id === id));
+        },
+      );
       const orderBody = {
         plano_versao_id: plan.rows[0].id,
         tipo_origem: 'OCCURRENCE',
@@ -375,6 +440,22 @@ test(
             name === 'USR-QUAL-DEMO' ? 'IN_TECHNICAL_REVIEW' : 'COMPLETED',
           );
         }
+        for (const [name] of users.slice(0, -1)) {
+          const closed = await call(
+            name!,
+            'GET',
+            `/v1/shared/orders?ativo_id=${assetId}&situacao=CLOSED`,
+          );
+          assert.equal(closed.statusCode, 200);
+          assert.ok(closed.json().data.itens.some((item: { id: string }) => item.id === orderId));
+          const open = await call(
+            name!,
+            'GET',
+            `/v1/shared/orders?ativo_id=${assetId}&situacao=OPEN`,
+          );
+          assert.equal(open.statusCode, 200);
+          assert.ok(!open.json().data.itens.some((item: { id: string }) => item.id === orderId));
+        }
       });
       await t.test(
         'sem vínculo de unidade não há leitura nem criação; isolamento tenant segue ativo',
@@ -391,6 +472,18 @@ test(
           assert.equal(list.json().data.itens.length, 0);
           const detail = await call('USR-PRO-DEMO', 'GET', `/v1/shared/orders/${orderId}`);
           assert.equal(detail.statusCode, 403);
+          const deniedQr = await call(
+            'USR-PRO-DEMO',
+            'GET',
+            '/v1/shared/resolve-code?' + new URLSearchParams({ codigo: assetId }),
+          );
+          assert.equal(deniedQr.statusCode, 403);
+          const deniedRequest = await call(
+            'USR-PRO-DEMO',
+            'GET',
+            `/v1/shared/requests/${requestId}`,
+          );
+          assert.equal(deniedRequest.statusCode, 404);
           const create = await call('USR-PRO-DEMO', 'POST', '/v1/shared/requests', {
             ...requestBody(),
             chave_envio: randomUUID(),

@@ -137,7 +137,7 @@ export class MonitoringService {
       severity: rawInput.assessment
         ? suggestOccurrencePriority(rawInput.assessment)
         : rawInput.severity,
-      equipmentStopped: rawInput.assessment?.equipamento_parado ?? rawInput.equipmentStopped,
+      equipmentStopped: rawInput.sharedRequest ? false : rawInput.assessment?.equipamento_parado ?? rawInput.equipmentStopped,
       occurrenceType: normalize(rawInput.occurrenceType).toUpperCase(),
       title: normalize(rawInput.title),
       description: rawInput.description.trim(),
@@ -169,6 +169,11 @@ export class MonitoringService {
           const previous=await client.query('SELECT id,asset_id,title,description,request_kind,requested_quality,requested_safety FROM maintenance.operational_occurrences WHERE reported_by=$1 AND request_submission_key=$2',[user.id,input.sharedRequest.submissionKey]);
           const prior=previous.rows[0];
           if(prior){
+            const previousReport=await client.query(`SELECT payload FROM maintenance.history_events WHERE payload->>'occurrenceId'=$1 AND event_type='OCCURRENCE_REPORTED' ORDER BY occurred_at LIMIT 1`,[prior.id]);
+            const report=previousReport.rows[0]?.payload??{};
+            const assessmentKeys=['situacao_atual','equipamento_parado','risco_parada','risco_seguranca','impacto_producao','impacto_qualidade','existe_redundancia'] as const;
+            if(assessmentKeys.some(key=>((input.assessment?.[key])??null)!==((report.triagem?.[key])??null))||(input.photo??null)!==(report.foto??null))
+              throw appError('REQUEST_KEY_CONFLICT','Este envio já foi registrado com outro relato. Consulte a solicitação antes de reenviar.',409);
             if(prior.asset_id!==input.assetId||prior.title!==input.title||prior.description!==input.description||prior.request_kind!==input.sharedRequest.kind||prior.requested_quality!==input.sharedRequest.quality||prior.requested_safety!==input.sharedRequest.safety)
               throw appError('REQUEST_KEY_CONFLICT','Este envio já foi registrado com outro conteúdo. Consulte a solicitação antes de abrir outro pedido.',409);
             return this.requiredOccurrenceDetail(client,prior.id);
