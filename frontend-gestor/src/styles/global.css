@@ -26999,3 +26999,6 @@ textarea:focus-visible {
     grid-column: auto;
   }
 }
+
+.admin-icon-action--recovery { position: relative; }
+.admin-recovery-dot { position: absolute; width: 8px; height: 8px; top: 3px; right: 3px; border-radius: 50%; background: #e79d31; outline: 2px solid var(--surface, #183344); }

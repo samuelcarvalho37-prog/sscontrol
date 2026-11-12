@@ -319,10 +319,14 @@ export class AdminRepository {
     );
     await client.query(
       `UPDATE iam.users SET first_access_required=true, password_changed_at=clock_timestamp(),
-              failed_login_attempts=0, locked_until=NULL
+              failed_login_attempts=0, locked_until=NULL, recovery_reference=NULL, recovery_requested_at=NULL
        WHERE id=$1 AND deleted_at IS NULL`,
       [userId],
     );
+    await client.query(`UPDATE iam.recovery_requests SET status='CONSUMED', consumed_at=clock_timestamp()
+      WHERE user_id=$1 AND status='PENDING'`, [userId]);
+    await client.query(`UPDATE workflow.notifications SET status='RETRACTED'
+      WHERE entity_id=$1 AND notification_type='AUTH_RECOVERY_REQUESTED' AND status='ACTIVE'`, [userId]);
     return this.revokeSessions(client, userId, 'ADMIN_PASSWORD_RESET');
   }
 

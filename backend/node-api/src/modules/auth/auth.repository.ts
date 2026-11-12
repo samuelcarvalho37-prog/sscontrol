@@ -742,6 +742,38 @@ export class AuthRepository {
       `,
       [input.tenantId, input.userId, input.publicReference],
     );
+    await client.query(`
+      WITH decisions AS (
+        SELECT ur.user_id, c.code, rc.effect
+        FROM iam.user_roles ur JOIN iam.roles r ON r.id=ur.role_id AND r.tenant_id=ur.tenant_id
+        JOIN iam.role_capabilities rc ON rc.role_id=r.id AND rc.tenant_id=r.tenant_id
+        JOIN iam.capabilities c ON c.id=rc.capability_id AND c.status='ACTIVE'
+        WHERE ur.tenant_id=$1 AND ur.valid_from<=clock_timestamp()
+          AND (ur.valid_until IS NULL OR ur.valid_until>clock_timestamp())
+          AND r.status='ACTIVE' AND r.deleted_at IS NULL
+        UNION ALL
+        SELECT uc.user_id,c.code,uc.effect FROM iam.user_capabilities uc
+        JOIN iam.capabilities c ON c.id=uc.capability_id AND c.status='ACTIVE'
+        WHERE uc.tenant_id=$1 AND uc.valid_from<=clock_timestamp()
+          AND (uc.valid_until IS NULL OR uc.valid_until>clock_timestamp())
+      ), permissions AS (
+        SELECT user_id,code FROM decisions GROUP BY user_id,code
+        HAVING bool_or(effect='ALLOW') AND NOT bool_or(effect='DENY')
+      ), recipients AS (
+        SELECT u.id FROM iam.users u JOIN permissions reset ON reset.user_id=u.id AND reset.code='admin.identity.manage'
+        JOIN permissions notices ON notices.user_id=u.id AND notices.code='workflow.notifications.read'
+        WHERE u.tenant_id=$1 AND u.status='ACTIVE' AND u.deleted_at IS NULL
+      ), notice AS (
+        INSERT INTO workflow.notifications (tenant_id,notification_type,title,message,entity_type,entity_id,priority,action_route,action_payload,audience,deduplication_key)
+        SELECT $1,'AUTH_RECOVERY_REQUESTED','Recuperação de acesso solicitada',
+          'Há uma solicitação de recuperação. Confira a identidade e redefina a senha em Gestão de pessoas.',
+          'IAM_USER',$2::uuid,'HIGH','/admin/users',jsonb_build_object('userId',$2::uuid::text),'{}'::jsonb,'recovery:'||$3
+        WHERE EXISTS(SELECT 1 FROM recipients)
+        RETURNING id
+      )
+      INSERT INTO workflow.notification_recipients (tenant_id,notification_id,user_id,delivery_status,delivered_at,last_notified_at,delivery_attempts)
+      SELECT $1,notice.id,recipients.id,'DELIVERED',clock_timestamp(),clock_timestamp(),1 FROM notice CROSS JOIN recipients
+    `,[input.tenantId,input.userId,input.publicReference]);
   }
 
   async writeAuditEvent(

@@ -2111,16 +2111,12 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     {assignmentSuccess ? <div className="pcm-assignment-success" role="status">{assignmentSuccess}</div> : null}
     {createOrderSuccess ? <div className="pcm-assignment-success" role="status">{createOrderSuccess}</div> : null}
 
-    <nav className="pcm-operational-actions" aria-label="Ações de manutenção">
-      <button type="button" onClick={() => void openCreateOrder()} disabled={demoMode || loading || plansLoading || publishedPlans.length === 0}>Criar ordem de serviço</button>
-      <button type="button" onClick={() => void openCreateOrder('PREVENTIVE')} disabled={demoMode || loading || plansLoading || preventivePlans.length === 0}>Programar preventiva</button>
-      <button type="button" onClick={showOperationalQueue} disabled={loading}>Abrir fila completa</button>
-    </nav>
+
 
       {!displayData && loading && (
         <div className="pcm-loading" role="status">
           <span className="pcm-loading__dot" />
-          Consultando ordens, paradas e execuções…
+          Carregando indicadores…
         </div>
       )}
 

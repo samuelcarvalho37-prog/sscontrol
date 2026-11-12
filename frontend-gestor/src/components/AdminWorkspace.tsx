@@ -2165,6 +2165,11 @@ export function AdminWorkspace({
     let entityType = String(notification.entidade_tipo ?? '').trim().toUpperCase()
     let entityId = String(notification.entidade_id ?? '').trim()
 
+    if (notificationType === 'AUTH_RECOVERY_REQUESTED' && entityId) {
+      openModule('users');
+      return;
+    }
+
     if (entityType === 'DEMANDAS_TECNICAS' && entityId) {
       const demand = (await listAdminTechnicalDemands())
         .find((item) => String(item.id) === entityId)

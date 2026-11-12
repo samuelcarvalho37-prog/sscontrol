@@ -341,7 +341,6 @@ export function NotificationCenter({
   );
 
   useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
@@ -381,7 +380,7 @@ export function NotificationCenter({
   }, { enabled: open && audience === "admin", intervalMs: 20_000 });
 
   useAutoRefresh(() => load(undefined, true), {
-    enabled: open,
+    enabled: true,
     intervalMs: 12_000,
   });
 

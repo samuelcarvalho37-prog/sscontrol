@@ -15,12 +15,16 @@ export function SharedWorkPanel({
   apiUrl,
   token,
   capabilities = [],
+  fixedTab,
+  embedded = false,
 }: {
   apiUrl: string;
   token: string;
   capabilities?: readonly string[];
+  fixedTab?: Tab;
+  embedded?: boolean;
 }) {
-  const [tab, setTab] = useState<Tab>("orders"),
+  const [tab, setTab] = useState<Tab>(fixedTab ?? "orders"),
     [items, setItems] = useState<Row[]>([]),
     [page, setPage] = useState(1),
     [total, setTotal] = useState(0);
@@ -190,22 +194,19 @@ export function SharedWorkPanel({
     : [];
   return (
     <section
-      className="shared-work"
+      className={`shared-work${embedded ? " shared-work--embedded" : ""}`}
       aria-label="Solicitações e acompanhamento de manutenção"
     >
       <header>
         <div>
           <h1 ref={heading} tabIndex={-1}>
-            Solicitações e manutenção
+            {embedded ? "Solicitações" : "Solicitações e manutenção"}
           </h1>
-          <p>
-            Histórico da unidade, incluindo trabalhos concluídos e pedidos de
-            todos os solicitantes.
-          </p>
+          {!embedded ? <p>Consulte os trabalhos e pedidos da sua unidade.</p> : null}
         </div>
         {canRequest && !form ? (
           <button type="button" onClick={() => begin()}>
-            Solicitar OS
+            Nova solicitação
           </button>
         ) : null}
       </header>
@@ -241,7 +242,7 @@ export function SharedWorkPanel({
         />
       ) : (
         <>
-          <nav aria-label="Visões do acompanhamento">
+          {!fixedTab ? <nav aria-label="Visões do acompanhamento">
             {(
               [
                 ["orders", "Ordens de serviço"],
@@ -261,7 +262,7 @@ export function SharedWorkPanel({
                 {label}
               </button>
             ))}
-          </nav>
+          </nav> : null}
           <form
             className="shared-work__search"
             onSubmit={(event) => {

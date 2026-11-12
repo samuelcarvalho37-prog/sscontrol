@@ -8,10 +8,10 @@ import { PcmImportDialog } from './PcmImportDialog'
 
 type MaintenanceModule = 'plans' | 'checklists' | 'technical-structure' | 'assets' | 'materials'
 const MODULES = [
-  { id: 'assets', label: 'Ativos e estrutura', group: 'Estrutura', step: 1, Icon: Network, help: 'Consulte os ativos e sua localização antes de definir o trabalho.' },
-  { id: 'technical-structure', label: 'Áreas e cargos técnicos', group: 'Estrutura', step: 1, Icon: Settings2, help: 'Organize especialidades e cargos. A edição depende das permissões concedidas à sua conta.' },
+  { id: 'assets', label: 'Ativos e componentes', group: 'Cadastros', step: 1, Icon: Network, help: 'Consulte os ativos e sua localização antes de definir o trabalho.' },
+  { id: 'technical-structure', label: 'Áreas e cargos', group: 'Cadastros', step: 1, Icon: Settings2, help: 'Organize especialidades e cargos. A edição depende das permissões concedidas à sua conta.' },
   { id: 'checklists', label: 'Checklists', group: 'Preparação', step: 2, Icon: ClipboardList, help: 'Prepare e valide o roteiro técnico que será vinculado ao plano.' },
-  { id: 'plans', label: 'Planos preventivos', group: 'Preparação', step: 2, Icon: CalendarCheck2, help: 'Defina o ativo, o gatilho e a programação. Use um checklist validado antes de publicar.' },
+  { id: 'plans', label: 'Planos de manutenção', group: 'Preparação', step: 2, Icon: CalendarCheck2, help: 'Defina o ativo, o gatilho e a programação. Use um checklist validado antes de publicar.' },
   { id: 'materials', label: 'Materiais', group: 'Recursos', step: 3, Icon: Package, help: 'Verifique os materiais necessários, o estoque e os recursos para executar o plano.' },
 ] as const
 

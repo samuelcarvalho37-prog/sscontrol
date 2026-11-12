@@ -1586,7 +1586,7 @@ export function AdminPage({
                         <div className="admin-user-detail-actions">
                           <button type="button" className="admin-icon-action" disabled={busy} onClick={() => onOpenUserSettings?.(user, 'identity')} aria-label={`Editar ${user.nome}`} title="Editar usuário"><SettingsIcon /></button>
                           {blocked ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void unlockUser(user)} aria-label={`Desbloquear ${user.nome}`} title="Desbloquear"><ShieldIcon /></button> : null}
-                          {!self ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void resetUserPassword(user)} aria-label={`Redefinir senha de ${user.nome}`} title="Redefinir senha e preparar e-mail"><KeyIcon /></button> : null}
+                          {!self ? <button type="button" className={`admin-icon-action${user.recuperacao_pendente ? " admin-icon-action--recovery" : ""}`} disabled={busy} onClick={() => void resetUserPassword(user)} aria-label={`${user.recuperacao_pendente ? "Atender recuperação de acesso" : "Redefinir senha"} de ${user.nome}`} title={user.recuperacao_pendente ? "Recuperação solicitada: redefinir senha e concluir pendência" : "Redefinir senha e preparar e-mail"}><KeyIcon />{user.recuperacao_pendente ? <span className="admin-recovery-dot" aria-hidden="true" /> : null}</button> : null}
                           {!self && Number(user.sessoes_ativas ?? 0) > 0 ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void revokeSessions(user)} aria-label={`Revogar sessões de ${user.nome}`} title="Revogar sessões"><StopIcon /></button> : null}
                         </div>
                       </div>
