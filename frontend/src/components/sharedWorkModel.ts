@@ -1,4 +1,8 @@
 export type SharedRow = Record<string, unknown> & { id: string };
+export function usesSharedHome(capabilities:readonly string[]|undefined,profile:string){
+  return Boolean(capabilities?.includes('maintenance.shared.read')) && !capabilities?.includes('maintenance.work-orders.review')
+    && !['TECNICO','PCM','GESTOR','ADMIN','SISTEMA'].includes(profile.trim().toUpperCase());
+}
 export type SharedAsset = {
   id: string;
   tag: string;

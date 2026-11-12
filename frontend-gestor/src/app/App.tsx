@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react'
 import '../styles/pcm-workspace-shell.css'
 import { useCallback, useEffect, useState } from 'react'
 import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
+import { usesSharedHome } from '../../../frontend/src/components/sharedWorkModel'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
 import { PcmDashboard } from '../components/PcmDashboard'
 import { PcmMaintenanceWorkspace } from '../components/PcmMaintenanceWorkspace'
@@ -149,6 +150,7 @@ function TenantApp() {
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
   const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
+  const canUseSharedHome = usesSharedHome(session?.user.capacidades,normalizedProfile)
   const [networkOnline, setNetworkOnline] = useState(() => navigator.onLine)
   useEffect(() => {
     const update = () => setNetworkOnline(navigator.onLine)
@@ -229,7 +231,7 @@ function TenantApp() {
   }, [expireSession, isAdmin, isSystem, session, workspaceReady])
 
   useEffect(() => {
-    if (!session || isAdmin || isSystem || !workspaceReady || !canAccessDecisionWorkspace) return
+    if (!session || isAdmin || isSystem || !workspaceReady || !canAccessDecisionWorkspace || canUseSharedHome) return
     const controller = new AbortController()
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
@@ -241,7 +243,7 @@ function TenantApp() {
         if (isGestorAuthenticationError(cause)) expireSession()
       })
     return () => controller.abort()
-  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canAccessDecisionWorkspace, canReadAnalytics])
+  }, [expireSession, isAdmin, isSystem, isTechnician, session, workspaceReady, canAccessDecisionWorkspace, canReadAnalytics, canUseSharedHome])
 
   useEffect(() => {
     if (!session) return
@@ -561,9 +563,9 @@ function TenantApp() {
               </div>
             </section>
           ) : null}
-          {section === 'home' && canReportOccurrence && !canReadWork && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
+          {section === 'home' && (canUseSharedHome || (canReportOccurrence && !canReadWork)) && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} notificationFocus={technicianActionFocus} onNotificationFocusHandled={() => setTechnicianActionFocus(null)} /> : null}
-          {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
+          {section === 'home' && canAccessDecisionWorkspace && !isTechnician && !canUseSharedHome ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
               initialView={decisionView}
