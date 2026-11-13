@@ -1496,6 +1496,8 @@ export function AdminPage({
                 const displayedStatus = bulkStatusPreview?.ids.includes(user.id) ? bulkStatusPreview.status : user.status
                 const technicalAreaName = user.area_nome || technicalAreas.find((area) => area.id === user.area_id)?.nome
                 const technicalRoleName = user.cargo_nome || technicalRoles.find((role) => role.id === user.cargo_id)?.nome
+                const userProfileLabel = PROFILE_LABELS[user.perfil as AdminUserProfile] || presentProfile(user.perfil)
+                const assignmentLabel = [...new Set([userProfileLabel, technicalRoleName || technicalAreaName].filter(Boolean))].join(' · ')
                 const scopeNames = (() => {
                   try {
                     const ids = JSON.parse(user.escopo_ids_json || '[]') as string[]
@@ -1522,8 +1524,9 @@ export function AdminPage({
                   <article className={`admin-user-record${open ? ' is-expanded' : ''}`} key={user.id}>
                     <div className="admin-user-row">
                       <button type="button" className="admin-user-open" aria-expanded={open} onClick={() => void toggleUserDetails(user)}>
-                        <span className="admin-user-open__text">
+                        <span className="admin-user-open__text" title={[user.nome, technicalAreaName, technicalRoleName, PROFILE_LABELS[user.perfil as AdminUserProfile] || presentProfile(user.perfil)].filter(Boolean).join(' · ')}>
                           <strong>{user.nome}{self ? ' · Você' : ''}</strong>
+                          <span className="admin-user-assignment">{assignmentLabel}</span>
                         </span>
                       </button>
                       <button

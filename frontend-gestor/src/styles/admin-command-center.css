@@ -4017,8 +4017,27 @@
 }
 
 .admin-command-center-shell .admin-user-open__text {
-  display: block;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
   min-width: 0;
+}
+
+.admin-command-center-shell .admin-user-assignment {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--muted, #5b7185);
+  background: color-mix(in srgb, var(--text, #173b59) 6%, transparent);
+  font-size: 0.59rem;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
 .admin-command-center-shell .admin-user-open__text > strong {
