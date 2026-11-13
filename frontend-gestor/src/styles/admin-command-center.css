@@ -4217,6 +4217,15 @@
   min-width: 0;
 }
 
+.admin-command-center-shell .admin-technical-list {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+
+.admin-command-center-shell .admin-technical-list > article {
+  align-self: start;
+}
+
 .admin-command-center-shell .admin-app-window__chrome-controls {
   width: 84px;
   min-width: 84px;
