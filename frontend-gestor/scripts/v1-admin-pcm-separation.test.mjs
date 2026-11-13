@@ -13,7 +13,7 @@ test('TI concentra cadastros na importação e separa a operação do PCM', asyn
   for (const module of ['workforce']) {
     assert.doesNotMatch(excludedModules, new RegExp(`'${module}'`))
   }
-  for (const module of ['structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals']) {
+  for (const module of ['structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals', 'configuration']) {
     assert.match(excludedModules, new RegExp(`'${module}'`))
   }
   for (const module of ['structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations']) {

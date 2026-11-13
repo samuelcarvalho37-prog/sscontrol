@@ -199,7 +199,7 @@ const NAVIGATION_GROUPS: Array<{
   },
 ]
 const ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>([
-  'structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals',
+  'structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals', 'configuration',
 ])
 const COMPANY_PROFILE_CACHE_KEY = 'fab_control_admin_company_profile_v1'
 const DEFAULT_COMPANY_PROFILE: AdminCompanyProfile = {
@@ -2334,7 +2334,6 @@ export function AdminWorkspace({
           {profileOpen ? (
             <aside className="admin-profile-menu" aria-label="Menu do perfil">
               <header><span>TI</span><div><strong>Equipe de TI</strong><small>{companyProfile.nome}</small></div></header>
-              <button type="button" aria-disabled={!isModuleAvailable('configuration')} title="Preparar, validar e publicar configurações versionadas" onClick={() => openModule('configuration')}>Configurações do sistema</button>
               <button type="button" aria-disabled={!isModuleAvailable('users')} title="O painel não oferece edição do perfil pessoal" onClick={() => openModule('users')}>Usuários e acessos</button>
               <button type="button" disabled={loggingOut} onClick={onLogout}>{loggingOut ? 'Saindo…' : 'Sair'}</button>
             </aside>

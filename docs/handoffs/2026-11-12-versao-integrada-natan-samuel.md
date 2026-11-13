@@ -8,6 +8,7 @@ Esta entrega inclui frontend, backend e migrações já versionados nesta branch
 
 - Manter o Centro de Comando do TI, sua navegação lateral, Ctrl+K e painéis redimensionáveis.
 - Estrutura, ativos e almoxarifado ficam concentrados em Importação e exportação. Não reintroduzir atalhos separados de Estrutura fabril, Cadastro técnico ou Materiais e peças na lateral do TI.
+- Configurações do sistema (motor de configuração) também fica oculto na navegação, busca de módulos e menu do perfil do TI. O módulo e sua API permanecem no código; não reintroduzir seu acesso visual nesta versão.
 - Checklists, planejamento, execução e publicação de planos ficam no fluxo do PCM. Homologação não deve reaparecer como atalho do TI.
 - O CSS global não deve impor dimensões e aparência a todo botão sem classe: isso quebra controles de janela e componentes com estilos próprios.
 - `visual-polish.css` não é mais importado pelo aplicativo gestor. Novas alterações visuais devem respeitar os estilos e os escopos dos componentes.
