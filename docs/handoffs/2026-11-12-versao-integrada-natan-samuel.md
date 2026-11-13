@@ -2,6 +2,28 @@
 
 Branch de referência: `dev/natan-refinamento-frontend`.
 
+## Marco principal de finalização do TI
+
+O commit `6bc8500` consolida a navegação aprovada por Natan, junto aos commits anteriores desta branch. Samuel deve integrar esse histórico completo. Se a interface no ambiente dele ainda mostrar os atalhos removidos, a integração visual não está concluída: conferir a versão executada, recompilar o frontend e remover conflitos que tenham reintroduzido a navegação anterior.
+
+A lista aprovada de entradas da lateral é **somente**:
+
+1. Integridade do sistema
+2. Equipes técnicas
+3. Gestão de pessoas
+4. Configurações de acesso
+5. Importação e exportação
+6. Lotes de importação
+7. Criar uma cópia
+8. Indicadores
+9. Documentos
+10. Auditoria
+11. Suporte VORQIX
+
+Não acrescentar à lateral Estrutura fabril, Cadastro técnico, Materiais e peças, Homologação de planos, Configurações avançadas ou Configurações do sistema. Os recursos de importação de estrutura, ativos e almoxarifado permanecem dentro de Importação e exportação. Ocultar esses atalhos não significa excluir os módulos, APIs ou dados. As permissões e o plano podem restringir o acesso às entradas aprovadas; não devem reintroduzir outras entradas.
+
+Esta lista deve ser usada na revisão de conflitos e na conferência final da interface após o pull. Mudanças futuras nessa navegação precisam ser combinadas antes de substituir o padrão aprovado.
+
 Esta entrega inclui frontend, backend e migrações já versionados nesta branch. Integrar a branch completa; copiar somente o frontend deixa de fora as regras de acesso e as rotas correspondentes. Não substituir a interface desta branch pela camada visual antiga após a integração.
 
 ## Padrão visual
