@@ -51,7 +51,7 @@ const YES_NO = [{ value: 'SIM', label: 'Sim' }, { value: 'NAO', label: 'Não' }]
 function areaInput(area?: TechnicalArea): TechnicalAreaInput {
   return {
     id: area?.id,
-    codigo: area?.codigo ?? '',
+    codigo: area?.codigo ?? `AREA-${crypto.randomUUID().toUpperCase()}`,
     nome: area?.nome ?? '',
     descricao: area?.descricao ?? '',
     status: area?.status ?? 'ATIVO',
@@ -63,7 +63,7 @@ function roleInput(areaId: string, role?: TechnicalRole): TechnicalRoleInput {
   return {
     id: role?.id,
     area_id: role?.area_id ?? areaId,
-    codigo: role?.codigo ?? '',
+    codigo: role?.codigo ?? `CARGO-${crypto.randomUUID().toUpperCase()}`,
     nome: role?.nome ?? '',
     descricao: role?.descricao ?? '',
     status: role?.status ?? 'ATIVO',
@@ -398,12 +398,13 @@ export function AdminTechnicalStructure({
         <header><h2 id="technical-editor-title">{editor.value.id ? 'Editar' : 'Nova'} {editor.kind === 'area' ? 'área técnica' : 'cargo técnico'}</h2><button type="button" onClick={() => setEditor(null)}>← Voltar</button></header>
         <form onSubmit={(event) => { event.preventDefault(); void saveEditor() }}>
           <div className="admin-technical-form">
-            {editor.kind === 'role' ? <label><span>Área técnica *</span><select required value={editor.value.area_id} onChange={(event) => setEditor({ kind: 'role', value: { ...editor.value, area_id: event.target.value } })}><option value="">Selecione…</option>{areas.filter((area) => area.status === 'ATIVO' || area.id === editor.value.area_id).map((area) => <option value={area.id} key={area.id}>{area.codigo} · {area.nome}</option>)}</select></label> : null}
-            <label><span>Código *</span><input required value={editor.value.codigo} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, codigo: event.target.value.toUpperCase() } } : { kind: 'role', value: { ...editor.value, codigo: event.target.value.toUpperCase() } })} placeholder={editor.kind === 'area' ? 'QUALIDADE' : 'INSPETOR'} /></label>
-            <label><span>Nome *</span><input required value={editor.value.nome} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, nome: event.target.value } } : { kind: 'role', value: { ...editor.value, nome: event.target.value } })} /></label>
+            {editor.kind === 'role' ? <label><span>Área técnica *</span><select required value={editor.value.area_id} onChange={(event) => setEditor({ kind: 'role', value: { ...editor.value, area_id: event.target.value } })}><option value="">Selecione…</option>{areas.filter((area) => area.status === 'ATIVO' || area.id === editor.value.area_id).map((area) => <option value={area.id} key={area.id}>{area.nome}</option>)}</select></label> : null}
+            <label><span>{editor.kind === 'area' ? 'Nome da área' : 'Nome do cargo'} *</span><input required value={editor.value.nome} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, nome: event.target.value } } : { kind: 'role', value: { ...editor.value, nome: event.target.value } })} /></label>
+            <details className="admin-technical-extra"><summary>Mais detalhes</summary>
+            <label><span>Código de identificação</span><input readOnly value={editor.value.codigo} /></label>
             <label><span>Status</span><select value={editor.value.status} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, status: event.target.value as AdminUserStatus } } : { kind: 'role', value: { ...editor.value, status: event.target.value as AdminUserStatus } })}><option value="ATIVO">Ativo</option><option value="INATIVO">Inativo</option></select></label>
             <label><span>{editor.kind === 'area' ? 'Exigir assinatura por padrão' : 'Pode assinar documentos'}</span><select value={editor.kind === 'area' ? editor.value.exige_assinatura_padrao : editor.value.pode_assinar} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, exige_assinatura_padrao: event.target.value } } : { kind: 'role', value: { ...editor.value, pode_assinar: event.target.value } })}>{YES_NO.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-            <details className="admin-technical-extra"><summary title="Informações opcionais do cadastro">Mais detalhes</summary><label><span>Descrição</span><textarea rows={2} value={editor.value.descricao || ''} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, descricao: event.target.value } } : { kind: 'role', value: { ...editor.value, descricao: event.target.value } })} /></label></details>
+            <label><span>Descrição</span><textarea rows={2} value={editor.value.descricao || ''} onChange={(event) => setEditor(editor.kind === 'area' ? { kind: 'area', value: { ...editor.value, descricao: event.target.value } } : { kind: 'role', value: { ...editor.value, descricao: event.target.value } })} /></label></details>
           </div>
           <footer><button type="button" onClick={() => setEditor(null)}>Cancelar</button><button className="primary-button" type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</button></footer>
         </form>
@@ -434,7 +435,7 @@ export function AdminTechnicalStructure({
           <div className="admin-technical-list">
             {visibleAreas.map((area) => (
               <article className={selectedAreaId === area.id ? 'is-active' : ''} key={area.id}>
-                <button className="admin-technical-select" title={`${area.codigo} · ${area.descricao || 'Sem descrição'}`} type="button" aria-pressed={selectedAreaId === area.id} onClick={() => setSelectedAreaId(area.id)}><span><b>{area.codigo}</b><strong>{area.nome}</strong></span></button>
+                <button className="admin-technical-select" title={`${area.codigo} · ${area.descricao || 'Sem descrição'}`} type="button" aria-pressed={selectedAreaId === area.id} onClick={() => setSelectedAreaId(area.id)}><span><strong>{area.nome}</strong></span></button>
                 <button className={`admin-user-status-control is-${area.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(area.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="area" data-technical-status-id={area.id} aria-pressed={area.status === 'ATIVO'} aria-label={`${area.status === 'ATIVO' ? 'Desativar' : 'Ativar'} área ${area.nome}`} title="Clique para alterar. Arraste para aplicar a outras áreas." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'area', area.id, area.status)} onClick={() => toggleStatusClick('area', area.id, area.status)}>{area.status === 'ATIVO' ? 'ON' : 'OFF'}</button>
                 <button className="admin-technical-edit" type="button" aria-label={`Editar área ${area.nome}`} onClick={() => setEditor({ kind: 'area', value: areaInput(area) })}>Editar</button>
               </article>
@@ -464,8 +465,8 @@ export function AdminTechnicalStructure({
           <header title={onDetachPanel && !detachedPanel ? 'Clique com o botão direito para desprender este grupo em uma janela.' : undefined}><h2>{selectedArea ? `Cargos · ${selectedArea.nome}` : 'Cargos'}</h2><button className="primary-button" title="Cadastrar cargo na área selecionada" type="button" disabled={!selectedAreaId || selectedArea?.status !== 'ATIVO'} onClick={() => setEditor({ kind: 'role', value: roleInput(selectedAreaId) })}>+ Novo</button></header>
           <label className="admin-technical-search"><SearchIcon /><input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Buscar cargo" /></label>
           <div className="admin-technical-role-table">
-            <div><span>Código e cargo</span><span>Assinatura</span><span>Status</span><span /></div>
-            {visibleRoles.map((role) => <article key={role.id}><span title={`${role.codigo} · ${role.descricao || 'Sem descrição'}`}><b>{role.codigo}</b><strong>{role.nome}</strong></span><span className={String(role.pode_assinar).toUpperCase() === 'SIM' ? 'is-signature' : ''} title="Permissão para assinar documentos">{String(role.pode_assinar).toUpperCase() === 'SIM' ? <><CheckIcon />Assina</> : 'Não assina'}</span><button className={`admin-user-status-control is-${role.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(role.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="role" data-technical-status-id={role.id} aria-pressed={role.status === 'ATIVO'} aria-label={`${role.status === 'ATIVO' ? 'Desativar' : 'Ativar'} cargo ${role.nome}`} title="Clique para alterar. Arraste para aplicar a outros cargos." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'role', role.id, role.status)} onClick={() => toggleStatusClick('role', role.id, role.status)}>{role.status === 'ATIVO' ? 'ON' : 'OFF'}</button><button title={`Editar ${role.nome}`} type="button" onClick={() => setEditor({ kind: 'role', value: roleInput(role.area_id, role) })}>Editar</button></article>)}
+            <div><span>Cargo</span><span>Assinatura</span><span>Status</span><span /></div>
+            {visibleRoles.map((role) => <article key={role.id}><span title={`${role.codigo} · ${role.descricao || 'Sem descrição'}`}><strong>{role.nome}</strong></span><span className={String(role.pode_assinar).toUpperCase() === 'SIM' ? 'is-signature' : ''} title="Permissão para assinar documentos">{String(role.pode_assinar).toUpperCase() === 'SIM' ? <><CheckIcon />Assina</> : 'Não assina'}</span><button className={`admin-user-status-control is-${role.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(role.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="role" data-technical-status-id={role.id} aria-pressed={role.status === 'ATIVO'} aria-label={`${role.status === 'ATIVO' ? 'Desativar' : 'Ativar'} cargo ${role.nome}`} title="Clique para alterar. Arraste para aplicar a outros cargos." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'role', role.id, role.status)} onClick={() => toggleStatusClick('role', role.id, role.status)}>{role.status === 'ATIVO' ? 'ON' : 'OFF'}</button><button title={`Editar ${role.nome}`} type="button" onClick={() => setEditor({ kind: 'role', value: roleInput(role.area_id, role) })}>Editar</button></article>)}
             {!visibleRoles.length ? <div className="admin-technical-empty">{!selectedArea ? 'Cadastre ou selecione uma área para ver os cargos.' : roleSearch ? 'Nenhum cargo corresponde à busca.' : 'Nenhum cargo nesta área. Adicione um cargo quando precisar.'}</div> : null}
           </div>
         </section> : null}
