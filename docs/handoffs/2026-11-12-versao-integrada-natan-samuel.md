@@ -38,7 +38,15 @@ Esta entrega inclui frontend, backend e migrações já versionados nesta branch
 - `visual-polish.css` não é mais importado pelo aplicativo gestor. Novas alterações visuais devem respeitar os estilos e os escopos dos componentes.
 - O tema do PCM continua próprio de suas telas; o técnico mantém sua identidade independente.
 
-## Backend que acompanha a branch
+## Fechamento de equipes técnicas e teste de importação
+
+Atualização de 13/11/2026: integrar também o commit `15d20a6` e os anteriores da mesma branch. Ele simplifica o formulário de áreas/cargos: Nome da área ou Nome do cargo em destaque, área previamente selecionada ao adicionar um cargo e código gerado automaticamente nos novos cadastros. Código de identificação, status, assinatura e descrição ficam em Mais detalhes. Códigos e vínculos dos registros existentes são preservados. As listas priorizam os nomes, deixando os códigos no contexto de consulta.
+
+Nesta última etapa **não houve alteração no código do importador nem no modelo de download do sistema**. Foi gerada uma planilha XLSX externa com oito contas fictícias, sem TI nem PCM. Natan informou que a análise ficou pronta para criar, confirmou a importação e verificou as áreas/cargos após atualizar a tela. Trata-se de confirmação manual do usuário no ambiente local, não de um novo teste automatizado.
+
+As oito contas e suas áreas/cargos gravados na TOZZI são dados locais e não acompanham o commit/pull. A planilha preenchida e as credenciais temporárias também não entram no repositório. Samuel deve puxar o código completo e testar a importação no próprio ambiente com seus dados. Não copiar banco ou credenciais locais para reproduzir a interface.
+
+## Regras de acesso e migrações
 
 Inclui as correções anteriores de recuperação/notificações e o controle de acesso da empresa. As migrações 0062 e 0063 fazem parte da entrega: ativação/suspensão pela plataforma e verificação de acesso/validade da assinatura. Aplicar todas as migrações pendentes, na ordem do migrador, sem selecionar apenas esses dois arquivos.
 
