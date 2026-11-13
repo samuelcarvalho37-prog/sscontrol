@@ -12,6 +12,7 @@ import {
   listPlatformFeatures,
   savePlatformPlan,
   updatePlatformTenantSubscription,
+  updatePlatformTenantStatus,
   loginPlatform,
   logoutPlatform,
   readPlatformTelemetry,
@@ -124,6 +125,7 @@ export function PlatformConsole() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [tenants, setTenants] = useState<PlatformTenantSummary[]>([]);
+  const [statusTenant, setStatusTenant] = useState<PlatformTenantSummary | null>(null);
   const [telemetry, setTelemetry] = useState<
     Array<{ tenant_id: string; modules: PlatformModuleMetric[] }>
   >([]);
@@ -394,6 +396,20 @@ export function PlatformConsole() {
     }
   }
 
+  async function changeTenantStatus() {
+    if (!session || !statusTenant || session.development || saving) return;
+    const target = statusTenant;
+    const nextStatus = target.tenant_status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    setSaving(true); setError('');
+    try {
+      await updatePlatformTenantStatus(session.token, target.tenant_id, nextStatus);
+      setStatusTenant(null);
+      await loadConsole(session);
+      setNotice(`${target.display_name}: ${nextStatus === 'ACTIVE' ? 'empresa reativada' : 'acesso desativado'}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível alterar o acesso da empresa.'); }
+    finally { setSaving(false); }
+  }
+
   async function saveTenant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session || !editingTenant) return;
@@ -658,7 +674,7 @@ export function PlatformConsole() {
               return <article className="platform-company-card" key={tenant.tenant_id}>
                 <header className="platform-company-card__header">
                   <div><h3>{tenant.display_name}</h3><span>{tenant.slug} · {tenant.environment}</span></div>
-                  <span className={`platform-company-status ${tenant.tenant_status === "ACTIVE" ? "is-active" : ""}`}>{tenant.tenant_status === "ACTIVE" ? "Empresa ativa" : tenant.tenant_status}</span>
+                  <span className={`platform-company-status ${tenant.tenant_status === "ACTIVE" ? "is-active" : ""}`}>{tenant.tenant_status === "ACTIVE" ? "Empresa ativa" : tenant.tenant_status === "SUSPENDED" ? "Empresa desativada" : tenant.tenant_status}</span>
                 </header>
                 <div className="platform-company-card__details">
                   <section><span>Plano</span><strong>{tenant.plan_name ?? "Nenhum plano"}</strong><small>{subscriptionActive ? "Assinatura ativa" : tenant.subscription_status ?? "Ainda não contratado"}</small></section>
@@ -668,6 +684,7 @@ export function PlatformConsole() {
                 </div>
                 <footer className="platform-company-card__actions">
                   <button type="button" disabled={session.development} onClick={() => openTenantPlan(tenant)}>{subscriptionActive ? "Gerenciar plano" : "Ativar plano"}</button>
+                  <button type="button" disabled={session.development || saving || tenant.tenant_status === 'ARCHIVED'} onClick={() => setStatusTenant(tenant)}>{tenant.tenant_status === 'ACTIVE' ? 'Desativar empresa' : 'Reativar empresa'}</button>
                   {!tenant.initial_admin_created ? <button type="button" className="platform-secondary-button" disabled={session.development || saving} onClick={() => { setAccessError(""); setAccessTenant(tenant); }}>Criar primeiro acesso TI</button> : null}
                 </footer>
               </article>;
@@ -778,6 +795,7 @@ export function PlatformConsole() {
         </section> : null}
 
       </div>
+      {statusTenant ? <div className="platform-modal-backdrop"><section className="platform-editor" role="dialog" aria-modal="true" aria-labelledby="company-status-title"><header><h2 id="company-status-title">{statusTenant.tenant_status === 'ACTIVE' ? 'Desativar empresa' : 'Reativar empresa'}</h2></header><p><strong>{statusTenant.display_name}</strong></p>{error ? <p className="platform-error" role="alert">{error}</p> : null}<p>{statusTenant.tenant_status === 'ACTIVE' ? 'Os usuários perderão o acesso ao ambiente. Os dados e o contrato serão preservados.' : 'O acesso ao ambiente será liberado conforme as permissões e o contrato existentes.'}</p><footer><button type="button" disabled={saving} onClick={() => setStatusTenant(null)}>Cancelar</button><button type="button" className="platform-primary" disabled={saving} onClick={() => void changeTenantStatus()}>{saving ? 'Salvando…' : 'Confirmar'}</button></footer></section></div> : null}
       {editingTenant ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) openTenantPlan(null); }}><form key={editingTenant.tenant_id} className="platform-editor" onSubmit={(event) => void saveTenant(event)}><header><div><span className="platform-eyebrow">CONTRATO DA EMPRESA</span><h2>Ativar ou alterar plano</h2></div><button type="button" onClick={() => openTenantPlan(null)}>Fechar</button></header><label>Empresa<select value={editingTenant.tenant_id} onChange={(event) => { const selected = customerTenants.find((tenant) => tenant.tenant_id === event.target.value); if (selected) openTenantPlan(selected); }} required>{customerTenants.map((tenant) => <option key={tenant.tenant_id} value={tenant.tenant_id}>{tenant.display_name}</option>)}</select></label><label>Plano<select name="plan_id" defaultValue={plans.find(plan => plan.code === editingTenant.plan_code)?.plan_id ?? plans.find(plan => plan.status === "ACTIVE")?.plan_id ?? ""} onChange={(event) => { const selected = plans.find((plan) => plan.plan_id === event.target.value); setContractFeatureCodes(selected?.features.map((feature) => feature.code) ?? []); }} required>{plans.filter(plan => plan.status === "ACTIVE").map(plan => <option key={plan.plan_id} value={plan.plan_id}>{plan.name}</option>)}</select></label><label>Status da assinatura<select name="status" defaultValue={editingTenant.subscription_status ?? "ACTIVE"}>{["TRIAL","ACTIVE","PAST_DUE","SUSPENDED","CANCELLED","EXPIRED"].map(status => <option key={status}>{status}</option>)}</select></label><div className="platform-form-grid"><label>Valor mensal (R$)<input name="monthly_price" type="number" min="0" step="0.01" defaultValue={Number(editingTenant.monthly_price ?? 0)} required /></label><label>Desconto (%)<input name="discount_percent" type="number" min="0" max="100" step="0.01" defaultValue={Number(editingTenant.discount_percent ?? 0)} required /></label><label>Implantação (dias)<input name="implementation_days" type="number" min="0" max="3650" step="1" defaultValue={editingTenant.implementation_days ?? 0} required /></label></div><fieldset><legend>Módulos habilitados</legend><div className="platform-module-grid">{features.map(feature => <label key={feature.code}><input type="checkbox" name="feature_codes" value={feature.code} checked={contractFeatureCodes.includes(feature.code)} onChange={(event) => setContractFeatureCodes((current) => event.target.checked ? [...new Set([...current, feature.code])] : current.filter((code) => code !== feature.code))} />{feature.name}</label>)}</div><small>A seleção inicial acompanha o plano. Você pode ajustar os módulos contratados antes de salvar.</small></fieldset><footer><button type="button" onClick={() => openTenantPlan(null)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving || !plans.some(plan => plan.status === "ACTIVE")}>{saving ? "Salvando…" : "Salvar contrato"}</button></footer></form></div> : null}
       {companyEditorOpen ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompanyEditorOpen(false); }}><form className="platform-editor" onSubmit={(event) => void createTenant(event)}><header><div><span className="platform-eyebrow">CADASTRO</span><h2>Nova empresa</h2></div><button type="button" onClick={() => setCompanyEditorOpen(false)}>Fechar</button></header><label>Nome da empresa<input name="display_name" minLength={2} maxLength={120} value={companyName} onChange={(event) => { const next = event.target.value; setCompanyName(next); setCompanySlug(generatedTenantSlug(next)); }} required autoFocus /></label><label>Razão social<input name="legal_name" minLength={2} maxLength={160} required /></label><label>CNPJ (opcional)<input name="tax_identifier" maxLength={32} /></label><label>Identificador do ambiente<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" minLength={3} maxLength={80} value={companySlug} onChange={(event) => setCompanySlug(event.target.value.toLowerCase())} required /><small>Endereço técnico gerado pelo nome e usado para abrir o ambiente.</small></label><p className="platform-footnote">Depois do cadastro, use as ações da empresa para ativar o plano e gerar o acesso TI.</p><footer><button type="button" onClick={() => setCompanyEditorOpen(false)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving}>{saving ? "Cadastrando…" : "Cadastrar empresa"}</button></footer></form></div> : null}
       {accessTenant ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccessTenant(null); }}><form className="platform-editor" onSubmit={(event) => void createInitialAdmin(event)}><header><div><span className="platform-eyebrow">PRIMEIRO ACESSO</span><h2>{accessTenant.display_name}</h2></div><button type="button" onClick={() => setAccessTenant(null)}>Fechar</button></header><p>Informe o responsável, a matrícula de login e o e-mail. A senha temporária será mostrada após a criação.</p>{accessError ? <div className="platform-error" role="alert">Não foi possível criar o acesso TI: {accessError}</div> : null}<label>Nome do responsável<input name="name" minLength={3} maxLength={160} required autoFocus /></label><div className="platform-form-grid"><label>Matrícula (login)<input name="employee_number" pattern="[A-Za-z0-9._-]{3,40}" maxLength={40} required /></label><label>E-mail<input name="email" type="email" maxLength={254} required /></label></div><footer><button type="button" onClick={() => setAccessTenant(null)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving}>{saving ? "Criando acesso…" : "Criar primeiro acesso"}</button></footer></form></div> : null}

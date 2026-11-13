@@ -348,6 +348,22 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
     },
   });
 
+  app.patch('/v1/platform/tenants/:tenantId/status', {
+    preHandler: async (request) => { await authenticatePlatform(request); },
+    schema: {
+      params: Type.Object({ tenantId: Type.String({ format: 'uuid' }) }),
+      body: Type.Object({ status: Type.Union([Type.Literal('ACTIVE'), Type.Literal('SUSPENDED')]) }, { additionalProperties: false }),
+    },
+    handler: async (request) => {
+      const identity = await authenticatePlatform(request);
+      const result = await app.database.query<{ status: string }>(
+        'SELECT platform.set_console_tenant_status($1,$2,$3,$4) AS status',
+        [identity.operatorId, request.params.tenantId, request.body.status, request.id],
+      );
+      return successEnvelope(request, 'platform.tenants.status.update', { status: result.rows[0]?.status });
+    },
+  });
+
   app.patch('/v1/platform/tenants/:tenantId/subscription', {
     preHandler: async (request) => { await authenticatePlatform(request); },
     schema: {

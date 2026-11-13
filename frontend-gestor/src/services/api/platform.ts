@@ -215,6 +215,12 @@ export function updatePlatformTenantSubscription(token: string, tenantId: string
   });
 }
 
+export function updatePlatformTenantStatus(token: string, tenantId: string, status: 'ACTIVE' | 'SUSPENDED') {
+  return request<{ status: string }>(`/v1/platform/tenants/${encodeURIComponent(tenantId)}/status`, {
+    method: 'PATCH', token, body: { status },
+  });
+}
+
 export function readPlatformTelemetry(token: string): Promise<{
   window_minutes: number;
   source: string;
