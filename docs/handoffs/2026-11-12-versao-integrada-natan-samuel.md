@@ -24,6 +24,8 @@ Não acrescentar à lateral Estrutura fabril, Cadastro técnico, Materiais e pe�
 
 Esta lista deve ser usada na revisão de conflitos e na conferência final da interface após o pull. Mudanças futuras nessa navegação precisam ser combinadas antes de substituir o padrão aprovado.
 
+**Ação obrigatória na integração:** se existirem outras áreas ou atalhos de primeiro nível no TI fora desta lista, removê-los da navegação apresentada ao usuário, inclusive acessos equivalentes pela busca de módulos ou pelo menu do perfil. Eles não fazem parte do escopo visual aprovado. Preservar subfluxos necessários das onze entradas, como as categorias de Importação e exportação. Não apagar tabelas, dados, APIs ou recursos compartilhados para fazer essa limpeza visual.
+
 Esta entrega inclui frontend, backend e migrações já versionados nesta branch. Integrar a branch completa; copiar somente o frontend deixa de fora as regras de acesso e as rotas correspondentes. Não substituir a interface desta branch pela camada visual antiga após a integração.
 
 ## Padrão visual
