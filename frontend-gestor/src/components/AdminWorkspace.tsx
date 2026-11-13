@@ -158,7 +158,7 @@ const MODULES: WorkspaceModule[] = [
   { id: 'exports-master', code: 'EM', label: 'Exportar planilha mestre', description: 'Cadastros atuais em um arquivo', Icon: UploadIcon, feature: 'IMPORTACOES' },
   { id: 'exports-zone', code: 'EZ', label: 'Exportação de dados', description: 'Estrutura, ativos e almoxarifado', Icon: UploadIcon, feature: 'IMPORTACOES' },
   { id: 'import-history', code: 'IR', label: 'Lotes de importação', description: 'Histórico, resultados e reversões', Icon: UploadIcon, feature: 'IMPORTACOES' },
-  { id: 'configuration', code: 'MC', label: 'Configurações avançadas', description: 'Regras, versões e publicação', searchTerms: 'motor configuração operação evidência workflow indicador metas salvar validar publicar reverter versão', Icon: SettingsIcon, feature: 'MOTOR_LIMITADO' },
+  { id: 'configuration', code: 'MC', label: 'Configurações do sistema', description: 'Regras, versões e publicação', searchTerms: 'motor configuração operação evidência workflow indicador metas salvar validar publicar reverter versão', Icon: SettingsIcon, feature: 'MOTOR_LIMITADO' },
   { id: 'users', code: 'US', label: 'Gestão de pessoas', description: 'Contas, equipes e perfis de acesso', searchTerms: 'usuário pessoa conta login senha sessão revogar acesso segurança cadastro área cargo equipe perfil', Icon: UserDirectoryIcon, feature: 'CADASTROS' },
   { id: 'permissions', code: 'PE', label: 'Configurações de acesso', description: 'Permissões por perfil', searchTerms: 'permissão perfil gestor técnico operador planejador produção qualidade segurança ligar desligar autorização papel role', Icon: KeyIcon, feature: 'CADASTROS' },
   { id: 'governance', code: 'AU', label: 'Auditoria', description: 'Histórico de alterações e responsáveis', searchTerms: 'log evento histórico alteração quem fez quando antes depois', Icon: AuditIcon, feature: 'AUDITORIA' },
@@ -199,7 +199,7 @@ const NAVIGATION_GROUPS: Array<{
   },
 ]
 const ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>([
-  'structure', 'assets', 'checklists', 'maintenance', 'inventory', 'operations',
+  'checklists', 'maintenance', 'operations', 'plan-approvals',
 ])
 const COMPANY_PROFILE_CACHE_KEY = 'fab_control_admin_company_profile_v1'
 const DEFAULT_COMPANY_PROFILE: AdminCompanyProfile = {
@@ -2333,7 +2333,7 @@ export function AdminWorkspace({
           {profileOpen ? (
             <aside className="admin-profile-menu" aria-label="Menu do perfil">
               <header><span>TI</span><div><strong>Equipe de TI</strong><small>{companyProfile.nome}</small></div></header>
-              <button type="button" aria-disabled={!isModuleAvailable('configuration')} title="Preparar, validar e publicar configurações versionadas" onClick={() => openModule('configuration')}>Configurações avançadas</button>
+              <button type="button" aria-disabled={!isModuleAvailable('configuration')} title="Preparar, validar e publicar configurações versionadas" onClick={() => openModule('configuration')}>Configurações do sistema</button>
               <button type="button" aria-disabled={!isModuleAvailable('users')} title="O painel não oferece edição do perfil pessoal" onClick={() => openModule('users')}>Usuários e acessos</button>
               <button type="button" disabled={loggingOut} onClick={onLogout}>{loggingOut ? 'Saindo…' : 'Sair'}</button>
             </aside>

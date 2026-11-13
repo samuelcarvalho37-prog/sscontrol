@@ -4,10 +4,18 @@ import test from 'node:test'
 
 const source = async path => readFile(new URL(path, import.meta.url), 'utf8')
 
-test('ADMIN fica sem atalhos operacionais e mantém analytics somente leitura', async () => {
+test('TI mantém cadastros estruturais e separa a operação do PCM', async () => {
   const workspace = await source('../src/components/AdminWorkspace.tsx')
   const page = await source('../src/pages/AdminPage.tsx')
   assert.match(workspace, /ADMIN_MAINTENANCE_MODULES = new Set/)
+  const excludedModules = workspace.match(/ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>\(\[([\s\S]*?)\]\)/)?.[1]
+  assert.ok(excludedModules)
+  for (const module of ['structure', 'assets', 'inventory', 'workforce']) {
+    assert.doesNotMatch(excludedModules, new RegExp(`'${module}'`))
+  }
+  for (const module of ['checklists', 'maintenance', 'operations', 'plan-approvals']) {
+    assert.match(excludedModules, new RegExp(`'${module}'`))
+  }
   for (const module of ['structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations']) {
     assert.match(workspace, new RegExp(`'${module}'`))
   }
@@ -40,7 +48,7 @@ test('checklist do PCM não consulta diretório administrativo de usuários', as
   assert.match(builder, /allowCustom=\{allowCustomValidators\}/)
 })
 
-test('ADMIN homologa planos sem criar, editar ou administrar o fluxo de manutenção', async () => {
+test('rota legada de homologação preserva restrições sem voltar à navegação do TI', async () => {
   const workspace = await source('../src/components/AdminWorkspace.tsx')
   const page = await source('../src/pages/AdminPage.tsx')
   const catalog = await source('../src/components/AdminCatalogWorkspace.tsx')

@@ -1,0 +1,55 @@
+# Entrega integrada para Samuel
+
+Branch de referência: `dev/natan-refinamento-frontend`.
+
+Esta entrega inclui frontend, backend e migrações já versionados nesta branch. Integrar a branch completa; copiar somente o frontend deixa de fora as regras de acesso e as rotas correspondentes. Não substituir a interface desta branch pela camada visual antiga após a integração.
+
+## Padrão visual
+
+- Manter o Centro de Comando do TI, sua navegação lateral, Ctrl+K e painéis redimensionáveis.
+- Estrutura fabril, ativos, componentes e materiais pertencem também à administração técnica do TI, sujeitos às permissões existentes da API.
+- Checklists, planejamento, execução e publicação de planos ficam no fluxo do PCM. Homologação não deve reaparecer como atalho do TI.
+- O CSS global não deve impor dimensões e aparência a todo botão sem classe: isso quebra controles de janela e componentes com estilos próprios.
+- `visual-polish.css` não é mais importado pelo aplicativo gestor. Novas alterações visuais devem respeitar os estilos e os escopos dos componentes.
+- O tema do PCM continua próprio de suas telas; o técnico mantém sua identidade independente.
+
+## Backend que acompanha a branch
+
+Inclui as correções anteriores de recuperação/notificações e o controle de acesso da empresa. As migrações 0062 e 0063 fazem parte da entrega: ativação/suspensão pela plataforma e verificação de acesso/validade da assinatura. Aplicar todas as migrações pendentes, na ordem do migrador, sem selecionar apenas esses dois arquivos.
+
+Empresa bloqueada ou assinatura vencida: a API rejeita acesso; os aplicativos limpam a sessão e apresentam o aviso correspondente. Sessões abertas detectam o bloqueio na próxima chamada ou na verificação periódica. Não se trata de desconexão instantânea por WebSocket.
+
+## Integração e execução
+
+1. Buscar a branch com `git fetch origin` e integrar seu histórico completo à branch de trabalho do Samuel. Se houver alterações locais ou divergência, resolver a integração preservando esta interface e as regras da API; não usar reset forçado.
+2. Com a branch integrada, instalar as dependências pelos lockfiles:
+
+```powershell
+npm --prefix frontend ci
+npm --prefix frontend-gestor ci
+npm --prefix backend/node-api ci
+```
+
+3. Com o ambiente do próprio Samuel configurado e backup do banco de destino, executar o migrador usando uma conta autorizada a alterar o esquema:
+
+```powershell
+npm --prefix backend/node-api run db:migrate
+```
+
+4. Compilar e reiniciar os serviços com a nova versão:
+
+```powershell
+npm --prefix backend/node-api run build
+npm --prefix frontend run build
+npm --prefix frontend-gestor run build
+```
+
+Usar Node 24 e npm 11, conforme o backend. Reiniciar a API compilada e os frontends pelo processo de execução do ambiente; atualizar somente os arquivos sem reiniciar a API pode causar “Rota não encontrada”.
+
+## Fora do Git
+
+Banco local, dados das empresas, backup, credenciais, arquivos `.env`, sessões e uploads não são transferidos por esta entrega. A limpeza local feita para testar a TOZZI não será reproduzida no banco do Samuel por um pull. Manter o ambiente e os dados dele.
+
+## Verificação desta correção visual
+
+Navegação do TI conferida no navegador local: Estrutura fabril, Cadastro técnico e Materiais e peças reaparecem. Maximização de painel conferida e controles separados. A verificação visual não substitui homologar todos os fluxos no ambiente do Samuel.

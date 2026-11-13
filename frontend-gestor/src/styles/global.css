@@ -53,17 +53,6 @@ button {
   cursor: pointer;
 }
 
-/* Ações sem classe própria não devem cair no botão transparente do navegador. */
-button:not([class]) {
-  min-height: 38px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  background: var(--surface);
-  font-weight: 750;
-}
-
 button:disabled {
   cursor: not-allowed;
   opacity: 0.72;

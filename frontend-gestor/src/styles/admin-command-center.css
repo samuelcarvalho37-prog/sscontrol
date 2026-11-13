@@ -4198,6 +4198,27 @@
   min-width: 0;
 }
 
+.admin-command-center-shell .admin-app-window__chrome-controls {
+  width: 84px;
+  min-width: 84px;
+  height: 28px;
+  gap: 4px;
+  padding: 2px;
+}
+
+.admin-command-center-shell .admin-app-window__chrome-controls > button {
+  box-sizing: border-box;
+  width: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  flex: 0 0 22px;
+  padding: 0;
+  line-height: 1;
+}
+
 @container admin-window (max-width: 420px) {
   .admin-command-center-shell .admin-user-row {
     padding: 4px 5px;
