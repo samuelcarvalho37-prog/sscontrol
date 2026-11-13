@@ -4,16 +4,16 @@ import test from 'node:test'
 
 const source = async path => readFile(new URL(path, import.meta.url), 'utf8')
 
-test('TI mantém cadastros estruturais e separa a operação do PCM', async () => {
+test('TI concentra cadastros na importação e separa a operação do PCM', async () => {
   const workspace = await source('../src/components/AdminWorkspace.tsx')
   const page = await source('../src/pages/AdminPage.tsx')
   assert.match(workspace, /ADMIN_MAINTENANCE_MODULES = new Set/)
   const excludedModules = workspace.match(/ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>\(\[([\s\S]*?)\]\)/)?.[1]
   assert.ok(excludedModules)
-  for (const module of ['structure', 'assets', 'inventory', 'workforce']) {
+  for (const module of ['workforce']) {
     assert.doesNotMatch(excludedModules, new RegExp(`'${module}'`))
   }
-  for (const module of ['checklists', 'maintenance', 'operations', 'plan-approvals']) {
+  for (const module of ['structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals']) {
     assert.match(excludedModules, new RegExp(`'${module}'`))
   }
   for (const module of ['structure', 'assets', 'checklists', 'maintenance', 'inventory', 'workforce', 'operations']) {

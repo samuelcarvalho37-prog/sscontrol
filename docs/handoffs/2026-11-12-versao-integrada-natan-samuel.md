@@ -7,7 +7,7 @@ Esta entrega inclui frontend, backend e migrações já versionados nesta branch
 ## Padrão visual
 
 - Manter o Centro de Comando do TI, sua navegação lateral, Ctrl+K e painéis redimensionáveis.
-- Estrutura fabril, ativos, componentes e materiais pertencem também à administração técnica do TI, sujeitos às permissões existentes da API.
+- Estrutura, ativos e almoxarifado ficam concentrados em Importação e exportação. Não reintroduzir atalhos separados de Estrutura fabril, Cadastro técnico ou Materiais e peças na lateral do TI.
 - Checklists, planejamento, execução e publicação de planos ficam no fluxo do PCM. Homologação não deve reaparecer como atalho do TI.
 - O CSS global não deve impor dimensões e aparência a todo botão sem classe: isso quebra controles de janela e componentes com estilos próprios.
 - `visual-polish.css` não é mais importado pelo aplicativo gestor. Novas alterações visuais devem respeitar os estilos e os escopos dos componentes.
@@ -52,4 +52,4 @@ Banco local, dados das empresas, backup, credenciais, arquivos `.env`, sessões 
 
 ## Verificação desta correção visual
 
-Navegação do TI conferida no navegador local: Estrutura fabril, Cadastro técnico e Materiais e peças reaparecem. Maximização de painel conferida e controles separados. A verificação visual não substitui homologar todos os fluxos no ambiente do Samuel.
+Maximização de painel conferida e controles separados. A lateral indica a aba visível em foco, não todas as abas do mesmo grupo. A verificação visual não substitui homologar todos os fluxos no ambiente do Samuel.

@@ -199,7 +199,7 @@ const NAVIGATION_GROUPS: Array<{
   },
 ]
 const ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>([
-  'checklists', 'maintenance', 'operations', 'plan-approvals',
+  'structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals',
 ])
 const COMPANY_PROFILE_CACHE_KEY = 'fab_control_admin_company_profile_v1'
 const DEFAULT_COMPANY_PROFILE: AdminCompanyProfile = {
@@ -2238,7 +2238,8 @@ export function AdminWorkspace({
   const renderNavigationModule = (module: WorkspaceModule) => {
     const { id, label, description, Icon } = module
     const windowItem = windows.find((item) => item.module === id)
-    const focused = windowItem && windowItem.zIndex === Math.max(0, ...windows.map((item) => item.zIndex))
+    const focused = windowItem && !windowItem.layoutHidden && !windowItem.minimized &&
+      windowItem.zIndex === Math.max(0, ...windows.filter((item) => !item.layoutHidden && !item.minimized).map((item) => item.zIndex))
     const available = isModuleAvailable(id)
     return (
       <div className="admin-command-center-nav-entry" key={id}>
