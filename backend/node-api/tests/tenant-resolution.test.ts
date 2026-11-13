@@ -74,3 +74,14 @@ test('tenant inativo ou inexistente tem a mesma resolução vazia', async () => 
     { code: 'AUTH_TENANT_UNAVAILABLE' },
   );
 });
+
+test('autenticação recusa bloqueios com motivo específico antes de consultar a sessão', async () => {
+  for (const [state,code] of [['DISABLED','AUTH_TENANT_DISABLED'],['EXPIRED','AUTH_SUBSCRIPTION_EXPIRED'],['SUBSCRIPTION_DISABLED','AUTH_SUBSCRIPTION_DISABLED']]) {
+    let calls = 0;
+    const service = new TenantResolutionService(environment(), {
+      query: async () => { calls++; return { rows: [{state}] }; },
+    } as never);
+    await assert.rejects(service.resolve({host:'tozzi.vorqix.com.br',ipAddress:'198.51.100.10',developmentTenantSlug:undefined}),{code});
+    assert.equal(calls,1);
+  }
+});

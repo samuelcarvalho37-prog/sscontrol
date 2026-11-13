@@ -1,3 +1,4 @@
+import { emitAccessBlock } from '../auth/accessBlock';
 import type { ApiEnvelope } from "../../types/api";
 import { getApiTransport, getApiUrl, getDevelopmentTenantSlug, getLegacyApiUrl } from "./config";
 
@@ -23,6 +24,7 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
     this.name = "ApiRequestError";
+    emitAccessBlock(code);
   }
 }
 

@@ -1,3 +1,5 @@
+import { accessBlockMessage, watchCompanyAccess } from '../../../frontend/src/services/auth/accessBlock'
+import { callApi } from '../services/api/client'
 import { SharedWorkPanel } from '../../../frontend/src/components/SharedWorkPanel'
 import { adaptPcmAppearance } from '../components/pcmAppearance'
 import type { CSSProperties } from 'react'
@@ -44,6 +46,7 @@ import {
   clearGestorSession,
   hasCompletedStartup,
   markExpiredGestorSession,
+  markBlockedGestorSession,
   markStartupCompleted,
   readGestorSession,
   saveGestorSession,
@@ -206,6 +209,16 @@ function TenantApp() {
     setNotificationCount(0)
     setWorkspaceReady(false)
   }, [])
+  useEffect(() => {
+    if (!session || !usesNodeApi()) return
+    return watchCompanyAccess(
+      signal => callApi('sistema.warmup', { token: session.token }, signal, { dedupe: false }),
+      code => {
+        expireSession()
+        markBlockedGestorSession(accessBlockMessage(code, isAdmin))
+      },
+    )
+  }, [session?.token, isAdmin, expireSession])
 
   useEffect(() => {
     if (!session || isAdmin || isSystem || !workspaceReady || (session.user.capacidades !== undefined && !session.user.capacidades.includes('workflow.notifications.read'))) return

@@ -1,3 +1,4 @@
+import { accessBlockMessage, watchCompanyAccess } from '../services/auth/accessBlock'
 import { SharedWorkPanel } from '../components/SharedWorkPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppHeader, type ConnectionState } from '../components/AppHeader'
@@ -6,7 +7,7 @@ import { ExecutionErrorBoundary } from '../components/ExecutionErrorBoundary'
 import { OperationOverlay } from '../components/OperationOverlay'
 import { ActionDetailPage } from '../pages/ActionDetailPage'
 import { OccurrenceWizard } from '../components/OccurrenceWizard'
-import { getApiUrl } from '../services/api/config'
+import { getApiUrl, getApiTransport } from '../services/api/config'
 import { ChecklistExecutionPage } from '../pages/ChecklistExecutionPage'
 import { OperatorHome } from '../pages/OperatorHome'
 import { LoginPage } from '../pages/LoginPage'
@@ -14,12 +15,13 @@ import { revokeOperatorSession } from '../services/api/auth'
 import {
   clearOperatorSession,
   markExpiredOperatorSession,
+  markBlockedOperatorSession,
   readOperatorSession,
   saveOperatorSession,
 } from '../services/auth/session'
 import { QrPage } from '../pages/QrPage'
 import { SettingsPage } from '../pages/SettingsPage'
-import { ApiRequestError } from '../services/api/client'
+import { ApiRequestError, callApi } from '../services/api/client'
 import { hasApiConfiguration } from '../services/api/config'
 import {
   finalizeOperatorAction,
@@ -230,6 +232,17 @@ function mergeEvidenceIntoDetail(
 
 export function App() {
   const [operatorSession, setOperatorSession] = useState(readOperatorSession)
+  useEffect(() => {
+    if (!operatorSession || getApiTransport() === 'apps-script') return
+    return watchCompanyAccess(
+      signal => callApi('sistema.warmup', { token: operatorSession.token }, signal, { dedupe: false }),
+      code => {
+        expireOperatorSession()
+        clearActiveExecutionContext()
+        markBlockedOperatorSession(accessBlockMessage(code))
+      },
+    )
+  }, [operatorSession?.token])
   const canReadExecutions = operatorSession?.user.capacidades === undefined || operatorSession.user.capacidades.includes('maintenance.executions.read')
   const canReportOccurrence = operatorSession?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
