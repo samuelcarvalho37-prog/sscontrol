@@ -101,8 +101,44 @@ html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-ca
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-plan-rule small, .admin-catalog-kpis small, .admin-empty-state span) { color: var(--pcm-shell-muted) !important; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(input:not([type="checkbox"]), select, textarea) { background: var(--pcm-shell-bg) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .admin-catalog-header > div > p { display: none; }
-html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace { background: var(--pcm-shell-bg); color: var(--pcm-shell-ink); }
-html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace :is(button, li) { background-color: var(--pcm-shell-panel); color: var(--pcm-shell-ink); border-color: var(--pcm-shell-line); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace {
+  display: flex; flex-direction: column; align-self: start; gap: 16px;
+  min-height: 0; height: auto; padding: 0; border: 0; border-radius: 0;
+  background: transparent; color: var(--pcm-shell-ink); box-shadow: none;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace > header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  flex: 0 0 auto; min-height: 0; height: auto; padding: 12px 0;
+  border-bottom: 1px solid var(--pcm-shell-line); background: transparent;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace__heading { flex: 1 1 240px; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace h2 { color: var(--pcm-shell-ink); font-size: 18px; overflow-wrap: anywhere; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace :is(p, .pcm-focus-workspace__count) { color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace :is(.pcm-focus-workspace__back, .pcm-focus-workspace__plan) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  width: auto; min-height: 32px; height: auto; padding: 6px 9px;
+  border: 1px solid var(--pcm-shell-line); border-radius: 4px;
+  color: var(--pcm-shell-ink); background: transparent; box-shadow: none; font: inherit; font-size: 12px;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace > ul {
+  display: flex; flex-direction: column; flex: 0 0 auto; gap: 0; min-height: 0; height: auto;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace > ul > li {
+  flex: 0 0 auto; min-height: 0; height: auto; border: 0;
+  border-bottom: 1px solid var(--pcm-shell-line); background: transparent;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace > ul > li > :is(button, .pcm-focus-workspace__record) {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; box-sizing: border-box;
+  min-height: 48px; height: auto; padding: 12px; border-radius: 3px;
+  background: transparent; color: var(--pcm-shell-ink); box-shadow: none;
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace__record > div { display: grid; gap: 4px; min-width: 0; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace > ul :is(span, small) { color: var(--pcm-shell-muted); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace button:hover {
+  background: color-mix(in srgb, var(--pcm-shell-ink) 6%, transparent);
+}
+html body .app-shell[data-pcm-workspace="true"] .pcm-focus-workspace button:focus-visible { outline: 2px solid var(--pcm-shell-ink); outline-offset: 2px; }
 @container pcm-planning (max-width: 620px) { .pcm-planning-section > div { grid-template-columns: 1fr; } }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page :is(.admin-catalog-summary > button, .admin-catalog-panel, .admin-catalog-panel > header, .admin-catalog-table th, .admin-checklist-models > article, .admin-checklist-step, .technical-structure-panel) { background: var(--pcm-shell-panel) !important; color: var(--pcm-shell-ink) !important; border-color: var(--pcm-shell-line) !important; }
 html body .app-shell[data-pcm-workspace="true"] .pcm-planning-page .admin-catalog-summary > button.is-active { background: color-mix(in srgb, #176fc1 18%, var(--pcm-shell-panel)) !important; }

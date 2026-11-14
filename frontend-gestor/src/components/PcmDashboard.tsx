@@ -2,7 +2,7 @@ import { clonePcmPrintBoard } from './pcmPrintAppearance'
 import { PcmHeaderContent } from './PcmHeaderContent'
 import { PcmPointAppearanceEditor } from './PcmPointAppearanceEditor'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Activity, CalendarCheck2, ChartNoAxesCombined, CircleHelp, CirclePause, ClipboardList, ClockAlert, Download, FileQuestionMark, Printer, Repeat2, Siren, TimerReset, TriangleAlert, UsersRound, Wrench } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowUpRight, CalendarCheck2, ChartNoAxesCombined, CircleHelp, CirclePause, ClipboardList, ClockAlert, FileQuestionMark, Repeat2, Siren, TimerReset, TriangleAlert, UsersRound, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { callApi } from '../services/api/client'
 import { getGestorToken } from '../services/api/config'
@@ -31,6 +31,11 @@ import {
 import './PcmDashboard.css'
 
 interface PcmData {
+  contextos?: {
+    disponibilidade: { id: string; tag: string; nome: string; setor: string; status: string; parada_segundos: number; disponibilidade_pct: number | null }[]
+    falhas: { id: string; ativo_id: string; ativo_tag: string; ativo_nome: string; setor_nome: string; motivo: string; iniciada_em: string; concluida_em: string | null; status: string; reincidente: boolean }[]
+    ordens_abertas: { id: string; codigo: string; titulo: string; ativo_id: string; ativo_tag: string; ativo_nome: string; setor_nome: string; status: string; prioridade: string; programada_para: string | null; duracao_estimada_minutos: number | null; responsavel_nome: string | null }[]
+  }
   atualizado_em: string
   atual: {
     ativos_parados: number
@@ -97,12 +102,15 @@ interface PcmData {
       por_prioridade?: { prioridade: string; quantidade: number }[]
     }
     preventivas?: {
+      concluidas_detalhes?: { id: string; codigo: string; titulo: string; ativo_tag: string; ativo_nome: string; setor_nome: string; responsavel_nome: string | null; programada_para: string; concluida_em: string; com_atraso: boolean }[]
       programadas_no_periodo?: number
       concluidas_no_prazo?: number
       concluidas_com_atraso?: number
       pendentes?: number
     }
     custos_materiais?: {
+      total_ano_atual?: number | string
+      por_ordem?: { ordem_id: string; ordem_codigo: string; titulo: string; ativo_tag: string; ativo_nome: string; setor_nome: string; linha_nome: string; custo_total: number | string; registros_consumo: number }[]
       total?: number | string
       itens_consumidos?: number
       ordens_com_consumo?: number
@@ -111,6 +119,11 @@ interface PcmData {
     estoque_baixo?: {
       quantidade?: number
       itens?: { sku: string; nome: string; unidade: string; estoque_atual: number | string; estoque_minimo: number | string; valor_unitario: number | string }[]
+    }
+    almoxarifado?: {
+      disponiveis: number
+      sem_saldo: number
+      itens: { id: string; sku: string; nome: string; nome_facil: string | null; unidade: string; estoque_atual: number | string; estoque_minimo: number | string; valor_unitario: number | string | null }[]
     }
     tecnicos?: { id: string; nome: string; execucoes: number; segundos_apontados: number }[]
     execucoes_detalhadas?: {
@@ -235,13 +248,20 @@ const pcmCanvasCategories: PcmCanvasCategory[] = [
   { id: 'results', label: 'Resultados do período' },
 ]
 
-interface InsightItem { id: string; title: string; detail: string; status?: string }
+interface InsightItem { id: string; title: string; detail: string; status?: string; assetId?: string; readOnly?: boolean }
 
 function InsightWorkspace({ insight, onClose, onSelect, onPlan }: { insight: { title: string; description: string; items: InsightItem[] } | null; onClose: () => void; onSelect: (item: InsightItem) => void; onPlan?: () => void }) {
   if (!insight) return null
   return <section className="pcm-focus-workspace" aria-labelledby="pcm-insight-title" aria-live="polite">
-      <header><button type="button" className="pcm-focus-workspace__back" onClick={onClose}>← Painel</button><div><span className="pcm-section-kicker">CONSULTA OPERACIONAL</span><h2 id="pcm-insight-title">{insight.title}</h2><p>{insight.description}</p></div><span className="pcm-focus-workspace__count">{insight.items.length} registro(s)</span>{onPlan ? <button type="button" className="pcm-focus-workspace__plan" aria-label="Ir para planejamento" title="Ir para planejamento" onClick={onPlan}>↗</button> : null}</header>
-      {insight.items.length ? <ul>{insight.items.map(item => <li key={item.id}><button type="button" onClick={() => onSelect(item)}><div><strong>{item.title}</strong><span>{item.detail}</span></div>{item.status ? <small>{item.status}</small> : null}</button></li>)}</ul> : <p className="pcm-empty">Nenhum registro disponível neste momento.</p>}
+      <header>
+        <button type="button" className="pcm-focus-workspace__back" onClick={onClose}><ArrowLeft aria-hidden="true" size={16} /><span>Lousa</span></button>
+        <div className="pcm-focus-workspace__heading"><h2 id="pcm-insight-title">{insight.title}</h2><p>{insight.description}</p></div>
+        <div className="pcm-focus-workspace__actions"><span className="pcm-focus-workspace__count">{insight.items.length} registro(s)</span>{onPlan ? <button type="button" className="pcm-focus-workspace__plan" onClick={onPlan}><span>Planejamento</span><ArrowUpRight aria-hidden="true" size={16} /></button> : null}</div>
+      </header>
+      {insight.items.length ? <ul>{insight.items.map(item => {
+        const content = <><div><strong>{item.title}</strong><span>{item.detail}</span></div>{item.status ? <small>{item.status}</small> : null}</>
+        return <li key={item.id}>{item.readOnly ? <div className="pcm-focus-workspace__record">{content}</div> : <button type="button" onClick={() => onSelect(item)}>{content}</button>}</li>
+      })}</ul> : <p className="pcm-empty">Nenhum registro corresponde a este indicador no período selecionado.</p>}
     </section>
 }
 
@@ -942,65 +962,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     URL.revokeObjectURL(url)
   }
 
-  function exportPcmReport() {
-    const report = displayData?.relatorios
-    if (!report) return
-    const protectCsv = (value: string) => {
-      const safe = /^[=+\-@]/.test(value) ? `'${value}` : value
-      return `"${safe.replaceAll('"', '""')}"`
-    }
-    const lines: string[][] = [
-      ['Relatório PCM', `Período: últimos ${days} dias`], [],
-      ['Resumo de OS', 'Quantidade'], ['Abertas', String(report.ordens?.abertas ?? 0)], ['Concluídas no período', String(report.ordens?.concluidas_no_periodo ?? 0)], ['Atrasadas', String(report.ordens?.atrasadas ?? 0)], [],
-      ['Preventivas', 'Quantidade'], ['Programadas no período', String(report.preventivas?.programadas_no_periodo ?? 0)], ['Concluídas no prazo', String(report.preventivas?.concluidas_no_prazo ?? 0)], ['Concluídas com atraso', String(report.preventivas?.concluidas_com_atraso ?? 0)], ['Pendentes', String(report.preventivas?.pendentes ?? 0)], [],
-      ['Técnico', 'OS concluídas', 'Horas apontadas'], ...(report.tecnicos ?? []).map(item => [item.nome, String(item.execucoes), duration(item.segundos_apontados)]),
-      [], ['Estoque baixo', 'SKU', 'Material', 'Saldo', 'Mínimo', 'Unidade', 'Valor unitário'], ...(report.estoque_baixo?.itens ?? []).map(item => ['Reposição necessária', item.sku, item.nome, String(item.estoque_atual), String(item.estoque_minimo), item.unidade, formatCurrency(item.valor_unitario)]),
-      [], ['Custo por ativo', 'Nome do ativo', 'Itens consumidos', 'Custo total'], ...(report.custos_materiais?.por_ativo ?? []).map(item => [item.ativo_tag, item.ativo_nome, String(item.itens_consumidos), formatCurrency(item.custo_total)]),
-      [], ['Execução', 'Ordem', 'Ativo', 'Técnico', 'Início', 'Conclusão', 'Duração', 'Pausas', 'Custo de materiais'], ...(report.execucoes_detalhadas ?? []).map(item => [item.titulo, item.ordem_codigo, item.ativo_tag, item.tecnico_nome, formatDateTime(item.iniciada_em), formatDateTime(item.concluida_em), duration(item.duracao_segundos), duration(item.segundos_pausados), formatCurrency(item.custo_materiais_total)]),
-    ]
-    const csv = lines.map(row => row.map(value => protectCsv(value)).join(';')).join('\r\n')
-    const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `vorqix-relatorio-pcm-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  function printPcmReport() {
-    const reportData = displayData?.relatorios
-    if (!reportData) return
-    const printWindow = window.open('', '_blank', 'width=1100,height=800')
-    if (!printWindow) {
-      window.alert('Permita a abertura da janela de impressão para gerar o relatório.')
-      return
-    }
-    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] ?? character)
-    const rows = (items: unknown[][], headers: string[], className = '') => `<table class="${className}"><thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${items.length ? items.map(item => `<tr>${headers.map((_, index) => `<td>${escapeHtml(item[index])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}">Sem registros no período.</td></tr>`}</tbody></table>`
-    const executions = reportData.execucoes_detalhadas ?? []
-    const technicians = reportData.tecnicos ?? []
-    const lowStockItems = reportData.estoque_baixo?.itens ?? []
-    const costsByAsset = reportData.custos_materiais?.por_ativo ?? []
-    const title = 'Relatório de manutenção · PCM'
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
-      *{box-sizing:border-box}body{margin:0;padding:32px;color:#17324a;font:13px/1.45 Arial,sans-serif}header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding-bottom:18px;border-bottom:2px solid #173f5f}h1{margin:0;font-size:22px}h2{margin:24px 0 9px;font-size:15px}p{margin:4px 0;color:#586f82}.meta{text-align:right}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:18px 0}.metric{padding:11px;border:1px solid #d6e0e8;border-radius:6px}.metric span{display:block;color:#5b7082;font-size:11px}.metric strong{display:block;margin-top:3px;font-size:18px}table{width:100%;border-collapse:collapse;margin:8px 0 20px}th,td{padding:7px 8px;border:1px solid #dbe3e9;text-align:left;vertical-align:top}th{background:#f0f4f7;color:#294a65;font-size:11px}td{overflow-wrap:break-word;word-break:normal}th,td{hyphens:none}td:first-child{white-space:nowrap}td:last-child{white-space:nowrap}footer{margin-top:25px;padding-top:10px;border-top:1px solid #dbe3e9;color:#607688;font-size:10px}@media print{body{padding:0;font-size:10px;line-height:1.25}header{padding-bottom:10px}h1{font-size:20px}h2{margin:12px 0 6px;break-after:avoid}.summary{margin:12px 0}.metric{padding:8px}table{margin:6px 0 10px}thead{display:table-header-group}table{break-inside:auto}tr{break-inside:avoid;break-after:auto}th,td{padding:4px 6px}table.executions{table-layout:fixed}table.executions th:nth-child(1){width:11%}table.executions th:nth-child(2){width:25%}table.executions th:nth-child(3){width:10%}table.executions th:nth-child(4){width:13%}table.executions th:nth-child(5),table.executions th:nth-child(6){width:14%}table.executions th:nth-child(7){width:6%}table.executions th:nth-child(8){width:7%}.executions td:nth-child(3),.executions td:nth-child(7){white-space:nowrap}.executions-heading{break-before:page}@page{size:A4 landscape;margin:14mm}}
-    </style></head><body><header><div><h1>${title}</h1><p>Consolidação de ordens, preventivas, equipe e materiais.</p></div><div class="meta"><strong>Período: últimos ${escapeHtml(days)} dias</strong><p>Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))}</p></div></header>
-      <section class="summary"><div class="metric"><span>Ordens abertas</span><strong>${escapeHtml(reportData.ordens?.abertas ?? 0)}</strong></div><div class="metric"><span>Concluídas no período</span><strong>${escapeHtml(reportData.ordens?.concluidas_no_periodo ?? 0)}</strong></div><div class="metric"><span>Ordens atrasadas</span><strong>${escapeHtml(reportData.ordens?.atrasadas ?? 0)}</strong></div><div class="metric"><span>Backlog estimado</span><strong>${escapeHtml(`${number(displayData?.atual.backlog_horas_estimadas ?? 0)} h`)}</strong></div></section>
-      <h2>Preventivas</h2>${rows([['Programadas no período', reportData.preventivas?.programadas_no_periodo ?? 0], ['Concluídas no prazo', reportData.preventivas?.concluidas_no_prazo ?? 0], ['Concluídas com atraso', reportData.preventivas?.concluidas_com_atraso ?? 0], ['Pendentes', reportData.preventivas?.pendentes ?? 0]], ['Indicador', 'Quantidade'])}
-      <h2>Equipe técnica</h2>${rows(technicians.map(item => [item.nome, item.execucoes, duration(item.segundos_apontados)]), ['Técnico', 'OS concluídas', 'Horas apontadas'])}
-      <h2>Materiais com estoque baixo</h2>${rows(lowStockItems.map(item => [item.sku, item.nome, `${item.estoque_atual} ${item.unidade}`, `${item.estoque_minimo} ${item.unidade}`]), ['SKU', 'Material', 'Saldo', 'Mínimo'])}
-      <h2>Custo de materiais por ativo</h2>${rows(costsByAsset.map(item => [item.ativo_tag, item.ativo_nome, item.itens_consumidos, formatCurrency(Number(item.custo_total))]), ['Ativo', 'Nome', 'Itens consumidos', 'Custo total'])}
-      <h2 class="executions-heading">Execuções concluídas</h2>${rows(executions.map(item => [item.ordem_codigo, item.titulo, item.ativo_tag, item.tecnico_nome, formatDateTime(item.iniciada_em), formatDateTime(item.concluida_em), duration(item.duracao_segundos), formatCurrency(Number(item.custo_materiais_total))]), ['OS', 'Execução', 'Ativo', 'Técnico', 'Início', 'Conclusão', 'Duração', 'Custo'], 'executions')}
-      <footer>VORQIX · Relatório gerado a partir dos dados do PCM.</footer></body></html>`
-    printWindow.document.open()
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true })
-    window.setTimeout(() => { printWindow.focus(); printWindow.print() }, 350)
-  }
-
   function printPcmCanvas(board: HTMLElement, activeFilters: string[]) {
     const printWindow = window.open('', '_blank', 'width=1200,height=900')
     if (!printWindow) {
@@ -1277,6 +1238,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     const stoppedAssets = displayData?.ativos_parados_lista ?? []
     const stoppedFromAssets = stoppedAssets.map(asset => ({
       id: asset.id,
+      assetId: asset.id,
       title: `${asset.ativo_tag || 'Sem TAG'} · ${asset.ativo_nome || 'Ativo sem nome'}`,
       detail: [asset.setor_nome || 'Setor não informado', asset.motivo_parada || 'Motivo não informado', asset.parada_iniciada_em ? `Desde ${formatDateTime(asset.parada_iniciada_em)}` : null].filter(Boolean).join(' · '),
       status: 'Parado',
@@ -1285,6 +1247,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       .filter(asset => ['STOPPED', 'PARADO', 'STOP'].includes(normalize(String(asset.status ?? asset.status_operacional ?? ''))))
       .map(asset => ({
         id: String(asset.id),
+        assetId: String(asset.id),
         title: `${String(asset.tag ?? asset.codigo ?? 'Sem TAG')} · ${String(asset.nome ?? asset.name ?? 'Ativo sem nome')}`,
         detail: String(asset.setor_nome ?? asset.setor ?? 'Setor não informado'),
         status: 'Parado',
@@ -1396,10 +1359,10 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
   }, [activeCriticalOrders, displayData])
 
   const operationalMetrics = {
-    backlog: { label: 'Backlog estimado', value: `${number(current?.backlog_horas_estimadas ?? 0)} h`, note: 'Soma das horas estimadas nas ordens abertas.', icon: TimerReset as LucideIcon },
+    backlog: { label: 'Trabalho pendente (horas)', value: `${number(current?.backlog_horas_estimadas ?? 0)} h`, note: 'Soma das horas estimadas nas ordens abertas.', icon: TimerReset as LucideIcon },
     'open-orders': { label: 'Ordens abertas', value: current?.ordens_abertas ?? 0, note: 'Ordens ainda em acompanhamento.', icon: ClipboardList as LucideIcon },
-    'active-technicians': { label: 'Técnicos ativos', value: current?.tecnicos_em_atividade ?? 0, note: 'Técnicos com execução em andamento.', icon: UsersRound as LucideIcon },
-    unestimated: { label: 'Sem estimativa', value: current?.ordens_sem_estimativa ?? 0, note: 'Ordens abertas sem duração planejada.', icon: FileQuestionMark as LucideIcon },
+    'active-technicians': { label: 'Técnicos em execução', value: current?.tecnicos_em_atividade ?? 0, note: 'Técnicos com execução em andamento.', icon: UsersRound as LucideIcon },
+    unestimated: { label: 'Ordens sem tempo estimado', value: current?.ordens_sem_estimativa ?? 0, note: 'Ordens abertas sem duração planejada.', icon: FileQuestionMark as LucideIcon },
   }
   const reliabilityMetrics = {
     availability: { label: 'Disponibilidade', value: reliability?.disponibilidade_percentual === null || reliability?.disponibilidade_percentual === undefined ? '—' : `${number(reliability.disponibilidade_percentual)}%`, note: `${reliability?.ativos_considerados ?? 0} ativos considerados no cálculo.`, icon: ChartNoAxesCombined as LucideIcon },
@@ -1435,12 +1398,21 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     ...Object.entries(operationalMetrics).map(([id, metric]) => pcmNumberWidget({
       id: `operational-${id}`, title: metric.label, categoryId: 'operational', value: metric.value, note: metric.note, icon: metric.icon,
       onClick: () => {
-        const summary = { id: `summary-operational-${id}`, title: `${metric.label}: ${metric.value}`, detail: metric.note }
-        if (id === 'active-technicians' || id === 'unestimated') {
-          openInsight(metric.label, 'Total informado pela API. O detalhamento individual deste indicador não está disponível nesta consulta.', [summary])
+        if (id === 'active-technicians') {
+          openInsight(metric.label, 'Técnicos com execução em andamento. Não representa o status ativo da conta.', dailyInsights.technicians.map(item => ({ ...item, readOnly: true })))
           return
         }
-        openInsight(metric.label, `${metric.note} Ordens abertas relacionadas ao acompanhamento:`, [summary, ...operationalOrders.filter(order => !isClosedWorkOrder(order.status)).map(order => ({ id: order.id, title: `${order.code} · ${order.equipment}`, detail: `${order.sector} · ${order.responsible} · ${humanStatus(order.status)}` }))])
+        const related = displayData?.contextos?.ordens_abertas
+        if (related) {
+          const selected = related.filter(order => id !== 'unestimated' || order.duracao_estimada_minutos === null)
+          openInsight(metric.label, `${metric.note} Até 500 ordens nesta consulta.`, selected.map(order => ({
+            id: `context-order:${order.id}`, title: `${order.codigo} · ${order.titulo}`,
+            detail: `${order.ativo_tag} · ${order.ativo_nome} · ${order.setor_nome} · ${order.responsavel_nome || 'Não atribuído'} · ${order.duracao_estimada_minutos === null ? 'Sem tempo estimado' : `${number(order.duracao_estimada_minutos)} min previstos`}`,
+            status: humanStatus(order.status),
+          })))
+          return
+        }
+        openInsight(metric.label, 'O detalhamento deste indicador requer a API atualizada.', [])
       },
       segmentValue: segments => {
         const subset = ordersForSegments(segments).filter(order => !isClosedWorkOrder(order.status))
@@ -1451,7 +1423,25 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     })),
     ...Object.entries(reliabilityMetrics).map(([id, metric]) => pcmNumberWidget({
       id: `reliability-${id}`, title: metric.label, categoryId: 'reliability', value: metric.value, note: metric.note, icon: metric.icon,
-      onClick: () => openInsight(metric.label, metric.note, [{ id: `summary-${id}`, title: `${metric.label}: ${metric.value}`, detail: `${days} dias · ${reliability?.ativos_considerados ?? 0} ativos considerados` }, ...(id === 'availability' ? dailyInsights.stopped : (displayData?.falhas_por_ativo ?? []).filter(item => id !== 'recurrence' || item.falhas > 1).map(item => ({ id: item.ativo_id, title: `${item.ativo_tag} · ${item.ativo_nome}`, detail: `${item.setor_nome} · ${item.falhas} falha(s) no período` })))]),
+      onClick: () => {
+        const context = displayData?.contextos
+        if (id === 'availability') {
+          openInsight(metric.label, `Disponibilidade geral: ${metric.value} · ${days} dias. Até 500 ativos com percentual individual e tempo parado no período.`,
+            (context?.disponibilidade ?? []).map(asset => ({ id: `context-asset:${asset.id}`, assetId: asset.id,
+              title: `${asset.tag} · ${asset.nome}`,
+              detail: `${asset.setor} · ${asset.disponibilidade_pct === null ? 'Sem período calculável' : `${number(Number(asset.disponibilidade_pct))}% disponível`} · ${duration(Number(asset.parada_segundos))} de parada`,
+              status: humanStatus(asset.status),
+            })))
+          return
+        }
+
+        openInsight(metric.label, id === 'recurrence' ? `Falhas dos ativos com repetição nos últimos ${days} dias. A primeira falha também aparece para contexto. Até 500 registros.` : `Falhas iniciadas nos últimos ${days} dias. Até 500 registros.`,
+          (context?.falhas ?? []).filter(failure => id !== 'recurrence' || failure.reincidente).map(failure => ({
+            id: `failure:${failure.id}`, assetId: failure.ativo_id, title: `${failure.ativo_tag} · ${failure.ativo_nome}`,
+            detail: `${failure.setor_nome} · ${failure.motivo || 'Motivo não informado'} · Início: ${formatDateTime(failure.iniciada_em)} · ${failure.concluida_em ? `Fim: ${formatDateTime(failure.concluida_em)}` : 'Sem encerramento'}`,
+            status: humanStatus(failure.status),
+          })))
+      },
     })),
     {
       id: 'mttr-mtbf-comparison', title: 'MTTR e MTBF', categoryId: 'comparison', note: 'Reparo médio e intervalo médio entre falhas.',
@@ -1506,9 +1496,9 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
     }] : []),
     ...(report ? [
       pcmNumberWidget({ id: 'result-orders-open', title: 'OS abertas', categoryId: 'results', value: report.ordens?.abertas ?? 0, note: 'Pendentes de encerramento.', icon: ClipboardList, onClick: () => openInsight('OS abertas', 'Ordens pendentes de encerramento.', orderInsightItems(operationalOrders.filter(order => !['CONCLUIDA', 'COMPLETED', 'CANCELLED', 'CANCELADA'].includes(normalize(order.status))))), segmentValue: segments => ordersForSegments(segments).filter(order => !isClosedWorkOrder(order.status)).length }),
-      pcmNumberWidget({ id: 'result-orders-closed', title: 'OS concluídas', categoryId: 'results', value: report.ordens?.concluidas_no_periodo ?? 0, note: 'Concluídas no período.', icon: Activity, tone: 'success', onClick: () => openInsight('Execuções concluídas', 'Registros encerrados no período selecionado.', (report.execucoes_detalhadas ?? []).map(item => ({ id: `report-execution:${item.id}`, title: `${item.ordem_codigo} · ${item.titulo}`, detail: `${item.ativo_tag} · ${item.tecnico_nome} · ${duration(item.duracao_segundos)}`, status: formatDateTime(item.concluida_em) }))) }),
-      pcmNumberWidget({ id: 'result-preventives-on-time', title: 'Preventivas no prazo', categoryId: 'planning', value: report.preventivas?.concluidas_no_prazo ?? 0, note: 'Concluídas até a data programada.', icon: CalendarCheck2, tone: 'success', onClick: () => openInsight('Preventivas no prazo', 'Total concluído dentro da data programada no período.', [{ id: 'report-preventive-ontime', title: `${report.preventivas?.concluidas_no_prazo ?? 0} preventiva(s)`, detail: `Período selecionado: ${days} dias.` }]) }),
-      pcmNumberWidget({ id: 'result-preventives-late', title: 'Preventivas com atraso', categoryId: 'planning', value: report.preventivas?.concluidas_com_atraso ?? 0, note: 'Concluídas após a programação.', icon: ClockAlert, tone: (report.preventivas?.concluidas_com_atraso ?? 0) > 0 ? 'warning' : 'success', onClick: () => openInsight('Preventivas com atraso', 'Total concluído após a data programada no período.', [{ id: 'report-preventive-late', title: `${report.preventivas?.concluidas_com_atraso ?? 0} preventiva(s)`, detail: `Período selecionado: ${days} dias.` }]) }),
+      pcmNumberWidget({ id: 'result-orders-closed', title: 'OS concluídas', categoryId: 'results', value: report.ordens?.concluidas_no_periodo ?? 0, note: 'Concluídas no período.', icon: Activity, tone: 'success', onClick: () => openInsight('Execuções concluídas', 'Registros encerrados no período selecionado.', (report.execucoes_detalhadas ?? []).map(item => ({ id: `report-execution:${item.id}`, readOnly: true, title: `${item.ordem_codigo} · ${item.titulo}`, detail: `${item.ativo_tag} · ${item.tecnico_nome} · Início: ${formatDateTime(item.iniciada_em)} · Fim: ${formatDateTime(item.concluida_em)} · Duração: ${duration(item.duracao_segundos)} · Pausas: ${duration(item.segundos_pausados)} · Equipe: não informada nesta consulta`, status: formatDateTime(item.concluida_em) }))) }),
+      pcmNumberWidget({ id: 'result-preventives-on-time', title: 'Preventivas no prazo', categoryId: 'planning', value: report.preventivas?.concluidas_no_prazo ?? 0, note: 'Concluídas até a data programada.', icon: CalendarCheck2, tone: 'success', onClick: () => openInsight('Preventivas no prazo', 'Preventivas concluídas no período selecionado. Até 500 registros.', (report.preventivas?.concluidas_detalhes ?? []).filter(order => order.com_atraso === false).map(order => ({ id: `context-order:${order.id}`, title: `${order.codigo} · ${order.titulo}`, detail: `${order.ativo_tag} · ${order.ativo_nome} · ${order.setor_nome} · ${order.responsavel_nome || 'Não atribuído'} · Programada: ${formatDateTime(order.programada_para)} · Concluída: ${formatDateTime(order.concluida_em)}`, status: 'No prazo' }))) }),
+      pcmNumberWidget({ id: 'result-preventives-late', title: 'Preventivas com atraso', categoryId: 'planning', value: report.preventivas?.concluidas_com_atraso ?? 0, note: 'Concluídas após a programação.', icon: ClockAlert, tone: (report.preventivas?.concluidas_com_atraso ?? 0) > 0 ? 'warning' : 'success', onClick: () => openInsight('Preventivas com atraso', 'Preventivas concluídas no período selecionado. Até 500 registros.', (report.preventivas?.concluidas_detalhes ?? []).filter(order => order.com_atraso === true).map(order => ({ id: `context-order:${order.id}`, title: `${order.codigo} · ${order.titulo}`, detail: `${order.ativo_tag} · ${order.ativo_nome} · ${order.setor_nome} · ${order.responsavel_nome || 'Não atribuído'} · Programada: ${formatDateTime(order.programada_para)} · Concluída: ${formatDateTime(order.concluida_em)}`, status: 'Com atraso' }))) }),
       pcmNumberWidget({ id: 'result-material-cost', title: 'Custo de materiais', categoryId: 'stock', value: formatCurrency(report.custos_materiais?.total), note: `${report.custos_materiais?.itens_consumidos ?? 0} itens em ${report.custos_materiais?.ordens_com_consumo ?? 0} OS.`, icon: Wrench, onClick: () => openInsight('Custo de materiais por ativo', 'Consumo registrado no período selecionado.', (report.custos_materiais?.por_ativo ?? []).map((item, index) => ({ id: `report-cost:${index}`, title: `${item.ativo_tag} · ${item.ativo_nome}`, detail: `${item.itens_consumidos} item(ns) · ${formatCurrency(item.custo_total)}` }))) }),
       pcmNumberWidget({ id: 'result-low-stock', title: 'Estoque baixo', categoryId: 'stock', value: report.estoque_baixo?.quantidade ?? 0, note: 'Itens no mínimo ou abaixo dele.', icon: TriangleAlert, tone: (report.estoque_baixo?.quantidade ?? 0) > 0 ? 'warning' : 'success', onClick: () => openInsight('Itens com estoque baixo', 'Materiais no mínimo ou abaixo dele.', (report.estoque_baixo?.itens ?? []).map(item => ({ id: `report-stock:${item.sku}`, title: `${item.sku} · ${item.nome}`, detail: `Saldo ${item.estoque_atual} ${item.unidade} · mínimo ${item.estoque_minimo} ${item.unidade} · ${formatCurrency(item.valor_unitario)}` }))) }),
       {
@@ -1543,16 +1533,6 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
         },
       },
       {
-        id: 'result-export-csv', title: 'Exportar fechamento', categoryId: 'results', note: 'Baixar consolidação do período em CSV.', action: true,
-        modes: [{ id: 'number' as const, label: 'Ação' }], defaultMode: 'number' as const,
-        render: () => <button type="button" className="pcm-canvas__action" aria-label="Exportar CSV" title="Exportar CSV" onClick={exportPcmReport}><Download size={15} aria-hidden="true" /><span>Exportar CSV</span></button>,
-      },
-      {
-        id: 'result-print-pdf', title: 'Imprimir relatório', categoryId: 'results', note: 'Abrir a impressão do relatório para salvar como PDF.', action: true,
-        modes: [{ id: 'number' as const, label: 'Ação' }], defaultMode: 'number' as const,
-        render: () => <button type="button" className="pcm-canvas__action" aria-label="Imprimir ou salvar PDF" title="Imprimir ou salvar PDF" onClick={printPcmReport}><Printer size={15} aria-hidden="true" /><span>Imprimir / PDF</span></button>,
-      },
-      {
         id: 'report-orders-type', title: 'Ordens por tipo', categoryId: 'orders', note: 'Ordens movimentadas no período.',
         modes: [{ id: 'bar' as const, label: 'Barras' }, { id: 'pie' as const, label: 'Pizza' }, { id: 'donut' as const, label: 'Rosca' }, { id: 'list' as const, label: 'Lista' }], defaultMode: 'bar' as const,
         onActivate: () => openInsight('Ordens por tipo', 'Distribuição das ordens movimentadas no período.', (report.ordens?.por_tipo ?? []).map(item => ({ id: `report-type:${item.tipo}`, title: humanWorkType(item.tipo), detail: `${item.quantidade} ordem(ns)` }))),
@@ -1576,6 +1556,26 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
   ]
 
   function openFocusItem(item: InsightItem) {
+    if (item.readOnly) return
+    if (item.id.startsWith('context-order:')) {
+      void openWorkOrderById(item.id.slice('context-order:'.length))
+      return
+    }
+    const asset = assetCatalog.find(candidate => String(candidate.id) === (item.assetId || item.id))
+    if (asset || item.assetId) {
+      const assetId = item.assetId || String(asset?.id)
+      const summary = displayData?.contextos?.disponibilidade.find(candidate => candidate.id === assetId)
+      const failures = (displayData?.contextos?.falhas ?? []).filter(candidate => candidate.ativo_id === assetId)
+      const orders = (displayData?.contextos?.ordens_abertas ?? []).filter(candidate => candidate.ativo_id === assetId)
+      openInsight(item.title, item.detail, [
+        { id: 'asset-location', title: 'Localização', detail: [asset?.setor_nome || summary?.setor, asset?.linha_nome, asset?.localizacao_tecnica].filter(Boolean).map(String).join(' · ') || 'Não informada', readOnly: true },
+        { id: 'asset-status', title: 'Situação atual', detail: humanStatus(String(asset?.status || summary?.status || item.status || 'Não informada')), readOnly: true },
+        ...(summary ? [{ id: 'asset-availability', title: `Disponibilidade nos últimos ${days} dias`, detail: `${summary.disponibilidade_pct === null ? 'Sem período calculável' : `${number(Number(summary.disponibilidade_pct))}%`} · Tempo parado: ${duration(Number(summary.parada_segundos))}`, readOnly: true }] : []),
+        ...failures.map(failure => ({ id: `asset-failure:${failure.id}`, title: `Falha em ${formatDateTime(failure.iniciada_em)}`, detail: `${failure.motivo || 'Motivo não informado'} · ${failure.concluida_em ? `Encerrada em ${formatDateTime(failure.concluida_em)}` : 'Sem encerramento'}`, readOnly: true })),
+        ...orders.map(order => ({ id: `context-order:${order.id}`, title: `${order.codigo} · ${order.titulo}`, detail: `${order.responsavel_nome || 'Não atribuído'} · ${order.programada_para ? formatDateTime(order.programada_para) : 'Sem programação'}`, status: humanStatus(order.status) })),
+      ])
+      return
+    }
     if (item.id.startsWith('notification:')) {
       const notification = todayNotifications.find(candidate => candidate.id === item.id.slice('notification:'.length))
       if (!notification) return

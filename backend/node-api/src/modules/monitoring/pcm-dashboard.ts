@@ -71,6 +71,39 @@ export async function loadPcmDashboard(
      )
      SELECT jsonb_build_object(
        'atualizado_em',now(),
+       'contextos',jsonb_build_object(
+         'disponibilidade',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT asset.id,asset.tag,asset.name AS nome,asset.sector_name AS setor,
+             asset.operational_status AS status,
+             COALESCE((SELECT sum(EXTRACT(EPOCH FROM (end_at-start_at)))
+               FROM intervals WHERE asset_id=asset.id),0) AS parada_segundos,
+             CASE WHEN bounds.seconds=0 THEN NULL ELSE round(GREATEST(0,100*(1-
+               COALESCE((SELECT sum(EXTRACT(EPOCH FROM (end_at-start_at)))
+                 FROM intervals WHERE asset_id=asset.id),0)/bounds.seconds)),2) END AS disponibilidade_pct
+           FROM assets asset ORDER BY asset.tag,asset.id LIMIT 500
+         ) row),'[]'::jsonb),
+         'falhas',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT failure.id,failure.asset_id AS ativo_id,asset.tag AS ativo_tag,
+             asset.name AS ativo_nome,asset.sector_name AS setor_nome,
+             failure.reason AS motivo,failure.started_at AS iniciada_em,
+             failure.completed_at AS concluida_em,failure.status, counts.falhas>1 AS reincidente
+           FROM failures failure JOIN assets asset ON asset.id=failure.asset_id
+             AND asset.tenant_id=failure.tenant_id
+           JOIN failures_by_asset counts ON counts.ativo_id=failure.asset_id ORDER BY failure.started_at DESC,failure.id LIMIT 500
+         ) row),'[]'::jsonb),
+         'ordens_abertas',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT work_order.id,work_order.operational_code AS codigo,work_order.title AS titulo,
+             asset.id AS ativo_id,asset.tag AS ativo_tag,asset.name AS ativo_nome,
+             asset.sector_name AS setor_nome,work_order.status,
+             work_order.priority AS prioridade,work_order.scheduled_for AS programada_para,
+             work_order.estimated_duration_minutes AS duracao_estimada_minutos,
+             person.name AS responsavel_nome
+           FROM orders work_order JOIN assets asset ON asset.id=work_order.asset_id
+             AND asset.tenant_id=work_order.tenant_id
+           LEFT JOIN iam.users person ON person.id=work_order.responsible_id
+             AND person.tenant_id=work_order.tenant_id
+           ORDER BY work_order.scheduled_for NULLS LAST,work_order.id LIMIT 500
+         ) row),'[]'::jsonb)),
        'atual',jsonb_build_object(
          'ativos_parados',(SELECT count(*) FROM assets asset WHERE asset.operational_status='STOPPED'
            OR EXISTS (SELECT 1 FROM maintenance.equipment_stops stop WHERE stop.asset_id=asset.id

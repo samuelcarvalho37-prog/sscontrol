@@ -86,3 +86,25 @@ Banco local, dados das empresas, backup, credenciais, arquivos `.env`, sessões 
 ## Verificação desta correção visual
 
 Maximização de painel conferida e controles separados. A lateral indica a aba visível em foco, não todas as abas do mesmo grupo. A verificação visual não substitui homologar todos os fluxos no ambiente do Samuel.
+
+## Entrega PCM de 13/11/2026 — integrar frontend e backend juntos
+
+Esta entrega complementa a versão integrada acima. Puxar toda a branch `dev/natan-refinamento-frontend`, incluindo o histórico anterior, e não copiar apenas arquivos de interface.
+
+Implementado nesta etapa:
+- Removidos da biblioteca da lousa os cards Exportar CSV e Imprimir / PDF, junto com seus geradores de relatório. A impressão da lousa no topo permanece; exportação de dados continua no TI.
+- Consulta de indicador com cabeçalho compacto, melhor contraste e listas no tema do PCM.
+- Contextos reais de disponibilidade por ativo, falhas, reincidências, ordens abertas e preventivas concluídas no prazo ou com atraso. Listas de contexto limitadas a 500 registros; execuções detalhadas mantêm o limite existente de 100.
+- API ampliada com saldo de materiais e consumo por OS, setor e linha, além do custo de materiais do ano corrente. Custo anual representa materiais consumidos em execuções concluídas, não o custo financeiro total da empresa.
+- Reincidência calculada sem depender do ranking visual de ativos. Detalhes consultivos podem ser somente leitura.
+
+Não está concluído nesta entrega:
+- Novos cards opcionais de almoxarifado e seus filtros por setor/linha/ativo. Os dados foram preparados na API, mas os novos cards ainda não foram entregues.
+- Homologação visual completa de cada indicador e de todos os temas.
+- Estoque por localização, entrega e entrada de peças: não inferir esses movimentos a partir de consumo ou saldo geral.
+
+Validação: consulta real de dashboard e relatórios executada com RLS da API em transação READ ONLY, revertida ao final, sem alterar dados da TOZZI. Verificar também builds e fluxos no ambiente de destino. Não há migração nova nesta etapa, mas o histórico anterior contém migrações e deve ser integrado por completo.
+
+Para Samuel: preservar a navegação TI aprovada de onze entradas e o frontend padronizado. Integrar os arquivos de backend junto com o frontend; manter seu próprio ambiente e banco. Dados importados localmente e planilhas de teste não são transferidos pelo Git.
+
+Verificações finais desta entrega: typecheck do frontend e backend, build do frontend e backend e git diff --check passaram. O build do Vite mantém aviso de pacotes grandes; não houve falha de compilação.
