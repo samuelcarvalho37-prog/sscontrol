@@ -140,6 +140,8 @@ type WindowLayout = 'smart' | 'focus' | 'columns' | 'rows' | 'grid' | 'cascade' 
 type WindowSnapTarget = 'maximize' | 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 const MODULES: WorkspaceModule[] = [
+  { id: 'additional-qr', code: 'QR', label: 'Ler QR Code', description: 'Câmera, webcam ou consulta por código', searchTerms: 'qr câmera webcam tag código equipamento', Icon: SearchIcon },
+  { id: 'additional-tools', code: 'FA', label: 'Ferramentas autorizadas', description: 'Funções adicionais liberadas para a conta', searchTerms: 'parâmetro checklist revisão funções', Icon: WrenchIcon },
   { id: 'overview', code: 'VG', label: 'Integridade do sistema', description: 'Saúde e alertas automáticos', searchTerms: 'visão geral diagnóstico desempenho latência módulo operação sistema ambiente telemetria', Icon: DashboardIcon },
   { id: 'structure', code: 'EF', label: 'Estrutura fabril', description: 'Plantas, setores e linhas', searchTerms: 'empresa fábrica unidade setor linha planta', Icon: FactoryIcon, feature: 'CADASTROS' },
   { id: 'assets', code: 'AT', label: 'Cadastro técnico', description: 'Ativos e componentes', searchTerms: 'equipamento máquina tag componente ativo patrimônio', Icon: AssetIcon, feature: 'CADASTROS' },
@@ -176,6 +178,7 @@ const NAVIGATION_GROUPS: Array<{
   label: string
   modules: readonly AdminModule[]
 }> = [
+  { id: 'additional', label: 'MÓDULOS ADICIONAIS', modules: ['additional-qr', 'additional-tools'] },
   {
     id: 'overview',
     label: 'DIAGNÓSTICO',
@@ -793,7 +796,6 @@ export function AdminWorkspace({
   const [workspaceTabContext, setWorkspaceTabContext] = useState<{ module: AdminModule; x: number; y: number; dropX: number; dropY: number } | null>(null)
   const [paletteProfiles, setPaletteProfiles] = useState<AdminPermissionProfile[]>([])
   const [paletteProfilesError, setPaletteProfilesError] = useState('')
-  const [permissionTool, setPermissionTool] = useState<'tools'|'qr'|null>(null)
   const canUseTools = hasPermissionTools(session.user.capacidades)
   const canReadQr = permitsAction(session.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
   const [permissionProfileRequest, setPermissionProfileRequest] = useState<{ profile: string; capabilityName?: string; requestId: number } | null>(null)
@@ -1029,10 +1031,12 @@ export function AdminWorkspace({
   const visibleModules = useMemo(
     () => MODULES.filter((module) => (
       !ADMIN_MAINTENANCE_MODULES.has(module.id)
+      && (module.id !== 'additional-qr' || canReadQr)
+      && (module.id !== 'additional-tools' || canUseTools)
       && module.id !== 'module-inspector'
       && (module.id !== 'plan-approvals' || session.user.capacidades?.includes('maintenance.plans.publish') === true)
     )),
-    [session.user.capacidades],
+    [session.user.capacidades, canReadQr, canUseTools],
   )
 
   const visibleNavigationGroups = useMemo(
@@ -1044,13 +1048,15 @@ export function AdminWorkspace({
   )
 
   const isModuleAvailable = useCallback((moduleId: AdminModule) => {
+    if (moduleId === 'additional-qr') return canReadQr
+    if (moduleId === 'additional-tools') return canUseTools
     const accessModuleId = moduleId === 'workforce-areas' || moduleId === 'workforce-roles' ? 'workforce' : moduleId
     const module = getModule(accessModuleId)
     if (ADMIN_MAINTENANCE_MODULES.has(accessModuleId)) return false
     if (accessModuleId === 'plan-approvals' && !session.user.capacidades?.includes('maintenance.plans.publish')) return false
     if (!commercialAccess || !module.feature) return true
     return commercialAccess.status === 'ATIVA' && grantedFeatures.has(module.feature)
-  }, [commercialAccess, grantedFeatures, session.user.capacidades])
+  }, [commercialAccess, grantedFeatures, session.user.capacidades, canReadQr, canUseTools])
 
   const systemModuleStatuses = useMemo<AdminWorkspaceModuleStatus[]>(() => MODULES
     .filter((module) => !ADMIN_MAINTENANCE_MODULES.has(module.id) && module.id !== 'module-inspector' && !module.id.startsWith('imports-') && !module.id.startsWith('exports-'))
@@ -2315,7 +2321,6 @@ export function AdminWorkspace({
         </button>
 
         <div className="admin-desktop-top-actions">
-          {canUseTools ? <button type="button" title="Ferramentas autorizadas" onClick={() => setPermissionTool('tools')}>Ferramentas</button> : null}{canReadQr ? <button type="button" title="Ler QR Code" onClick={() => setPermissionTool('qr')}>QR</button> : null}
           <button data-window-manager-trigger type="button" title="Gerenciador de janelas" aria-label="Gerenciador de janelas" onClick={() => setWindowManagerOpen((current) => !current)}><WindowsIcon /></button>
           <button
             className="admin-notification-button"
@@ -2349,7 +2354,6 @@ export function AdminWorkspace({
         </div>
       </header>
 
-      {permissionTool ? <div className="admin-desktop-overlay" role="presentation"><section role="dialog" aria-modal="true" aria-label="Ferramentas autorizadas" className="admin-permission-tools-dialog"><header><strong>{permissionTool === 'qr' ? 'Ler QR Code' : 'Ferramentas autorizadas'}</strong><button type="button" onClick={() => setPermissionTool(null)}>Fechar</button></header>{permissionTool === 'tools' && canUseTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={onSessionExpired} /> : permissionTool === 'qr' && canReadQr ? <GestorQrWorkspace onSessionExpired={onSessionExpired} onOpenAsset={() => {setPermissionTool(null);openModule('assets')}} /> : null}</section></div> : null}
       <div className="admin-desktop-content">
         <nav className="admin-desktop-rail" aria-label="Navegação do Centro de Comando">
           {visibleNavigationGroups.map((group) => (
@@ -2697,7 +2701,7 @@ export function AdminWorkspace({
                       ))}
                   </div>
                   <div className="admin-app-window__body">
-                    <AdminPage
+                    {item.module === 'additional-qr' ? (canReadQr ? <GestorQrWorkspace embedded onSessionExpired={onSessionExpired} /> : <p role="status">Esta função não está habilitada para esta conta.</p>) : item.module === 'additional-tools' ? (canUseTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={onSessionExpired} /> : <p role="status">Esta função não está habilitada para esta conta.</p>) : <AdminPage
                       session={session}
                       onSessionExpired={onSessionExpired}
                       activeModule={item.module}
@@ -2771,7 +2775,7 @@ export function AdminWorkspace({
                         }
                       }}
                       userDataRevision={userDataRevision}
-                    />
+                    />}
                   </div>
                 </section>
               )

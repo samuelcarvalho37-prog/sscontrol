@@ -1,3 +1,4 @@
+import { workspaceExperience } from '../services/auth/workspaceExperience'
 import { PermissionTools, hasPermissionTools } from '../../../frontend/src/components/PermissionTools'
 import { permitsAction } from '../../../frontend/src/services/auth/permissionActions'
 import { accessBlockMessage, watchCompanyAccess } from '../../../frontend/src/services/auth/accessBlock'
@@ -142,7 +143,8 @@ function TenantApp() {
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
-  const isAdmin = session?.user.roleType === 'ADMIN' || session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const experience = workspaceExperience(session?.user)
+  const isAdmin = experience === 'ti'
   const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
   const canReviewWork = session?.user.capacidades?.includes('maintenance.work-orders.review') ?? false
   const canAccessDecisionWorkspace = canReadWork || canReviewWork
@@ -155,7 +157,7 @@ function TenantApp() {
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
-  const canViewPcmDashboard = ['PCM', 'GESTOR'].includes(normalizedProfile) && canReadAnalytics
+  const isPcmWorkspace = experience === 'pcm'
   const [networkOnline, setNetworkOnline] = useState(() => navigator.onLine)
   useEffect(() => {
     const update = () => setNetworkOnline(navigator.onLine)
@@ -164,14 +166,14 @@ function TenantApp() {
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
   }, [])
   useEffect(() => {
-    if (canViewPcmDashboard) setSection(current => current === 'home' ? 'validations' : current)
-  }, [canViewPcmDashboard])
+    if (isPcmWorkspace) setSection(current => current === 'home' ? (canReadAnalytics ? 'validations' : 'more') : current)
+  }, [isPcmWorkspace, canReadAnalytics])
   const [pcmSurface, setPcmSurface] = useState<{ cardBackground?: string; contentColor?: string; titleColor?: string; cardEffect?: string }>(() => { try { const saved = JSON.parse(localStorage.getItem('vorqix.pcm.workspace-style.v1') ?? '{}'); return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {} } catch { return {} } })
   const [pcmTheme, setPcmTheme] = useState<'light' | 'dark' | 'ice'>(() => {
     try { const saved = window.localStorage.getItem('vorqix.pcm.dashboard-theme.v1'); return saved === 'light' || saved === 'ice' ? saved : 'dark' } catch { return 'dark' }
   })
   useEffect(() => {
-    if (!canViewPcmDashboard) return
+    if (!isPcmWorkspace) return
     const update = (event: Event) => {
       const value = (event as CustomEvent).detail
       if (value === 'light' || value === 'dark' || value === 'ice') setPcmTheme(value)
@@ -181,23 +183,23 @@ function TenantApp() {
     window.addEventListener('vorqix:pcm-theme', update)
     document.documentElement.dataset.pcmDashboardTheme = pcmTheme
     return () => { window.removeEventListener('vorqix:pcm-theme', update); window.removeEventListener('vorqix:pcm-style', updateStyle); delete document.documentElement.dataset.pcmDashboardTheme }
-  }, [canViewPcmDashboard, pcmTheme])
+  }, [isPcmWorkspace, pcmTheme])
 
   const pcmSurfaceAppearance = adaptPcmAppearance({ ...pcmSurface, themeAdaptive: true }, pcmTheme)
   const pcmControlPanel = pcmSurfaceAppearance.cardBackground && pcmSurfaceAppearance.cardBackground !== 'transparent'
     ? pcmSurfaceAppearance.cardBackground : pcmTheme === 'dark' ? '#183344' : pcmTheme === 'ice' ? '#f6fbff' : '#ffffff'
   const pcmControlInk = pcmSurfaceAppearance.contentColor ?? (pcmTheme === 'dark' ? '#edf5fc' : '#183b56')
   useEffect(() => {
-    if (!canViewPcmDashboard) return
+    if (!isPcmWorkspace) return
     const root = document.documentElement
     root.style.setProperty('--pcm-control-panel', pcmControlPanel)
     root.style.setProperty('--pcm-control-ink', pcmControlInk)
     return () => { root.style.removeProperty('--pcm-control-panel'); root.style.removeProperty('--pcm-control-ink') }
-  }, [canViewPcmDashboard, pcmControlPanel, pcmControlInk])
+  }, [isPcmWorkspace, pcmControlPanel, pcmControlInk])
   const canManageMaintenance = Boolean(session?.user.capacidades?.includes('workspace.maintenance.open'))
   useEffect(() => {
-    if ((section === 'tools' && !canTools) || (section === 'scan' && !canScan) || (section === 'tracking' && !canTracking) || (section === 'maintenance' && !canManageMaintenance)) setSection(canViewPcmDashboard ? 'validations' : 'home')
-  }, [section,canTools,canScan,canTracking,canManageMaintenance,canViewPcmDashboard])
+    if ((section === 'tools' && !canTools) || (section === 'scan' && !canScan) || (section === 'tracking' && !canTracking) || (section === 'maintenance' && !canManageMaintenance)) setSection(isPcmWorkspace ? 'validations' : 'home')
+  }, [section,canTools,canScan,canTracking,canManageMaintenance,isPcmWorkspace])
   const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
 
@@ -498,13 +500,13 @@ function TenantApp() {
 
   return (
     <div className="manager-app-stage">
-      <div style={canViewPcmDashboard ? { '--pcm-shared-panel': pcmSurfaceAppearance.cardBackground === 'transparent' || !pcmSurfaceAppearance.cardBackground ? (pcmTheme === 'dark' ? '#183344' : pcmTheme === 'ice' ? '#f6fbff' : '#ffffff') : pcmSurfaceAppearance.cardBackground, '--pcm-shared-ink': pcmSurfaceAppearance.contentColor ?? (pcmTheme === 'dark' ? '#edf5fc' : '#183b56') } as CSSProperties : undefined} data-technician-workspace={isTechnician || undefined} data-pcm-surface-effect={canViewPcmDashboard ? pcmSurface.cardEffect : undefined} data-pcm-workspace={canViewPcmDashboard || undefined} data-pcm-theme={canViewPcmDashboard ? pcmTheme : undefined} className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
+      <div style={isPcmWorkspace ? { '--pcm-shared-panel': pcmSurfaceAppearance.cardBackground === 'transparent' || !pcmSurfaceAppearance.cardBackground ? (pcmTheme === 'dark' ? '#183344' : pcmTheme === 'ice' ? '#f6fbff' : '#ffffff') : pcmSurfaceAppearance.cardBackground, '--pcm-shared-ink': pcmSurfaceAppearance.contentColor ?? (pcmTheme === 'dark' ? '#edf5fc' : '#183b56') } as CSSProperties : undefined} data-technician-workspace={isTechnician || undefined} data-pcm-surface-effect={isPcmWorkspace ? pcmSurface.cardEffect : undefined} data-pcm-workspace={isPcmWorkspace || undefined} data-pcm-theme={isPcmWorkspace ? pcmTheme : undefined} className={`app-shell app-shell--manager profile-shell--${normalizedProfile.toLowerCase() || 'default'}`}>
         <header className="topbar">
         <div className="topbar__identity topbar__identity--manager">
           <div>
             <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
             <span>
-              {canViewPcmDashboard ? <span className="pcm-identity-line"><b>PCM</b><strong title={session.user.nome}>{session.user.nome}</strong></span> : isTechnician ? 'Técnico' : technicalContext?.pode_validar
+              {isPcmWorkspace ? <span className="pcm-identity-line"><b>PCM</b><strong title={session.user.nome}>{session.user.nome}</strong></span> : isTechnician ? 'Técnico' : technicalContext?.pode_validar
                 ? `Validação técnica · ${technicalContext.identidade.area_nome || 'Qualidade e segurança'}`
                 : (() => {
                     const role = technicalContext?.identidade.cargo_nome || 'Acompanhamento técnico'
@@ -523,12 +525,12 @@ function TenantApp() {
             Online
           </span>
 
-          <div className="user-badge" hidden={canViewPcmDashboard}>
+          <div className="user-badge" hidden={isPcmWorkspace}>
             <strong>{session.user.nome}</strong>
             {!['PCM', 'GESTOR'].includes(normalizedProfile) ? <span>{session.user.perfil}</span> : null}
           </div>
 
-          {canViewPcmDashboard ? <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" /> : null}
+          {isPcmWorkspace ? <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" /> : null}
 
           {canReadNotices ? <button
             className="manager-notification-trigger"
@@ -554,14 +556,14 @@ function TenantApp() {
             {loggingOut ? 'Saindo…' : 'Sair'}
           </button>
         </div>
-        {canViewPcmDashboard ? <>
-          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canTracking ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}{canScan ? <button type="button" aria-current={section === 'scan' ? 'page' : undefined} onClick={() => handleNavigate('scan')}>Ler QR Code</button> : null}{canTools ? <button type="button" aria-current={section === 'tools' ? 'page' : undefined} onClick={() => handleNavigate('tools')}>Ferramentas</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
+        {isPcmWorkspace ? <>
+          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button hidden={!canReadAnalytics} type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canTracking ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}{canScan ? <button type="button" aria-current={section === 'scan' ? 'page' : undefined} onClick={() => handleNavigate('scan')}>Ler QR Code</button> : null}{canTools ? <button type="button" aria-current={section === 'tools' ? 'page' : undefined} onClick={() => handleNavigate('tools')}>Ferramentas</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
           <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
         </> : null}
         </header>
 
         <div className="app-content">
-          {section === 'home' && !isTechnician && profileExperience ? (
+          {section === 'home' && !isPcmWorkspace && !isTechnician && profileExperience ? (
             <section className="profile-experience-hero" aria-label={`Resumo de ${profileTabTitle(normalizedProfile)}`}>
               <div>
                 <span>{profileExperience.eyebrow}</span>
@@ -583,7 +585,7 @@ function TenantApp() {
                 >
                   {profileExperience.primary}
                 </button>
-                {canViewPcmDashboard ? (
+                {isPcmWorkspace ? (
                   <button className="secondary-button" type="button" onClick={() => handleNavigate('validations')}>
                     Ver indicadores
                   </button>
@@ -598,7 +600,7 @@ function TenantApp() {
           ) : null}
           {section === 'home' && canReportOccurrence && !canReadWork && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} notificationFocus={technicianActionFocus} onNotificationFocusHandled={() => setTechnicianActionFocus(null)} /> : null}
-          {section === 'home' && canAccessDecisionWorkspace && !isTechnician ? (
+          {section === 'home' && !isPcmWorkspace && canAccessDecisionWorkspace && !isTechnician ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
               initialView={decisionView}
@@ -610,10 +612,10 @@ function TenantApp() {
           ) : null}
           {section === 'validations' && canReadAnalytics ? (
             <>
-            {usesNodeApi() && canViewPcmDashboard && detailedAnalytics ? <nav className="pcm-view-switch pcm-view-switch--return" aria-label="Área do PCM">
+            {usesNodeApi() && isPcmWorkspace && detailedAnalytics ? <nav className="pcm-view-switch pcm-view-switch--return" aria-label="Área do PCM">
               <button type="button" aria-pressed="false" onClick={() => setDetailedAnalytics(false)}>Voltar ao painel do PCM</button>
             </nav> : null}
-            {usesNodeApi() && !detailedAnalytics && canViewPcmDashboard ? <PcmDashboard onOpenPlanning={canManageMaintenance ? () => handleNavigate('maintenance') : undefined} onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} onOpenHistory={() => setDetailedAnalytics(true)} /> :
+            {usesNodeApi() && !detailedAnalytics && isPcmWorkspace ? <PcmDashboard onOpenPlanning={canManageMaintenance ? () => handleNavigate('maintenance') : undefined} onSessionExpired={expireSession} partShortageFocusId={partShortageFocusId} onOpenHistory={() => setDetailedAnalytics(true)} /> :
             <GestorAnalyticsWorkspace
               focusAssetId={analyticsFocusAsset}
               focusOccurrenceId={analyticsFocusOccurrence}
@@ -655,7 +657,7 @@ function TenantApp() {
           ) : null}
         </div>
 
-        {!canViewPcmDashboard ? <AppNavigation
+        {!isPcmWorkspace ? <AppNavigation
           active={section}
           validationCount={validationCount}
           showAdmin={false}

@@ -1,5 +1,7 @@
 # Integração obrigatória — permissões e planos
 
+Complemento de interface: [Adaptação das funções ao portal TI e PCM](2026-11-14-adaptacao-ti-pcm.md). Esse complemento não acrescenta migração de banco.
+
 Esta entrega deve ser integrada como versão completa da branch `dev/natan-refinamento-frontend`: frontend do gestor/TI/PCM, frontend do operador, backend e migrações. Não copiar somente CSS ou somente o frontend. Não restaurar a navegação antiga do TI durante a integração.
 
 ## Comportamento entregue

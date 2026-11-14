@@ -88,6 +88,8 @@ interface AdminPageProps {
 }
 
 export type AdminModule =
+  | 'additional-qr'
+  | 'additional-tools'
   | 'overview'
   | 'imports'
   | 'imports-structure'

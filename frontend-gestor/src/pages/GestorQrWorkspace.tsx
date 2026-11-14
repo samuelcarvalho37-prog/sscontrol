@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import '../styles/qr-profile-adapters.css'
 import {
   AlertIcon,
   AssetIcon,
@@ -74,7 +75,8 @@ const STATUS_CONTENT: Record<
 }
 
 interface GestorQrWorkspaceProps {
-  onOpenAsset: (assetId: string) => void
+  onOpenAsset?: (assetId: string) => void
+  embedded?: boolean
   onSessionExpired: () => void
 }
 
@@ -113,6 +115,7 @@ function numericValue(value: string): number | undefined {
 export function GestorQrWorkspace({
   onOpenAsset,
   onSessionExpired,
+  embedded = false,
 }: GestorQrWorkspaceProps) {
   const [query, setQuery] = useState('')
   const [journey, setJourney] = useState<GestorAssetJourney | null>(null)
@@ -268,9 +271,11 @@ export function GestorQrWorkspace({
         void scan()
       } catch (cause) {
         setCameraError(
-          cause instanceof Error
-            ? `Não foi possível abrir a câmera: ${cause.message}`
-            : 'Não foi possível abrir a câmera.',
+          cause instanceof DOMException && cause.name === 'NotFoundError'
+            ? 'Nenhuma câmera encontrada. Conecte uma webcam ou consulte pela TAG abaixo.'
+            : cause instanceof DOMException && cause.name === 'NotAllowedError'
+              ? 'O acesso à câmera não foi autorizado. Você pode consultar pela TAG abaixo.'
+              : 'Não foi possível abrir a câmera. Verifique a webcam ou consulte pela TAG abaixo.',
         )
         setCameraActive(false)
       }
@@ -410,8 +415,8 @@ export function GestorQrWorkspace({
   }
 
   return (
-    <main className={`content manager-qr-workspace${journey ? ' has-dossier' : ''}`}>
-      <header className="manager-qr-heading">
+    <main className={`content manager-qr-workspace${embedded ? ' is-embedded' : ''}${journey ? ' has-dossier' : ''}`}>
+      <header className="manager-qr-heading" hidden={embedded && !journey}>
         <div>
           <h1>{journey ? 'Equipamento' : 'Ler QR'}</h1>
         </div>
@@ -436,6 +441,7 @@ export function GestorQrWorkspace({
 
       {!journey ? (
         <section className="manager-qr-scanner">
+          {cameraError && !cameraActive ? <p className="manager-qr-camera-error" role="status">{cameraError}</p> : null}
           {cameraActive ? (
             <div className="manager-qr-camera">
               <video ref={videoRef} muted playsInline aria-label="Leitor de QR Code" />
@@ -459,7 +465,7 @@ export function GestorQrWorkspace({
             >
               <CameraIcon />
               <strong>Abrir câmera</strong>
-              <span>Use a câmera traseira para ler a identificação do ativo.</span>
+              <span>Use uma câmera ou webcam. Você também pode digitar a TAG ou o código abaixo.</span>
             </button>
           )}
 
@@ -774,12 +780,12 @@ export function GestorQrWorkspace({
 
           <footer className="manager-qr-result-footer">
             <span><ShieldIcon /> Consulta registrada para rastreabilidade.</span>
-            <button
+            {onOpenAsset ? <button
               type="button"
               onClick={() => onOpenAsset(journey.ativo?.id ?? '')}
             >
               Abrir ficha completa
-            </button>
+            </button> : null}
           </footer>
         </section>
       ) : null}
