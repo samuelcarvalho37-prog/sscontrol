@@ -13,6 +13,7 @@ import {
 } from '../services/api/operator'
 import { readQrContextCache, writeQrContextCache } from '../services/storage/operatorCache'
 import { createQrFrameDetector } from '../services/media/qrFrameDetector'
+import { operationalLabel } from '../components/operationalLabels'
 import type {
   FinishStopResponseData,
   OperatorQrContextData,
@@ -1247,7 +1248,7 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
               return (
                 <article className="history-compact__card" key={item.id}>
                   <div className="history-compact__top">
-                    <strong>{displayName(item.evento || 'Evento técnico')}</strong>
+                    <strong>{operationalLabel(item.evento) ?? displayName(item.evento || 'Evento técnico')}</strong>
                     <span className="history-compact__profile">
                       {displayName(item.perfil || 'SISTEMA')}
                     </span>

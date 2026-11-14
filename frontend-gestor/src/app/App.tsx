@@ -1,37 +1,23 @@
-import { SharedWorkPanel } from '../../../frontend/src/components/SharedWorkPanel'
 import { adaptPcmAppearance } from '../components/pcmAppearance'
 import type { CSSProperties } from 'react'
 import '../styles/pcm-workspace-shell.css'
-import { useCallback, useEffect, useState } from 'react'
-import { OccurrenceWizard } from '../../../frontend/src/components/OccurrenceWizard'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { usesSharedHome } from '../../../frontend/src/components/sharedWorkModel'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
-import { PcmDashboard } from '../components/PcmDashboard'
-import { PcmMaintenanceWorkspace } from '../components/PcmMaintenanceWorkspace'
-import { PcmTrackingWorkspace } from '../components/PcmTrackingWorkspace'
-import { TechnicianDashboard } from '../components/TechnicianDashboard'
 import {
   AppNavigation,
   type GestorSection,
 } from '../components/AppNavigation'
-import { AdminWorkspace } from '../components/AdminWorkspace'
-import { PlatformConsole } from '../components/PlatformConsole'
 import { BellIcon } from '../components/Icons'
 import { NotificationCenter } from '../components/NotificationCenter'
 import { notificationNavigation, validationDemandFromSearch } from '../components/notificationPolicy'
-import { PlatformMotorWorkspace } from '../components/PlatformMotorWorkspace'
 import { WorkspaceStartupGate } from '../components/WorkspaceStartupGate'
 import { useAdaptiveDevice } from '../hooks/useAdaptiveDevice'
 import type { AdminModule } from '../pages/AdminPage'
-import { GestorAnalyticsWorkspace } from '../pages/GestorAnalyticsWorkspace'
-import {
-  GestorDecisionWorkspace,
-  type GestorDecisionFocus,
-} from '../pages/GestorDecisionWorkspace'
+import type { GestorDecisionFocus } from '../pages/GestorDecisionWorkspace'
 import { LoginPage } from '../pages/LoginPage'
-import { MaintenanceAccessPage } from '../pages/MaintenanceAccessPage'
 import { MorePage } from '../pages/MorePage'
-import { GestorQrWorkspace } from '../pages/GestorQrWorkspace'
+import { WorkspaceLoadBoundary } from '../components/WorkspaceLoadBoundary'
 import {
   revokeGestorSession,
   type GestorSession,
@@ -54,6 +40,20 @@ import type {
   GestorTechnicalContext,
   GestorWorkView,
 } from '../types/gestor'
+
+const SharedWorkPanel=lazy(()=>import('../../../frontend/src/components/SharedWorkPanel').then(m=>({default:m.SharedWorkPanel})))
+const OccurrenceWizard=lazy(()=>import('../../../frontend/src/components/OccurrenceWizard').then(m=>({default:m.OccurrenceWizard})))
+const PcmDashboard=lazy(()=>import('../components/PcmDashboard').then(m=>({default:m.PcmDashboard})))
+const PcmMaintenanceWorkspace=lazy(()=>import('../components/PcmMaintenanceWorkspace').then(m=>({default:m.PcmMaintenanceWorkspace})))
+const PcmTrackingWorkspace=lazy(()=>import('../components/PcmTrackingWorkspace').then(m=>({default:m.PcmTrackingWorkspace})))
+const TechnicianDashboard=lazy(()=>import('../components/TechnicianDashboard').then(m=>({default:m.TechnicianDashboard})))
+const AdminWorkspace=lazy(()=>import('../components/AdminWorkspace').then(m=>({default:m.AdminWorkspace})))
+const PlatformConsole=lazy(()=>import('../components/PlatformConsole').then(m=>({default:m.PlatformConsole})))
+const PlatformMotorWorkspace=lazy(()=>import('../components/PlatformMotorWorkspace').then(m=>({default:m.PlatformMotorWorkspace})))
+const GestorAnalyticsWorkspace=lazy(()=>import('../pages/GestorAnalyticsWorkspace').then(m=>({default:m.GestorAnalyticsWorkspace})))
+const GestorDecisionWorkspace=lazy(()=>import('../pages/GestorDecisionWorkspace').then(m=>({default:m.GestorDecisionWorkspace})))
+const MaintenanceAccessPage=lazy(()=>import('../pages/MaintenanceAccessPage').then(m=>({default:m.MaintenanceAccessPage})))
+const GestorQrWorkspace=lazy(()=>import('../pages/GestorQrWorkspace').then(m=>({default:m.GestorQrWorkspace})))
 
 const PROFILE_TAB_TITLES: Record<string, string> = {
   ADMIN: 'TI',
@@ -663,5 +663,5 @@ export function App() {
 
   const isPlatformRoute = window.location.pathname === '/plataforma'
     || window.location.pathname.startsWith('/plataforma/')
-  return isPlatformRoute ? <PlatformConsole /> : <TenantApp />
+  return <WorkspaceLoadBoundary><Suspense fallback={<main role="status" aria-live="polite" className="content"><h1>Carregando área de trabalho…</h1><p>Aguarde enquanto os recursos desta área são preparados.</p></main>}>{isPlatformRoute ? <PlatformConsole /> : <TenantApp />}</Suspense></WorkspaceLoadBoundary>
 }

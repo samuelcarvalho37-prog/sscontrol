@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { operationalLabel } from '../../../frontend/src/components/operationalLabels'
 import { ActionReviewDialog } from '../components/ActionReviewDialog'
 import { ChecklistModelReviewDialog } from '../components/ChecklistModelReviewDialog'
 import {
@@ -81,6 +82,8 @@ function upper(value: unknown): string {
 }
 
 function humanize(value: unknown): string {
+  const operational=operationalLabel(value)
+  if(operational)return operational
   const raw = String(value ?? '').trim()
   const knownLabels: Record<string, string> = {
     LOW: 'Baixa',

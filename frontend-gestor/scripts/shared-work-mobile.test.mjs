@@ -6,6 +6,7 @@ import {createServer} from 'vite'
 const vite=await createServer({configFile:false,root:fileURLToPath(new URL('../../frontend',import.meta.url)),optimizeDeps:{noDiscovery:true},server:{middlewareMode:true,hmr:false}})
 const {locationChoices,blankAnswers,workPriority}=await vite.ssrLoadModule('/src/components/sharedWorkModel.ts')
 const {usesSharedHome}=await vite.ssrLoadModule('/src/components/sharedWorkModel.ts')
+const {operationalLabel}=await vite.ssrLoadModule('/src/components/operationalLabels.ts')
 test.after(()=>vite.close())
 const assets=[
   {id:'a',nome:'Bomba',tag:'A',planta_id:'p1',planta:'Unidade 1',setor_id:'s1',setor:'Utilidades',linha_id:'l1',linha:'Linha 1'},
@@ -35,4 +36,10 @@ test('operador com leitura de OS entra na consulta compartilhada; revisão, téc
   assert.equal(usesSharedHome([...read,'maintenance.work-orders.review'],'QUALIDADE'),false)
   assert.equal(usesSharedHome([...read,'maintenance.work-orders.review'],'SEGURANCA'),false)
   assert.equal(usesSharedHome(undefined,'OPERADOR'),false)
+})
+test('tipos operacionais conhecidos aparecem em português sem inventar rótulo para evento futuro',()=>{
+  assert.equal(operationalLabel('WORK_ORDER'),'Ordem de serviço')
+  assert.equal(operationalLabel('PART_SHORTAGE_RESOLVED'),'Pendência de peça resolvida')
+  assert.equal(operationalLabel('EXECUTION_TECHNICAL_REPORT'),'Relatório técnico de execução')
+  assert.equal(operationalLabel('EVENTO_FUTURO'),undefined)
 })

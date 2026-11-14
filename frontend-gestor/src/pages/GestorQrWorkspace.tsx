@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { operationalLabel } from '../../../frontend/src/components/operationalLabels'
 import {
   AlertIcon,
   AssetIcon,
@@ -728,7 +729,7 @@ export function GestorQrWorkspace({
                     </span>
                     <div>
                       <small>{formatDate(event.criado_em)} · {event.usuario_nome || event.usuario_id || 'Sistema'}</small>
-                      <strong>{humanize(event.evento)}</strong>
+                      <strong>{operationalLabel(event.evento) ?? humanize(event.evento)}</strong>
                       <p>{event.descricao || event.acao_titulo || event.os_titulo || 'Registro técnico preservado.'}</p>
                       {event.os_codigo ? <em>{event.os_codigo} · {event.os_titulo}</em> : null}
                       {event.execucao ? (
