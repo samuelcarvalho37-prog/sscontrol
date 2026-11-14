@@ -1,3 +1,7 @@
+import { PermissionTools, hasPermissionTools } from '../../../frontend/src/components/PermissionTools'
+import { permitsAction } from '../../../frontend/src/services/auth/permissionActions'
+import { getApiUrl } from '../services/api/config'
+import { GestorQrWorkspace } from '../pages/GestorQrWorkspace'
 import {
   useCallback,
   useEffect,
@@ -789,6 +793,9 @@ export function AdminWorkspace({
   const [workspaceTabContext, setWorkspaceTabContext] = useState<{ module: AdminModule; x: number; y: number; dropX: number; dropY: number } | null>(null)
   const [paletteProfiles, setPaletteProfiles] = useState<AdminPermissionProfile[]>([])
   const [paletteProfilesError, setPaletteProfilesError] = useState('')
+  const [permissionTool, setPermissionTool] = useState<'tools'|'qr'|null>(null)
+  const canUseTools = hasPermissionTools(session.user.capacidades)
+  const canReadQr = permitsAction(session.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
   const [permissionProfileRequest, setPermissionProfileRequest] = useState<{ profile: string; capabilityName?: string; requestId: number } | null>(null)
   const permissionProfileRequestIdRef = useRef(0)
   const [importReimportRequest, setImportReimportRequest] = useState<(AdminImportRetryRequest & { requestId: number; file: File }) | null>(null)
@@ -2308,6 +2315,7 @@ export function AdminWorkspace({
         </button>
 
         <div className="admin-desktop-top-actions">
+          {canUseTools ? <button type="button" title="Ferramentas autorizadas" onClick={() => setPermissionTool('tools')}>Ferramentas</button> : null}{canReadQr ? <button type="button" title="Ler QR Code" onClick={() => setPermissionTool('qr')}>QR</button> : null}
           <button data-window-manager-trigger type="button" title="Gerenciador de janelas" aria-label="Gerenciador de janelas" onClick={() => setWindowManagerOpen((current) => !current)}><WindowsIcon /></button>
           <button
             className="admin-notification-button"
@@ -2341,6 +2349,7 @@ export function AdminWorkspace({
         </div>
       </header>
 
+      {permissionTool ? <div className="admin-desktop-overlay" role="presentation"><section role="dialog" aria-modal="true" aria-label="Ferramentas autorizadas" className="admin-permission-tools-dialog"><header><strong>{permissionTool === 'qr' ? 'Ler QR Code' : 'Ferramentas autorizadas'}</strong><button type="button" onClick={() => setPermissionTool(null)}>Fechar</button></header>{permissionTool === 'tools' && canUseTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={onSessionExpired} /> : permissionTool === 'qr' && canReadQr ? <GestorQrWorkspace onSessionExpired={onSessionExpired} onOpenAsset={() => {setPermissionTool(null);openModule('assets')}} /> : null}</section></div> : null}
       <div className="admin-desktop-content">
         <nav className="admin-desktop-rail" aria-label="Navegação do Centro de Comando">
           {visibleNavigationGroups.map((group) => (

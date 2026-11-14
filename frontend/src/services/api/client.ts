@@ -978,6 +978,7 @@ function nodeActionRequest(
             version: data.release_version,
             perfil: user?.perfil ?? "",
             usuario_id: user?.id ?? "",
+            usuario: user,
             elapsed_internal_ms: 0,
             loaded_tables: 0,
           };

@@ -1,3 +1,4 @@
+import { hasAction } from '../services/auth/permissionActions'
 import { Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
@@ -80,6 +81,12 @@ export function PcmTechnicalStructure({
   selectedAreaId: selectedAreaIdProp,
   onSelectedAreaIdChange,
 }: PcmTechnicalStructureProps) {
+  const canReadAreas = hasAction('GET', '/v1/admin/technical-areas', 'cmms.structure.read')
+  const canReadRoles = hasAction('GET', '/v1/admin/technical-roles', 'cmms.structure.read')
+  const canCreateArea = hasAction('POST', '/v1/admin/technical-areas', 'admin.technical-structure.manage')
+  const canEditArea = hasAction('PATCH', '/v1/admin/technical-areas/:areaId', 'admin.technical-structure.manage')
+  const canCreateRole = hasAction('POST', '/v1/admin/technical-roles', 'admin.technical-structure.manage')
+  const canEditRole = hasAction('PATCH', '/v1/admin/technical-roles/:roleId', 'admin.technical-structure.manage')
   const [areas, setAreas] = useState<TechnicalArea[]>([])
   const [roles, setRoles] = useState<TechnicalRole[]>([])
   const [localSelectedAreaId, setLocalSelectedAreaId] = useState('')
@@ -123,8 +130,8 @@ export function PcmTechnicalStructure({
     const sequence = ++requestSequence.current
     try {
       const [nextAreas, nextRoles] = await Promise.all([
-        listAllTechnicalAreas(signal),
-        listAllTechnicalRoles('', signal),
+        hasAction('GET', '/v1/admin/technical-areas', 'cmms.structure.read') ? listAllTechnicalAreas(signal) : Promise.resolve([]),
+        hasAction('GET', '/v1/admin/technical-roles', 'cmms.structure.read') ? listAllTechnicalRoles('', signal) : Promise.resolve([]),
       ])
       if (signal?.aborted || sequence !== requestSequence.current) return false
 
@@ -165,6 +172,7 @@ export function PcmTechnicalStructure({
   })
 
   async function applyStatusChanges(kind: 'area' | 'role', ids: string[], status: AdminUserStatus) {
+    if (kind === 'area' ? !canEditArea : !canEditRole) return
     const targets = kind === 'area'
       ? areas.filter((area) => ids.includes(area.id) && area.status !== status)
       : roles.filter((role) => ids.includes(role.id) && role.status !== status)
@@ -317,13 +325,13 @@ export function PcmTechnicalStructure({
 
   const visibleRoles = useMemo(() => {
     const term = roleSearch.trim().toLowerCase()
-    return roles.filter((role) => role.area_id === selectedAreaId && (!term || [role.codigo, role.nome, role.descricao]
+    return roles.filter((role) => (!canReadAreas || role.area_id === selectedAreaId) && (!term || [role.codigo, role.nome, role.descricao]
       .some((value) => String(value ?? '').toLowerCase().includes(term))))
-  }, [roleSearch, roles, selectedAreaId])
+  }, [roleSearch, roles, selectedAreaId, canReadAreas])
 
   const selectedArea = areas.find((area) => area.id === selectedAreaId)
   async function saveEditor() {
-    if (!editor) return
+    if (!editor || (editor.kind === 'area' ? (editor.value.id ? !canEditArea : !canCreateArea) : (editor.value.id ? !canEditRole : !canCreateRole))) return
     if (!editor.value.nome.trim() || !editor.value.codigo.trim()) {
       setError('Informe o código e o nome do cadastro.')
       return
@@ -358,8 +366,8 @@ export function PcmTechnicalStructure({
     }
   }
 
-  const showAreasPanel = detachedPanel === 'areas' || (!detachedPanel && !detachedPanels.includes('areas'))
-  const showRolesPanel = detachedPanel === 'roles' || (!detachedPanel && !detachedPanels.includes('roles'))
+  const showAreasPanel = canReadAreas && (detachedPanel === 'areas' || (!detachedPanel && !detachedPanels.includes('areas')))
+  const showRolesPanel = canReadRoles && (detachedPanel === 'roles' || (!detachedPanel && !detachedPanels.includes('roles')))
 
   useEffect(() => {
     if (!detachContext) return undefined
@@ -389,7 +397,7 @@ export function PcmTechnicalStructure({
       {pendingStatusBatch ? <section className="pcm-resource-technical-batch-confirm" role="alertdialog" aria-label="Confirmar alteração de status"><span>{`Aplicar ${pendingStatusBatch.status === 'ATIVO' ? 'ativação' : 'desativação'} em ${pendingStatusBatch.ids.length} ${pendingStatusBatch.kind === 'area' ? 'áreas' : 'cargos'}?`}</span><div><button type="button" onClick={() => { setPendingStatusBatch(null); setStatusPreviewIds([]) }}>Cancelar</button><button className="primary-button" type="button" onClick={() => { if (!pendingStatusBatch) return; const request = pendingStatusBatch; setPendingStatusBatch(null); void applyStatusChanges(request.kind, request.ids, request.status) }}>Confirmar</button></div></section> : null}
 
 
-      {!editor && areaPage ? <div className="pcm-resource-breadcrumb"><button type="button" onClick={() => setAreaPage(false)}>Áreas</button><span aria-hidden="true">/</span><strong>{selectedArea?.nome}</strong><button type="button" onClick={() => selectedArea && setEditor({ kind: 'area', value: areaInput(selectedArea) })} aria-label="Editar área selecionada"><Pencil size={15} /></button></div> : null}
+      {!editor && areaPage ? <div className="pcm-resource-breadcrumb"><button type="button" onClick={() => setAreaPage(false)}>Áreas</button><span aria-hidden="true">/</span><strong>{selectedArea?.nome}</strong>{canEditArea ? <button type="button" onClick={() => selectedArea && setEditor({ kind: 'area', value: areaInput(selectedArea) })} aria-label="Editar área selecionada"><Pencil size={15} /></button> : null}</div> : null}
       {editor ? <section className="pcm-resource-technical-editor" role="tabpanel" aria-labelledby="technical-editor-title">
         <header><h2 id="technical-editor-title">{editor.value.id ? 'Editar' : 'Nova'} {editor.kind === 'area' ? 'área técnica' : 'cargo técnico'}</h2></header>
         <form onSubmit={(event) => { event.preventDefault(); void saveEditor() }}>
@@ -425,14 +433,14 @@ export function PcmTechnicalStructure({
             : undefined}
       >
         {showAreasPanel ? <section className="pcm-resource-technical-panel" onContextMenu={(event) => showDetachMenu(event, 'areas')}>
-          <header title={onDetachPanel && !detachedPanel ? 'Clique com o botão direito para desprender este grupo em uma janela.' : undefined}><h2>Áreas</h2><button className="primary-button" title="Cadastrar uma nova área técnica" type="button" onClick={() => setEditor({ kind: 'area', value: areaInput() })}>+ Nova</button></header>
+          <header title={onDetachPanel && !detachedPanel ? 'Clique com o botão direito para desprender este grupo em uma janela.' : undefined}><h2>Áreas</h2>{canCreateArea ? <button className="primary-button" title="Cadastrar uma nova área técnica" type="button" onClick={() => setEditor({ kind: 'area', value: areaInput() })}>+ Nova</button> : null}</header>
           {areas.length > 8 || areaSearch ? <label className="pcm-resource-technical-search"><SearchIcon /><input value={areaSearch} onChange={(event) => setAreaSearch(event.target.value)} placeholder="Buscar área" aria-label="Buscar área" /></label> : null}
           <div className="pcm-resource-technical-list">
             {visibleAreas.map((area) => (
               <article className={selectedAreaId === area.id ? 'is-active' : ''} key={area.id}>
                 <button className="pcm-resource-technical-select" title={`${area.codigo} · ${area.descricao || 'Sem descrição'}`} type="button" aria-pressed={selectedAreaId === area.id} onClick={() => { setSelectedAreaId(area.id); setAreaPage(true); setRoleSearch('') }}><span><strong>{area.nome}</strong>{area.codigo.normalize('NFD').replace(/[\u0300-\u036f\s]/g, '').toLowerCase() !== area.nome.normalize('NFD').replace(/[\u0300-\u036f\s]/g, '').toLowerCase() ? <b>{area.codigo}</b> : null}</span></button>
-                <button className={`pcm-resource-user-status-control is-${area.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(area.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="area" data-technical-status-id={area.id} aria-pressed={area.status === 'ATIVO'} aria-label={`${area.status === 'ATIVO' ? 'Desativar' : 'Ativar'} área ${area.nome}`} title="Clique para alterar. Arraste para aplicar a outras áreas." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'area', area.id, area.status)} onClick={() => toggleStatusClick('area', area.id, area.status)}>{area.status === 'ATIVO' ? 'ON' : 'OFF'}</button>
-                <button className="pcm-resource-technical-edit" type="button" aria-label={`Editar área ${area.nome}`} onClick={() => setEditor({ kind: 'area', value: areaInput(area) })}><Pencil size={15} aria-hidden="true" /></button>
+                {canEditArea ? <button className={`pcm-resource-user-status-control is-${area.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(area.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="area" data-technical-status-id={area.id} aria-pressed={area.status === 'ATIVO'} aria-label={`${area.status === 'ATIVO' ? 'Desativar' : 'Ativar'} área ${area.nome}`} title="Clique para alterar. Arraste para aplicar a outras áreas." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'area', area.id, area.status)} onClick={() => toggleStatusClick('area', area.id, area.status)}>{area.status === 'ATIVO' ? 'ON' : 'OFF'}</button> : <span>{area.status === 'ATIVO' ? 'ON' : 'OFF'}</span>}
+                {canEditArea ? <button className="pcm-resource-technical-edit" type="button" aria-label={`Editar área ${area.nome}`} onClick={() => setEditor({ kind: 'area', value: areaInput(area) })}><Pencil size={15} aria-hidden="true" /></button> : null}
               </article>
             ))}
             {!visibleAreas.length ? <div className="pcm-resource-technical-empty">{areaSearch ? 'Nenhuma área corresponde à busca.' : 'Nenhuma área cadastrada. Crie uma área para começar.'}</div> : null}
@@ -457,11 +465,11 @@ export function PcmTechnicalStructure({
         /> : null}
 
         {showRolesPanel ? <section className="pcm-resource-technical-panel" onContextMenu={(event) => showDetachMenu(event, 'roles')}>
-          <header title={onDetachPanel && !detachedPanel ? 'Clique com o botão direito para desprender este grupo em uma janela.' : undefined}><h2>{selectedArea ? `Cargos · ${selectedArea.nome}` : 'Cargos'}</h2><button className="primary-button" title="Cadastrar cargo na área selecionada" type="button" disabled={!selectedAreaId || selectedArea?.status !== 'ATIVO'} onClick={() => setEditor({ kind: 'role', value: roleInput(selectedAreaId) })}>+ Novo</button></header>
+          <header title={onDetachPanel && !detachedPanel ? 'Clique com o botão direito para desprender este grupo em uma janela.' : undefined}><h2>{selectedArea ? `Cargos · ${selectedArea.nome}` : 'Cargos'}</h2>{canCreateRole ? <button className="primary-button" title="Cadastrar cargo na área selecionada" type="button" disabled={!selectedAreaId || selectedArea?.status !== 'ATIVO'} onClick={() => setEditor({ kind: 'role', value: roleInput(selectedAreaId) })}>+ Novo</button> : null}</header>
           {roles.length > 8 || roleSearch ? <label className="pcm-resource-technical-search"><SearchIcon /><input value={roleSearch} onChange={(event) => setRoleSearch(event.target.value)} placeholder="Buscar cargo" aria-label="Buscar cargo" /></label> : null}
           <div className="pcm-resource-technical-role-table">
             <div><span>Código e cargo</span><span>Assinatura</span><span>Status</span><span /></div>
-            {visibleRoles.map((role) => <article key={role.id}><span title={`${role.codigo} · ${role.descricao || 'Sem descrição'}`}><b>{role.codigo}</b><strong>{role.nome}</strong></span><span className={String(role.pode_assinar).toUpperCase() === 'SIM' ? 'is-signature' : ''} title="Permissão para assinar documentos">{String(role.pode_assinar).toUpperCase() === 'SIM' ? <><CheckIcon />Assina</> : 'Não assina'}</span><button className={`pcm-resource-user-status-control is-${role.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(role.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="role" data-technical-status-id={role.id} aria-pressed={role.status === 'ATIVO'} aria-label={`${role.status === 'ATIVO' ? 'Desativar' : 'Ativar'} cargo ${role.nome}`} title="Clique para alterar. Arraste para aplicar a outros cargos." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'role', role.id, role.status)} onClick={() => toggleStatusClick('role', role.id, role.status)}>{role.status === 'ATIVO' ? 'ON' : 'OFF'}</button><button title={`Editar ${role.nome}`} aria-label={`Editar cargo ${role.nome}`} type="button" onClick={() => setEditor({ kind: 'role', value: roleInput(role.area_id, role) })}><Pencil size={15} aria-hidden="true" /></button></article>)}
+            {visibleRoles.map((role) => <article key={role.id}><span title={`${role.codigo} · ${role.descricao || 'Sem descrição'}`}><b>{role.codigo}</b><strong>{role.nome}</strong></span><span className={String(role.pode_assinar).toUpperCase() === 'SIM' ? 'is-signature' : ''} title="Permissão para assinar documentos">{String(role.pode_assinar).toUpperCase() === 'SIM' ? <><CheckIcon />Assina</> : 'Não assina'}</span>{canEditRole ? <button className={`pcm-resource-user-status-control is-${role.status.toLocaleLowerCase('pt-BR')}${statusPreviewIds.includes(role.id) ? ' is-preview' : ''}`} type="button" data-technical-status-kind="role" data-technical-status-id={role.id} aria-pressed={role.status === 'ATIVO'} aria-label={`${role.status === 'ATIVO' ? 'Desativar' : 'Ativar'} cargo ${role.nome}`} title="Clique para alterar. Arraste para aplicar a outros cargos." disabled={savingStatuses || Boolean(pendingStatusBatch)} onPointerDown={(event) => beginStatusDrag(event, 'role', role.id, role.status)} onClick={() => toggleStatusClick('role', role.id, role.status)}>{role.status === 'ATIVO' ? 'ON' : 'OFF'}</button> : <span>{role.status === 'ATIVO' ? 'ON' : 'OFF'}</span>}{canEditRole ? <button title={`Editar ${role.nome}`} aria-label={`Editar cargo ${role.nome}`} type="button" onClick={() => setEditor({ kind: 'role', value: roleInput(role.area_id, role) })}><Pencil size={15} aria-hidden="true" /></button> : null}</article>)}
             {!visibleRoles.length ? <div className="pcm-resource-technical-empty">{!selectedArea ? 'Cadastre ou selecione uma área para ver os cargos.' : roleSearch ? 'Nenhum cargo corresponde à busca.' : 'Nenhum cargo nesta área. Adicione um cargo quando precisar.'}</div> : null}
           </div>
         </section> : null}

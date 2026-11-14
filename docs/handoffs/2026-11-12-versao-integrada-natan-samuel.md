@@ -108,3 +108,7 @@ Validação: consulta real de dashboard e relatórios executada com RLS da API e
 Para Samuel: preservar a navegação TI aprovada de onze entradas e o frontend padronizado. Integrar os arquivos de backend junto com o frontend; manter seu próprio ambiente e banco. Dados importados localmente e planilhas de teste não são transferidos pelo Git.
 
 Verificações finais desta entrega: typecheck do frontend e backend, build do frontend e backend e git diff --check passaram. O build do Vite mantém aviso de pacotes grandes; não houve falha de compilação.
+
+## Atualização de 14/11 — permissões e planos
+
+Integrar também a entrega descrita em [Permissões e planos](2026-11-14-permissoes-e-planos.md), com o [catálogo das 214 ações e habilitações](2026-11-14-catalogo-de-permissoes.md). Esta etapa inclui backend, ambos os frontends e migrações 0064–0067. É obrigatório aplicar as migrações e reiniciar a API; puxar somente a interface não ativa o controle granular. Preservar a navegação TI e os estilos de cada portal.

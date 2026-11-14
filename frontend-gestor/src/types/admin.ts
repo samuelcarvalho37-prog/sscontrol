@@ -113,6 +113,13 @@ export interface AdminPermissionCapability {
   permitido: boolean
   padrao: boolean
   acoes: string[]
+  grupo?: string
+  acao?: string
+  impacto?: string
+  critico?: boolean
+  disponivel_no_plano?: boolean
+  bloqueio_motivo?: string | null
+  dependencias?: string[]
 }
 
 export interface AdminPermissionProfile {
@@ -125,6 +132,8 @@ export interface AdminPermissionProfile {
 }
 
 export interface AdminPermissionMatrix {
+  editavel?: boolean
+  bloqueio_motivo?: string | null
   chave: string
   perfis: AdminPermissionProfile[]
 }

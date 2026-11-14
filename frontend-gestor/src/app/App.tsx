@@ -1,3 +1,5 @@
+import { PermissionTools, hasPermissionTools } from '../../../frontend/src/components/PermissionTools'
+import { permitsAction } from '../../../frontend/src/services/auth/permissionActions'
 import { accessBlockMessage, watchCompanyAccess } from '../../../frontend/src/services/auth/accessBlock'
 import { callApi } from '../services/api/client'
 import { SharedWorkPanel } from '../../../frontend/src/components/SharedWorkPanel'
@@ -140,14 +142,16 @@ function TenantApp() {
   const [workspaceReady, setWorkspaceReady] = useState(hasCompletedStartup)
   const [technicalContext, setTechnicalContext] =
     useState<GestorTechnicalContext | null>(null)
-  const isAdmin = session?.user.capacidades !== undefined
-    ? session.user.capacidades.includes('admin.identity.read')
-    : session?.user.perfil.trim().toUpperCase() === 'ADMIN'
+  const isAdmin = session?.user.roleType === 'ADMIN' || session?.user.perfil.trim().toUpperCase() === 'ADMIN'
   const canReadWork = session?.user.capacidades === undefined || session.user.capacidades.includes('maintenance.work-orders.read')
   const canReviewWork = session?.user.capacidades?.includes('maintenance.work-orders.review') ?? false
   const canAccessDecisionWorkspace = canReadWork || canReviewWork
   const canReportOccurrence = session?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const canReadAnalytics = session?.user.capacidades === undefined || session.user.capacidades.includes('analytics.technical.read')
+  const canReadNotices = permitsAction(session?.user.capacidades,'GET','/v1/notifications','workflow.notifications.read')
+  const canScan = permitsAction(session?.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
+  const canTools = hasPermissionTools(session?.user.capacidades)
+  const canTracking = canReadWork && Boolean(session?.user.capacidades?.includes('workspace.tracking.open'))
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
@@ -190,8 +194,10 @@ function TenantApp() {
     root.style.setProperty('--pcm-control-ink', pcmControlInk)
     return () => { root.style.removeProperty('--pcm-control-panel'); root.style.removeProperty('--pcm-control-ink') }
   }, [canViewPcmDashboard, pcmControlPanel, pcmControlInk])
-  const canManageMaintenance = ['PCM', 'GESTOR'].includes(normalizedProfile)
-    && Boolean(session?.user.capacidades?.includes('maintenance.plans.manage'))
+  const canManageMaintenance = Boolean(session?.user.capacidades?.includes('workspace.maintenance.open'))
+  useEffect(() => {
+    if ((section === 'tools' && !canTools) || (section === 'scan' && !canScan) || (section === 'tracking' && !canTracking) || (section === 'maintenance' && !canManageMaintenance)) setSection(canViewPcmDashboard ? 'validations' : 'home')
+  }, [section,canTools,canScan,canTracking,canManageMaintenance,canViewPcmDashboard])
   const profileExperience = PROFILE_EXPERIENCE[normalizedProfile]
   const compactDevice = useAdaptiveDevice()
 
@@ -212,7 +218,14 @@ function TenantApp() {
   useEffect(() => {
     if (!session || !usesNodeApi()) return
     return watchCompanyAccess(
-      signal => callApi('sistema.warmup', { token: session.token }, signal, { dedupe: false }),
+      async signal => {
+        const result = await callApi<{usuario?: GestorSession['user']}>('sistema.warmup', { token: session.token }, signal, { dedupe: false });
+        if (result.data?.usuario) setSession(current => {
+          if (!current || current.token !== session.token || JSON.stringify(current.user) === JSON.stringify(result.data?.usuario)) return current;
+          const next = {...current,user:result.data?.usuario!}; saveGestorSession(next); return next;
+        });
+        return result;
+      },
       code => {
         expireSession()
         markBlockedGestorSession(accessBlockMessage(code, isAdmin))
@@ -517,7 +530,7 @@ function TenantApp() {
 
           {canViewPcmDashboard ? <div id="pcm-alerts-slot" className="pcm-header-alerts-slot" /> : null}
 
-          <button
+          {canReadNotices ? <button
             className="manager-notification-trigger"
             type="button"
             onClick={() => setNotificationOpen(true)}
@@ -531,8 +544,7 @@ function TenantApp() {
             {notificationCount > 0 ? (
               <span>{notificationCount > 99 ? '99+' : notificationCount}</span>
             ) : null}
-          </button>
-
+          </button> : null}
           <button
             className="logout-button"
             type="button"
@@ -543,7 +555,7 @@ function TenantApp() {
           </button>
         </div>
         {canViewPcmDashboard ? <>
-          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canReadWork ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
+          <nav className="pcm-header-navigation" aria-label="Áreas do PCM"><button type="button" aria-current={section === 'validations' ? 'page' : undefined} onClick={() => { setDetailedAnalytics(false); handleNavigate('validations') }}>Lousa do PCM</button>{canManageMaintenance ? <button type="button" aria-current={section === 'maintenance' ? 'page' : undefined} onClick={() => handleNavigate('maintenance')}>Manutenção</button> : null}{canTracking ? <button type="button" aria-current={section === 'tracking' ? 'page' : undefined} onClick={() => { setTrackingChecklistId(''); handleNavigate('tracking') }}>Acompanhamento</button> : null}{canScan ? <button type="button" aria-current={section === 'scan' ? 'page' : undefined} onClick={() => handleNavigate('scan')}>Ler QR Code</button> : null}{canTools ? <button type="button" aria-current={section === 'tools' ? 'page' : undefined} onClick={() => handleNavigate('tools')}>Ferramentas</button> : null}<button type="button" aria-current={section === 'more' ? 'page' : undefined} onClick={() => handleNavigate('more')}>Conta</button></nav>
           <div id="pcm-toolbar-slot" className="pcm-header-toolbar-slot" />
         </> : null}
         </header>
@@ -576,7 +588,7 @@ function TenantApp() {
                     Ver indicadores
                   </button>
                 ) : null}
-                {compactDevice ? (
+                {canScan ? (
                   <button className="profile-experience-hero__scan" type="button" onClick={() => handleNavigate('scan')}>
                     Ler QR
                   </button>
@@ -627,16 +639,17 @@ function TenantApp() {
             </>
           ) : null}
           {section === 'shared' && session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : null}
-          {section === 'tracking' && canReadWork ? <PcmTrackingWorkspace requestsContent={session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} fixedTab="requests" embedded /> : undefined} key={trackingChecklistId || 'tracking'} initialChecklistId={trackingChecklistId} canManage={Boolean(session.user.capacidades?.includes('maintenance.work-orders.manage'))} onSessionExpired={expireSession} /> : null}
+          {section === 'tracking' && canTracking ? <PcmTrackingWorkspace requestsContent={session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} fixedTab="requests" embedded /> : undefined} key={trackingChecklistId || 'tracking'} initialChecklistId={trackingChecklistId} canManage={Boolean(session.user.capacidades?.includes('maintenance.work-orders.manage'))} onSessionExpired={expireSession} /> : null}
           {section === 'maintenance' && canManageMaintenance ? (
             <PcmMaintenanceWorkspace onSessionExpired={expireSession} onCreateOrder={id => { setTrackingChecklistId(id); handleNavigate('tracking') }} />
           ) : null}
-          {section === 'scan' ? (
+          {section === 'scan' && canScan ? (
             <GestorQrWorkspace
               onOpenAsset={(assetId) => handleOpenAnalytics(assetId)}
               onSessionExpired={expireSession}
             />
           ) : null}
+          {section === 'tools' && canTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={expireSession} /> : null}
           {section === 'more' || (section === 'home' && !canAccessDecisionWorkspace && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
@@ -651,6 +664,8 @@ function TenantApp() {
           canReportOccurrence={canReportOccurrence}
           isTechnician={isTechnician}
           canReadAnalytics={canReadAnalytics}
+          canScan={canScan}
+          canTools={canTools}
           canManageMaintenance={canManageMaintenance}
           compactDevice={compactDevice}
           onNavigate={handleNavigate}

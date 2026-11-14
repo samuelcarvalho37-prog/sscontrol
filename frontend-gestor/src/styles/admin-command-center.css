@@ -4256,3 +4256,32 @@
     font-size: 0.62rem;
   }
 }
+
+/* Permissões: categorias e impacto sem alterar o controle ON/OFF. */
+.permission-panel .permission-capability-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.permission-panel .permission-capability-toolbar .search-field { flex: 1 1 240px; }
+.permission-category-filter { display: grid; gap: 3px; flex: 0 1 220px; min-width: 0; font-size: 0.62rem; }
+.permission-category-filter select { width: 100%; min-height: 34px; border: 1px solid #c7d6e3; border-radius: 4px; background: #f7fafc; color: #183b56; padding: 5px 8px; }
+.permission-capability-list .permission-category { min-width: 0; grid-column: 1 / -1; }
+.permission-category > h3 { display: flex; align-items: center; gap: 7px; margin: 14px 0 4px; color: #31536e; font-size: 0.67rem; font-weight: 700; }
+.permission-category > h3 > span { font-size: 0.58rem; color: #6b8296; font-weight: 500; }
+.permission-capability-description { min-width: 0; overflow-wrap: anywhere; }
+.permission-capability-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.permission-action-label, .permission-critical-label { display: inline-block; padding: 2px 5px; border-radius: 3px; color: #476982; background: #eef3f7; font-size: 0.52rem; }
+.permission-critical-label { color: #86551c; background: #fff4df; }
+.permission-capability-help { position: relative; color: #526e83; font-size: 0.6rem; }
+.permission-capability-help > summary { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid #b8cbd9; border-radius: 50%; cursor: pointer; list-style: none; }
+.permission-capability-help > summary::-webkit-details-marker { display: none; }
+.permission-capability-help > summary:focus-visible { outline: 2px solid #2874a6; outline-offset: 2px; }
+.permission-capability-help[open] { flex: 1 1 100%; }
+.permission-capability-help p { margin: 5px 0; line-height: 1.5; }
+.permission-panel .permission-capability .permission-capability-description > small { display: block; margin-top: 3px; color: #5b7488; font-size: 0.58rem; line-height: 1.45; }
+.permission-panel .permission-capability .permission-capability-description > .permission-capability-impact { color: #684a17; }
+.permission-panel .permission-capability .permission-capability-description > .permission-capability-blocked { color: #8b4a31; }
+.permission-plan-notice { grid-column: 1 / -1; margin: 6px 0; padding: 8px; color: #684a17; background: #fff8e9; border-left: 3px solid #bd872e; font-size: 0.63rem; line-height: 1.5; }
+
+.admin-permission-tools-dialog{width:min(1100px,95vw);max-height:90vh;overflow:auto;background:var(--admin-panel,#fff);color:var(--admin-ink,#17324a);border:1px solid #c9d9e8;border-radius:6px;padding:16px}.admin-permission-tools-dialog>header{display:flex;justify-content:space-between;align-items:center;gap:12px}

@@ -1,3 +1,4 @@
+import { effectiveCapabilities, readPermissionPolicy } from './permission-policy.js';
 import type { PoolClient, QueryResultRow } from 'pg';
 
 import type { AuthenticatedUser, SessionPurpose } from './auth.types.js';
@@ -273,7 +274,7 @@ export class AuthRepository {
     const capabilitiesResult = await client.query<CapabilityRow>(
       `
           WITH decisions AS (
-            SELECT capability.code, role_capability.effect
+            SELECT capability.code, role_capability.effect, role.id::text AS source
             FROM iam.user_roles user_role
             JOIN iam.roles role
               ON role.tenant_id = user_role.tenant_id
@@ -293,7 +294,7 @@ export class AuthRepository {
 
             UNION ALL
 
-            SELECT capability.code, user_capability.effect
+            SELECT capability.code, user_capability.effect, 'user'::text AS source
             FROM iam.user_capabilities user_capability
             JOIN iam.capabilities capability
               ON capability.id = user_capability.capability_id
@@ -306,9 +307,14 @@ export class AuthRepository {
               )
               AND capability.status = 'ACTIVE'
           )
-          SELECT code
-          FROM decisions
-          GROUP BY code
+          , expanded AS (
+            SELECT code,effect FROM decisions
+            UNION ALL
+            SELECT child.code,decisions.effect FROM decisions
+            JOIN iam.capabilities child ON child.parent_code=decisions.code AND child.status='ACTIVE'
+            WHERE NOT EXISTS(SELECT 1 FROM decisions explicit WHERE explicit.code=child.code AND explicit.source=decisions.source)
+          )
+          SELECT code FROM expanded GROUP BY code
           HAVING bool_or(effect = 'ALLOW') AND NOT bool_or(effect = 'DENY')
           ORDER BY code
         `,
@@ -343,7 +349,7 @@ export class AuthRepository {
       areaId: assignment?.technical_area_id ?? null,
       technicalRoleId: assignment?.technical_role_id ?? null,
       roles: rolesResult.rows.map((role) => role.code),
-      capabilities: capabilitiesResult.rows.map((capability) => capability.code),
+      capabilities: effectiveCapabilities(capabilitiesResult.rows.map((capability) => capability.code), await readPermissionPolicy(client)),
     };
   }
 

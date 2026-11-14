@@ -1,3 +1,5 @@
+import { PermissionTools, hasPermissionTools } from '../components/PermissionTools'
+import { permitsAction } from '../services/auth/permissionActions'
 import { accessBlockMessage, watchCompanyAccess } from '../services/auth/accessBlock'
 import { SharedWorkPanel } from '../components/SharedWorkPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -235,7 +237,14 @@ export function App() {
   useEffect(() => {
     if (!operatorSession || getApiTransport() === 'apps-script') return
     return watchCompanyAccess(
-      signal => callApi('sistema.warmup', { token: operatorSession.token }, signal, { dedupe: false }),
+      async signal => {
+        const result = await callApi<{usuario?: NonNullable<typeof operatorSession>['user']}>('sistema.warmup', { token: operatorSession.token }, signal, { dedupe: false });
+        if (result.data?.usuario) setOperatorSession(current => {
+          if (!current || current.token !== operatorSession.token || JSON.stringify(current.user) === JSON.stringify(result.data?.usuario)) return current;
+          const next = {...current,user:result.data?.usuario!}; saveOperatorSession(next); return next;
+        });
+        return result;
+      },
       code => {
         expireOperatorSession()
         clearActiveExecutionContext()
@@ -243,6 +252,8 @@ export function App() {
       },
     )
   }, [operatorSession?.token])
+  const canScan = permitsAction(operatorSession?.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
+  const canTools = hasPermissionTools(operatorSession?.user.capacidades)
   const canReadExecutions = operatorSession?.user.capacidades === undefined || operatorSession.user.capacidades.includes('maintenance.executions.read')
   const canReportOccurrence = operatorSession?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
@@ -250,6 +261,7 @@ export function App() {
   )
 
   const [section, setSection] = useState<AppSection>('home')
+  useEffect(() => {if ((section === 'tools' && !canTools) || (section === 'qr' && !canScan)) setSection('home')},[section,canTools,canScan])
   const [view, setView] = useState<AppView>(
     () => initialExecutionContextRef.current?.view ?? 'navigation',
   )
@@ -1027,11 +1039,12 @@ export function App() {
                   onRetry={() => void refresh({ forceHealth: true })}
                   onOpenSettings={() => setSection('settings')}
                   onOpenAction={openAction}
-                  onOpenQr={() => setSection('qr')}
+                  onOpenQr={() => {if(canScan)setSection('qr')}}
                 />
               )}
               {section === 'shared' && operatorSession.user.capacidades?.includes('maintenance.shared.read') && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} />}
-              {section === 'qr' && <QrPage onNotify={notify} onOpenAction={openActionById} />}
+              {section === 'qr' && canScan && <QrPage onNotify={notify} onOpenAction={openActionById} />}
+              {section === 'tools' && canTools && <PermissionTools apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades ?? []} onSessionExpired={expireOperatorSession} />}
               {section === 'settings' && (
                 <SettingsPage
                     apiOnline={connectionState === 'online'}
@@ -1051,7 +1064,7 @@ export function App() {
           )}
         </main>
 
-        {view === 'navigation' && <BottomNavigation canShared={operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false} active={section} onChange={changeSection} />}
+        {view === 'navigation' && <BottomNavigation canTools={canTools} canScan={canScan} canShared={operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false} active={section} onChange={changeSection} />}
 
         {detailRefreshing && actionDetail && (
           <div className="background-refresh" role="status">Atualizando dados…</div>

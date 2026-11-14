@@ -96,7 +96,7 @@ function devHeaders(): Record<string, string> {
 
 async function request<T>(
   path: string,
-  options: { method?: string; token?: string; body?: unknown } = {},
+  options: { method?: string; token?: string; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -112,7 +112,7 @@ async function request<T>(
       headers,
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: controller.signal,
+      signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
       cache: "no-store",
     });
     const envelope = (await response.json()) as {
@@ -199,7 +199,7 @@ export function listPlatformFeatures(token: string) {
   return request<{ items: PlatformFeature[] }>("/v1/platform/features", { token });
 }
 
-export function savePlatformPlan(token: string, input: Omit<PlatformPlan, "plan_id" | "version" | "features"> & { plan_id?: string; feature_codes: string[] }) {
+export function savePlatformPlan(token: string, input: Omit<PlatformPlan, "plan_id" | "version" | "features"> & { plan_id?: string; feature_codes: string[]; permission_policy?: PlatformPermissionPolicy }) {
   const { plan_id, ...body } = input;
   return request<{ plan_id: string }>(plan_id ? `/v1/platform/plans/${encodeURIComponent(plan_id)}` : "/v1/platform/plans", {
     method: plan_id ? "PUT" : "POST", token, body,
@@ -296,4 +296,28 @@ async function multipartRequest<T>(path: string, token: string, body: FormData):
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+export interface PlatformPermissionDefinition {
+  id: string;
+  nome: string;
+  grupo: string;
+  acao: string;
+  impacto: string;
+  critico: boolean;
+  dependencias: string[];
+  feature: string | null;
+}
+
+export interface PlatformPermissionPolicy {
+  personalizavel: boolean;
+  permissoes: string[] | null;
+}
+
+export function getPlatformPermissionCatalog(token: string, signal?: AbortSignal) {
+  return request<{ items: PlatformPermissionDefinition[] }>("/v1/platform/permissions/catalog", { token, signal });
+}
+
+export function getPlatformPlanPermissions(token: string, planId: string, signal?: AbortSignal) {
+  return request<PlatformPermissionPolicy>(`/v1/platform/plans/${encodeURIComponent(planId)}/permissions`, { token, signal });
 }

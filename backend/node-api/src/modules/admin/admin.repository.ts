@@ -482,12 +482,14 @@ export class AdminRepository {
   async permissionMatrix(client: PoolClient): Promise<readonly AdminRow[]> {
     const result = await client.query<AdminRow>(
       `SELECT role.code AS role_code, role.role_type, capability.id, capability.code, capability.name,
-              capability.description, capability.protected,
-              COALESCE(role_capability.effect='ALLOW',false) AS allowed
+              capability.description, capability.protected, capability.ui_metadata, capability.parent_code,
+              CASE WHEN role_capability.effect IS NOT NULL THEN role_capability.effect='ALLOW' ELSE COALESCE(parent_permission.effect='ALLOW',false) END AS allowed
        FROM iam.roles role
        CROSS JOIN iam.capabilities capability
        LEFT JOIN iam.role_capabilities role_capability
          ON role_capability.role_id=role.id AND role_capability.capability_id=capability.id
+       LEFT JOIN iam.capabilities parent ON parent.code=capability.parent_code
+       LEFT JOIN iam.role_capabilities parent_permission ON parent_permission.role_id=role.id AND parent_permission.capability_id=parent.id AND parent_permission.tenant_id=role.tenant_id
        WHERE role.status='ACTIVE' AND capability.status='ACTIVE'
          AND role.deleted_at IS NULL
          AND role.tenant_id=current_setting('app.tenant_id')::uuid
@@ -503,10 +505,10 @@ export class AdminRepository {
     actorId: string,
   ): Promise<void> {
     const role = await this.requireIdentityRole(client, profile);
-    if (role.role_type === 'ADMIN' || role.protected) {
+    if (role.role_type === 'ADMIN' && Object.entries(permissions).some(([code,enabled]) => !enabled && ['access.get.admin.permissions','access.patch.admin.permissions.profile'].includes(code))) {
       throw new AppError({
         code: 'ADMIN_PROFILE_PROTECTED',
-        message: 'Este perfil possui permissões protegidas.',
+        message: 'O canal de configuração de acesso do TI deve permanecer habilitado para evitar o bloqueio da administração.',
         statusCode: 409,
       });
     }

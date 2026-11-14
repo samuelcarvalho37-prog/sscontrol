@@ -654,3 +654,24 @@
     padding: 24px;
   }
 }
+
+.platform-plan-permissions > p { margin: 0 0 10px; font-size: 0.78rem; line-height: 1.5; color: #526d84; }
+.platform-editor .platform-plan-customization { display: flex; flex-direction: row; align-items: center; gap: 8px; margin-bottom: 12px; }
+.platform-editor .platform-plan-customization input { width: auto; min-height: 0; }
+.platform-plan-permission-group { margin-top: 16px; min-width: 0; }
+.platform-plan-permission-group > h3 { margin: 0; padding-bottom: 6px; border-bottom: 1px solid #d9e4ee; font-size: 0.85rem; color: #244760; }
+.platform-plan-permission { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf1f5; }
+.platform-plan-permission > div { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.platform-plan-permission strong { font-size: 0.78rem; }
+.platform-plan-permission small { flex: 1 1 100%; color: #647c91; font-size: 0.68rem; }
+.platform-plan-permission .platform-plan-critical { flex: 0 1 auto; color: #875a22; background: #fff3dd; padding: 2px 5px; border-radius: 3px; }
+.platform-plan-permission details { font-size: 0.74rem; color: #4d6b82; }
+.platform-plan-permission details[open] { flex: 1 1 100%; }
+.platform-plan-permission summary { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; border: 1px solid #bacddc; cursor: pointer; list-style: none; }
+.platform-plan-permission summary::-webkit-details-marker { display: none; }
+.platform-plan-permission summary:focus-visible { outline: 2px solid #2676b5; outline-offset: 2px; }
+.platform-plan-permission details p { margin: 5px 0; line-height: 1.5; }
+.platform-editor .platform-plan-switch { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; border: 1px solid #c1d1de; border-radius: 4px; padding: 6px 7px; min-width: 69px; font-size: 0.7rem; background: #f2f6fa; color: #536d83; }
+.platform-editor .platform-plan-switch.is-on { color: #195e4d; border-color: #7cbaa8; background: #eaf5f0; }
+.platform-editor .platform-plan-switch input { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: #266b59; }
+.platform-editor .platform-plan-policy-error { color: #a23535; }

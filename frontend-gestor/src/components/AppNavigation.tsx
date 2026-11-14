@@ -5,13 +5,15 @@ import {
   ValidationIcon,
 } from './Icons'
 
-export type GestorSection = 'shared' | 'home' | 'validations' | 'maintenance' | 'tracking' | 'scan' | 'admin' | 'more'
+export type GestorSection = 'shared' | 'home' | 'validations' | 'maintenance' | 'tracking' | 'scan' | 'admin' | 'more' | 'tools'
 
 export interface AppNavigationProps {
   active: GestorSection
   validationCount: number
   showAdmin: boolean
   canValidate: boolean
+  canScan?: boolean
+  canTools?: boolean
   canShared?: boolean
   canReportOccurrence?: boolean
   isTechnician?: boolean
@@ -26,6 +28,7 @@ const ITEMS = [
   { id: 'home' as const, label: 'Validar', Icon: ValidationIcon },
   { id: 'validations' as const, label: 'Acompanhar', Icon: ChartIcon },
   { id: 'maintenance' as const, label: 'Manutenção', Icon: ChartIcon },
+  { id: 'tools' as const, label: 'Ferramentas', Icon: UsersIcon },
   { id: 'scan' as const, label: 'Ler QR', Icon: CameraIcon },
   { id: 'admin' as const, label: 'Admin', Icon: UsersIcon },
   { id: 'more' as const, label: 'Conta', Icon: UsersIcon },
@@ -36,6 +39,8 @@ export function AppNavigation({
   validationCount,
   showAdmin,
   canValidate,
+  canScan = false,
+  canTools = false,
   canShared = false,
   canReportOccurrence = false,
   isTechnician = false,
@@ -50,7 +55,8 @@ export function AppNavigation({
     if (item.id === 'home') return canValidate || isTechnician || canReportOccurrence
     if (item.id === 'validations') return canReadAnalytics
     if (item.id === 'maintenance') return canManageMaintenance
-    if (item.id === 'scan') return compactDevice
+    if (item.id === 'tools') return canTools
+    if (item.id === 'scan') return canScan
     return true
   })
   return (
