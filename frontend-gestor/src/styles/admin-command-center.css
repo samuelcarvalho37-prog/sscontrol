@@ -9,6 +9,7 @@
   color: #132b40;
   background: #edf2f6;
 }
+.admin-command-center-shell .admin-workspace-editor-tab-close { color: #526579; }
 
 .admin-command-center-shell .admin-desktop-topbar {
   gap: 12px;
@@ -100,6 +101,7 @@
 }
 
 .admin-command-center-shell .admin-desktop-top-actions > button.admin-desktop-avatar {
+  color: #edf5fc;
   background: #102b46;
 }
 
@@ -1261,7 +1263,7 @@
 }
 
 .admin-command-center-shell .admin-user-open__text > small {
-  color: #718397;
+  color: #526579;
   font-size: 0.56rem;
 }
 
@@ -1336,7 +1338,7 @@
 }
 
 .admin-command-center-shell .admin-user-details dt {
-  color: #718397;
+  color: #526579;
 }
 
 .admin-command-center-shell .admin-user-details dd {
@@ -1366,7 +1368,7 @@
 
 .admin-command-center-shell .admin-user-details li span,
 .admin-command-center-shell .admin-user-details section > small {
-  color: #718397;
+  color: #526579;
   font-size: 0.57rem;
 }
 
@@ -1443,7 +1445,7 @@
 
 .admin-command-center-shell .identity-assignment header p {
   margin: 4px 0 0;
-  color: #6a7e91;
+  color: #526579;
   font-size: 0.65rem;
 }
 
@@ -1519,7 +1521,7 @@
 .admin-command-center-shell .identity-specialty-list > small,
 .admin-command-center-shell .identity-scope-empty,
 .admin-command-center-shell .identity-scope-message {
-  color: #718397;
+  color: #526579;
   font-size: 0.64rem;
 }
 
@@ -1561,7 +1563,7 @@
 
 .admin-command-center-shell .identity-scope-tree summary small {
   margin-left: auto;
-  color: #718397;
+  color: #526579;
   font-size: 0.58rem;
   font-weight: 500;
 }
@@ -1665,7 +1667,7 @@
 }
 
 .admin-command-center-shell .admin-users-summary > button > span {
-  color: #718397;
+  color: #526579;
   font-size: 0.52rem;
 }
 
@@ -1685,7 +1687,7 @@
 }
 
 .admin-command-center-shell .admin-user-result-count {
-  color: #8191a1;
+  color: #526579;
   font-size: 0.56rem;
 }
 
@@ -2071,7 +2073,7 @@
 }
 
 .admin-command-center-shell .identity-creation-receipt__content dt {
-  color: #718397;
+  color: #526579;
   font-size: 0.54rem;
   font-weight: 700;
 }
@@ -2340,7 +2342,7 @@
 .admin-command-center-shell .admin-welcome-help {
   flex-wrap: wrap;
   margin-top: 17px;
-  color: #6a7e91;
+  color: #526579;
   font-size: 0.54rem;
 }
 
@@ -2414,7 +2416,7 @@
 
 .admin-command-center-resource-count {
   padding-top: 5px;
-  color: #6a7e91;
+  color: #526579;
   font-size: 0.53rem;
 }
 
@@ -2896,7 +2898,7 @@
 
 .admin-command-center-shell .admin-users-summary span {
   overflow: hidden;
-  color: #718397;
+  color: #526579;
   font-size: 0.52rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3728,7 +3730,7 @@
 }
 
 .admin-command-center-shell .permission-profile-create > small {
-  color: #718397;
+  color: #526579;
   font-size: 0.61rem;
   line-height: 1.45;
 }

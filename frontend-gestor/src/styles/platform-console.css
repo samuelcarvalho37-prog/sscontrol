@@ -90,7 +90,7 @@
 .platform-plan-company select { min-width:0; min-height:36px; padding:6px 9px; border:1px solid #cad8e4; border-radius:6px; background:#fff; color:#172f47; }
 .platform-selected-contract { display:grid; gap:12px; padding:14px; border:1px solid #dce5ed; border-radius:8px; }
 .platform-selected-contract__heading,.platform-selected-contract footer { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.platform-selected-contract__heading > div > span,.platform-selected-contract__metrics > div > span { color:#718599; font-size:10px; }
+.platform-selected-contract__heading > div > span,.platform-selected-contract__metrics > div > span { color:#526579; font-size:10px; }
 .platform-selected-contract__heading h3 { margin-top:4px; font-size:15px; }
 .platform-selected-contract__metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border-block:1px solid #e7edf2; }
 .platform-selected-contract__metrics > div { display:grid; gap:5px; padding:10px 12px 10px 0; }
@@ -100,19 +100,19 @@
 .platform-selected-modules li { display:flex; justify-content:space-between; gap:8px; padding:8px 2px; border-bottom:1px solid #edf1f4; color:#405c74; font-size:11px; }
 .platform-selected-modules li strong { font-size:10px; white-space:nowrap; }
 .platform-selected-modules li strong.is-active { color:#28704e; }
-.platform-selected-modules li strong.is-inactive { color:#718599; }
-.platform-selected-contract footer > span { color:#687e91; font-size:11px; }
+.platform-selected-modules li strong.is-inactive { color:#526579; }
+.platform-selected-contract footer > span { color:#526579; font-size:11px; }
 .platform-selected-contract footer > button { min-height:34px; padding:0 11px; border:1px solid #173b5b; border-radius:6px; background:#12334f; color:#fff; font-size:11px; font-weight:650; }
 .platform-faq-section { margin:8px 16px 16px; border:1px solid #e2e8ee; border-radius:7px; }
 .platform-faq-section > header { padding:11px 13px; border-bottom:1px solid #e7edf2; }
 .platform-faq-section h3 { margin-top:3px; font-size:14px; }
 .platform-module-health { margin:14px 16px 0; border:1px solid #dce5ed; border-radius:8px; background:#fff; }
 .platform-module-health > header { min-height:54px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 13px; border-bottom:1px solid #e7edf2; }
-.platform-module-health > header > span { color:#718599; font-size:10px; }
+.platform-module-health > header > span { color:#526579; font-size:10px; }
 .platform-module-health h3 { margin-top:3px; font-size:14px; }
 .platform-module-health .platform-table { min-width:680px; }
 .platform-module-health .platform-table td { white-space:normal; }
-.platform-module-health__note { padding:0 13px 11px; color:#718599; font-size:10px; }
+.platform-module-health__note { padding:0 13px 11px; color:#526579; font-size:10px; }
 .platform-schedule { display:grid; gap:8px; }
 .platform-schedule label { display:grid; gap:4px; color:#61798d; font-size:10px; }
 .platform-schedule input,.platform-schedule select { width:100%; min-height:34px; padding:5px 8px; border:1px solid #cbd8e4; border-radius:6px; background:#fff; color:#264760; }
@@ -173,7 +173,7 @@
   height: 44px;
 }
 .platform-eyebrow {
-  color: #55758f;
+  color: #526579;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -221,7 +221,7 @@
   font-size: 12px;
 }
 .platform-operator span {
-  color: #718397;
+  color: #526579;
 }
 .platform-operator button {
   min-height: 32px;
@@ -264,7 +264,7 @@
 }
 .platform-summary span,
 .platform-section > header > span {
-  color: #667c90;
+  color: #526579;
   font-size: 12px;
 }
 .platform-summary strong {
@@ -295,7 +295,7 @@
 }
 .platform-section-intro {
   margin-top: 5px;
-  color: #6a7f92;
+  color: #526579;
   font-size: 11px;
 }
 .platform-company-list {
@@ -325,7 +325,7 @@
 .platform-company-card__header > div > span {
   display: block;
   margin-top: 4px;
-  color: #6a7f92;
+  color: #526579;
   font-size: 10px;
   overflow-wrap: anywhere;
 }
@@ -354,7 +354,7 @@
   padding: 11px 12px 9px 0;
 }
 .platform-company-card__details section > span {
-  color: #718599;
+  color: #526579;
   font-size: 10px;
 }
 .platform-company-card__details section > strong {
@@ -362,7 +362,7 @@
   overflow-wrap: anywhere;
 }
 .platform-company-card__details section > small {
-  color: #718599;
+  color: #526579;
   font-size: 10px;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -424,7 +424,7 @@
 .platform-credential-list dt:last-of-type,
 .platform-credential-list dd:last-of-type { border-bottom: 0; }
 .platform-mail-note {
-  color: #6a7f92;
+  color: #526579;
   font-size: 11px;
   line-height: 1.5;
 }
@@ -442,7 +442,7 @@
   height: 38px;
   padding: 0 13px;
   background: #f6f8fa;
-  color: #687e91;
+  color: #526579;
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -460,7 +460,7 @@
 .platform-support-row small {
   display: block;
   margin-top: 4px;
-  color: #73869a;
+  color: #526579;
   font-size: 10px;
 }
 .platform-state {
@@ -495,7 +495,7 @@
 }
 .platform-footnote {
   padding: 9px 13px;
-  color: #73869a;
+  color: #526579;
   font-size: 10px;
 }
 .platform-support-list {
@@ -540,7 +540,7 @@
 .platform-loading {
   padding: 28px;
   text-align: center;
-  color: #6c8194;
+  color: #526579;
   font-size: 13px;
 }
 .tenant-support {

@@ -1,7 +1,7 @@
 /* Central do técnico: escopo próprio, sem alterar TI ou a lousa. */
 html body .app-shell[data-technician-workspace="true"] {
   --tech-bg: #f4f7fb; --tech-panel: #ffffff;
-  --tech-ink: #172f46; --tech-muted: #607387; --tech-line: #d6e1ea;
+  --tech-ink: #172f46; --tech-muted: #52677b; --tech-line: #d6e1ea;
   --background: var(--tech-bg); --surface: var(--tech-panel); --surface-soft: #edf3f8;
   --text: var(--tech-ink); --muted: var(--tech-muted); --line: var(--tech-line);
   --blue: #1769ae; --blue-soft: #e9f2fa; --red: #b82f3b; --orange: #956019;
@@ -36,6 +36,11 @@ html body .app-shell[data-technician-workspace="true"] .technician-dashboard__me
 html body .app-shell[data-technician-workspace="true"] .technician-dashboard__panel { padding: 16px; min-width: 0; }
 html body .app-shell[data-technician-workspace="true"] .technician-dashboard__list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 10px; }
 html body .app-shell[data-technician-workspace="true"] .technician-action { padding: 14px; width: 100%; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard .technician-action { background: var(--tech-panel) !important; }
+html body .app-shell[data-technician-workspace="true"] .technician-action > strong { color: var(--tech-ink); }
+html body .app-shell[data-technician-workspace="true"] .technician-action > span:not(.technician-action__top) { color: var(--tech-ink); }
+html body .app-shell[data-technician-workspace="true"] .technician-action :is(small, em, .technician-action__top strong) { color: var(--tech-muted); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__back { color: var(--blue) !important; }
 html body .app-shell[data-technician-workspace="true"] .technician-action :is(strong,span,small) { min-width: 0; overflow-wrap: anywhere; }
 html body .app-shell[data-technician-workspace="true"] .technician-dashboard :is(input,select,textarea) { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; background: var(--tech-panel); color: var(--tech-ink); border: 1px solid var(--tech-line); border-radius: 4px; }
 html body .app-shell[data-technician-workspace="true"] .technician-dashboard input[type="checkbox"] { width: 20px; min-height: 20px; }

@@ -176,12 +176,12 @@
   padding: 6px 3px;
   gap: 4px;
   border-radius: 14px;
-  color: #6e7c8e;
+  color: #526579;
   font-size: 0.68rem;
 }
 
 .app-shell--manager .app-navigation__item.is-active {
-  color: var(--blue);
+  color: #075ba5;
   background: var(--blue-soft);
 }
 
