@@ -87,7 +87,11 @@ const EQUIPMENT_TYPE_OPTIONS = [
   { value: 'BOILER', label: 'Caldeira / utilidade' },
   { value: 'ELECTRICAL_PANEL', label: 'Painel elétrico' },
   { value: 'INSTRUMENT', label: 'Sensor / instrumento' },
-  { value: 'OTHER', label: 'Outro equipamento' },
+  { value: 'PIPELINE', label: 'Tubulação / trecho' },
+  { value: 'DISTRIBUTION_NETWORK', label: 'Rede de distribuição' },
+  { value: 'RESERVOIR', label: 'Reservatório' },
+  { value: 'TANK', label: 'Tanque de armazenamento' },
+  { value: 'OTHER', label: 'Outro equipamento / instalação' },
 ]
 
 const LEGACY_EQUIPMENT_TYPES: Readonly<Record<string, string>> = {
@@ -223,7 +227,7 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
     defaults: { id: '', planta_id: '', tag: '', nome: '', status: 'ATIVO' },
   },
   linhas: {
-    entity: 'linhas', singular: 'linha', label: 'Linhas de produção', description: 'Linhas vinculadas aos setores da planta.',
+    entity: 'linhas', singular: 'linha', label: 'Linhas / sistemas', description: 'Linhas vinculadas aos setores da planta.',
     columns: [{ key: 'tag', label: 'TAG' }, { key: 'nome', label: 'Nome' }, { key: 'setor_id', label: 'Setor' }, { key: 'status', label: 'Status' }],
     fields: [
       { key: 'setor_id', label: 'Setor', type: 'reference', reference: 'setores', referenceLabel: 'nome', required: true },
@@ -235,13 +239,13 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
   },
   ativos: {
     entity: 'ativos', singular: 'ativo', label: 'Equipamentos e ativos', description: 'Cadastro técnico dos equipamentos monitorados.',
-    columns: [{ key: 'tag', label: 'TAG' }, { key: 'nome', label: 'Equipamento' }, { key: 'linha_id', label: 'Linha' }, { key: 'criticidade', label: 'Criticidade' }, { key: 'status', label: 'Status' }, { key: 'saude_pct', label: 'Saúde' }],
+    columns: [{ key: 'tag', label: 'TAG' }, { key: 'nome', label: 'Equipamento' }, { key: 'linha_id', label: 'Linha / sistema' }, { key: 'criticidade', label: 'Criticidade' }, { key: 'status', label: 'Status' }, { key: 'saude_pct', label: 'Saúde' }],
     fields: [
       { key: 'planta_contexto', label: 'Planta', type: 'reference', reference: 'plantas', referenceLabel: 'nome', required: true, help: 'Filtra os setores e evita procurar em toda a fábrica.' },
       { key: 'setor_contexto', label: 'Setor', type: 'reference', reference: 'setores', referenceLabel: 'nome', dependsOn: { field: 'planta_contexto', targetField: 'planta_id' }, required: true },
-      { key: 'linha_id', label: 'Linha', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
+      { key: 'linha_id', label: 'Linha / sistema', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
       { key: 'tag', label: 'TAG / código', required: true },
-      { key: 'nome', label: 'Nome do equipamento', required: true },
+      { key: 'nome', label: 'Nome do equipamento / instalação', required: true },
       { key: 'tipo', label: 'Tipo de equipamento', type: 'select', options: EQUIPMENT_TYPE_OPTIONS, required: true },
       { key: 'criticidade', label: 'Criticidade', type: 'select', options: CRITICALITY_OPTIONS, required: true },
       { key: 'status', label: 'Status operacional', type: 'select', options: OPERATIONAL_STATUS_OPTIONS, required: true },
@@ -260,7 +264,7 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
     fields: [
       { key: 'planta_contexto', label: 'Planta', type: 'reference', reference: 'plantas', referenceLabel: 'nome', required: true },
       { key: 'setor_contexto', label: 'Setor', type: 'reference', reference: 'setores', referenceLabel: 'nome', dependsOn: { field: 'planta_contexto', targetField: 'planta_id' }, required: true },
-      { key: 'linha_contexto', label: 'Linha', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
+      { key: 'linha_contexto', label: 'Linha / sistema', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
       { key: 'ativo_id', label: 'Ativo', type: 'reference', reference: 'ativos', referenceLabel: 'nome', dependsOn: { field: 'linha_contexto', targetField: 'linha_id' }, required: true },
       { key: 'tag', label: 'TAG / código', required: true },
       { key: 'nome', label: 'Nome do componente', required: true },
@@ -299,7 +303,7 @@ const ENTITY_DEFINITIONS: Record<AdminEntity, EntityDefinition> = {
     fields: [
       { key: 'planta_contexto', label: 'Planta', type: 'reference', reference: 'plantas', referenceLabel: 'nome', required: true },
       { key: 'setor_contexto', label: 'Setor', type: 'reference', reference: 'setores', referenceLabel: 'nome', dependsOn: { field: 'planta_contexto', targetField: 'planta_id' }, required: true },
-      { key: 'linha_contexto', label: 'Linha', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
+      { key: 'linha_contexto', label: 'Linha / sistema', type: 'reference', reference: 'linhas', referenceLabel: 'nome', dependsOn: { field: 'setor_contexto', targetField: 'setor_id' }, required: true },
       { key: 'ativo_id', label: 'Ativo', type: 'reference', reference: 'ativos', referenceLabel: 'nome', dependsOn: { field: 'linha_contexto', targetField: 'linha_id' }, required: true },
       { key: 'componente_id', label: 'Componente (opcional)', type: 'reference', reference: 'componentes', referenceLabel: 'nome', dependsOn: { field: 'ativo_id', targetField: 'ativo_id' } },
       { key: 'checklist_versao_id', label: 'Checklist validado', type: 'checklist', required: true, help: 'Somente modelos publicados, com etapas e compatíveis com o ativo selecionado.' },

@@ -6,5 +6,9 @@ const labels:Record<string,string>={
   EXECUTION_STARTED:'Execução iniciada',EXECUTION_COMPLETED:'Execução concluída',
   QUALITY:'Qualidade',SAFETY:'Segurança',PCM:'PCM',TECNICO:'Técnico',
   LOW:'Baixa',MEDIUM:'Média',HIGH:'Alta',CRITICAL:'Crítica',EXECUTE_CHECKLIST:'Execução de checklist',
+  WORK_ORDER_EXTERNAL_WORK_ENABLED:'Participação externa incluída',
+  WORK_ORDER_EXTERNAL_SERVICE_RECORDED:'Serviço externo registrado',
+  TECHNICIAN_HOURLY_RATE_RECORDED:'Custo por hora registrado',
+  EXTERNAL_LABOR_BUDGET_UPDATED:'Orçamento de mão de obra externa atualizado',
 }
 export function operationalLabel(value:unknown):string|undefined{return labels[String(value??'').trim().toUpperCase()]}

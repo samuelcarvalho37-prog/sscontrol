@@ -1,3 +1,4 @@
+import {listHourlyRates,recordHourlyRate,type HourlyRateInput} from './labor-costs.js';
 import { assertSharedAsset, notifySharedObservers } from './shared-workflow.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { requiresPostInterventionRelease } from './post-intervention-policy.js';
@@ -167,6 +168,111 @@ export class OperationsService {
     private readonly database: Database,
     private readonly objectStorage: ObjectStorage,
   ) {}
+
+  async saveExternalBudget(
+    user: AuthenticatedUser,
+    month: string,
+    amount: number,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          user.tenantId + ':external-budget:' + month,
+        ]);
+        const existing = await client.query(
+          'SELECT amount FROM maintenance.external_labor_budgets WHERE tenant_id=$1 AND month_start=$2::date FOR UPDATE',
+          [user.tenantId, month + '-01'],
+        );
+        const result = await client.query(
+          'INSERT INTO maintenance.external_labor_budgets(tenant_id,month_start,amount,recorded_by) VALUES($1,$2::date,$3,$4) ON CONFLICT(tenant_id,month_start) DO UPDATE SET amount=EXCLUDED.amount,recorded_by=EXCLUDED.recorded_by,updated_at=clock_timestamp() RETURNING amount valor,month_start mes',
+          [user.tenantId, month + '-01', amount, user.id],
+        );
+        await this.repository.writeAudit(
+          client,
+          user.tenantId,
+          user.id,
+          audit,
+          'EXTERNAL_LABOR_BUDGET_UPDATED',
+          'TENANT',
+          user.tenantId,
+          { month, previous_amount: existing.rows[0]?.amount ?? null, amount },
+        );
+        return result.rows[0];
+      },
+    );
+  }
+  async enableExternalWork(
+    user: AuthenticatedUser,
+    workOrderId: string,
+    note: string,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const order = await this.repository.findWorkOrder(client, workOrderId, true);
+        if (!order) throw error('WORK_ORDER_NOT_FOUND', 'Ordem de serviço não encontrada.', 404);
+        if (text(order, 'status') === 'CANCELLED')
+          throw error(
+            'WORK_ORDER_CANCELLED',
+            'Uma OS cancelada não recebe serviços externos.',
+            409,
+          );
+        await client.query(
+          "UPDATE maintenance.work_orders SET execution_mode='MIXED',updated_at=clock_timestamp() WHERE id=$1 AND execution_mode='INTERNAL'",
+          [workOrderId],
+        );
+        await this.repository.writeAudit(
+          client,
+          user.tenantId,
+          user.id,
+          audit,
+          'WORK_ORDER_EXTERNAL_WORK_ENABLED',
+          'WORK_ORDER',
+          workOrderId,
+          { previous_mode: order.execution_mode, justification: note },
+        );
+        return this.requiredWorkOrderDetail(client, workOrderId);
+      },
+    );
+  }
+  async listHourlyRates(user: AuthenticatedUser) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id, readOnly: true },
+      async (client) => ({
+        taxas: await listHourlyRates(client),
+        pessoas: await this.repository.listActiveTechnicians(client),
+      }),
+    );
+  }
+  async recordHourlyRate(
+    user: AuthenticatedUser,
+    input: HourlyRateInput,
+    audit: RequestAuditMetadata,
+  ) {
+    return this.database.withTransaction(
+      { tenantId: user.tenantId, userId: user.id },
+      async (client) => {
+        const people = await this.repository.listActiveTechnicians(client);
+        if (!people.some((person) => person.id === input.userId))
+          throw error('HOURLY_RATE_USER_INVALID', 'Selecione um técnico ativo da equipe.', 422);
+        const rate = await recordHourlyRate(client, user.tenantId, user.id, input);
+        await this.repository.writeAudit(
+          client,
+          user.tenantId,
+          user.id,
+          audit,
+          'TECHNICIAN_HOURLY_RATE_RECORDED',
+          'USER',
+          input.userId,
+          { rate_id: rate.id, hourly_cost: input.hourlyCost },
+        );
+        return rate;
+      },
+    );
+  }
 
   async tracking(user: AuthenticatedUser, search: string, sectorId: string | null, filter: string, page: number) {
     return this.database.withTransaction({tenantId:user.tenantId,userId:user.id,readOnly:true}, async client => {
@@ -364,6 +470,7 @@ export class OperationsService {
     audit: RequestAuditMetadata,
   ) {
     const input: ExternalServiceInput = {
+      costCategory: rawInput.costCategory ?? "UNCLASSIFIED",
       providerName: rawInput.providerName.trim(),
       description: rawInput.description.trim(),
       amount: rawInput.amount,

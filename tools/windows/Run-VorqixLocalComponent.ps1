@@ -6,7 +6,7 @@ if($Component -eq 'API'){
   $protected=Import-Clixml -LiteralPath (Join-Path $paths.Runtime 'runtime-environment.xml')
   foreach($key in $protected.Keys){[Environment]::SetEnvironmentVariable($key,[Net.NetworkCredential]::new('',$protected[$key]).Password,'Process')}
   if($env:DATABASE_URL -notmatch '/vorqix_hml_\d{8}_\d{6}$'){throw 'Este inicializador aceita somente o banco de homologacao.'}
-  $env:APP_RELEASE_VERSION='1.4.0';$env:API_VERSION='2.0.0';$env:SCHEMA_VERSION='postgres-0067';$env:CONTRACT_VERSION='2.0.0';$env:FRONTEND_VERSION='1.4.0'
+  $env:APP_RELEASE_VERSION='1.4.0';$env:API_VERSION='2.0.0';$env:SCHEMA_VERSION='postgres-0069';$env:CONTRACT_VERSION='2.0.0';$env:FRONTEND_VERSION='1.4.0'
   $env:CORS_ALLOWED_ORIGINS='http://127.0.0.1:5183,http://127.0.0.1:5184,http://127.0.0.1:5185,http://127.0.0.1:5186'
   Set-Location (Join-Path $paths.Repository 'backend\node-api')
   & $paths.Node --enable-source-maps dist/server.js

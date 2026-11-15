@@ -2394,4 +2394,15 @@ const routes = new Map(
 export const capabilityDefinition = (id: string) =>
   CAPABILITY_CATALOG.find((item) => item.id === id);
 export const routeCapability = (method: string, path: string, fallback: string) =>
-  routes.get(`${method.toUpperCase()} ${path}`)?.id ?? fallback;
+  routes.get(`${method.toUpperCase()} ${path}`)?.id
+  ?? maintenanceFinancialAliases.get(`${method.toUpperCase()} ${path}`)
+  ?? fallback;
+
+// The added financial controls share the established cost-management permission;
+// no user or role receives a new grant through this delivery.
+const maintenanceFinancialAliases = new Map([
+  ['GET /v1/maintenance/labor-rates', 'access.patch.maintenance.material_usage.materialUsageId.cost'],
+  ['POST /v1/maintenance/labor-rates', 'access.patch.maintenance.material_usage.materialUsageId.cost'],
+  ['POST /v1/maintenance/external-labor-budget', 'access.patch.maintenance.material_usage.materialUsageId.cost'],
+  ['POST /v1/maintenance/work-orders/:workOrderId/enable-external', 'access.post.maintenance.work_orders.workOrderId.external_services'],
+]);

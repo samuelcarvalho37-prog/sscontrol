@@ -49,6 +49,7 @@ export interface WorkOrderCorrectionInput {
 }
 
 export interface ExternalServiceInput {
+  readonly costCategory?: "LABOR" | "PARTS" | "OTHER" | "UNCLASSIFIED";
   readonly providerName: string;
   readonly description: string;
   readonly amount: number | null;

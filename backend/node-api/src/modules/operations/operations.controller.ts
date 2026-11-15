@@ -76,6 +76,7 @@ interface WorkOrderCorrectionBody {
   readonly categoria_melhoria?: ImprovementCategory | null;
 }
 interface ExternalServiceBody {
+  readonly categoria_custo?: "LABOR" | "PARTS" | "OTHER" | "UNCLASSIFIED";
   readonly prestador: string;
   readonly descricao: string;
   readonly valor: number | null;
@@ -325,6 +326,51 @@ export class OperationsController {
       ),
     );
 
+  saveExternalBudget = async (request: FastifyRequest<{ Body: { mes: string; valor: number } }>) =>
+    successEnvelope(
+      request,
+      'external-budget.save',
+      await this.service.saveExternalBudget(
+        user(request),
+        request.body.mes,
+        request.body.valor,
+        audit(request),
+      ),
+    );
+  enableExternalWork = async (
+    request: FastifyRequest<{ Params: Params; Body: { justificativa: string } }>,
+  ) =>
+    successEnvelope(
+      request,
+      'work-orders.enable-external',
+      await this.service.enableExternalWork(
+        user(request),
+        id(request.params, 'workOrderId'),
+        request.body.justificativa,
+        audit(request),
+      ),
+    );
+  listHourlyRates = async (request: FastifyRequest) =>
+    successEnvelope(request, 'labor-rates.list', await this.service.listHourlyRates(user(request)));
+  recordHourlyRate = async (
+    request: FastifyRequest<{
+      Body: { usuario_id: string; custo_hora: number; vigente_desde?: string | null };
+    }>,
+  ) =>
+    successEnvelope(
+      request,
+      'labor-rates.create',
+      await this.service.recordHourlyRate(
+        user(request),
+        {
+          userId: request.body.usuario_id,
+          hourlyCost: request.body.custo_hora,
+          effectiveFrom: request.body.vigente_desde ?? null,
+        },
+        audit(request),
+      ),
+    );
+
   listExternalServices = async (request: FastifyRequest<{ Params: Params }>) =>
     successEnvelope(
       request,
@@ -341,6 +387,7 @@ export class OperationsController {
       user(request),
       id(request.params, 'workOrderId'),
       {
+        costCategory: request.body.categoria_custo ?? "UNCLASSIFIED",
         providerName: request.body.prestador,
         description: request.body.descricao,
         amount: request.body.valor,

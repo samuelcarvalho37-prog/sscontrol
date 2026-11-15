@@ -1,3 +1,4 @@
+import {loadPcmManagement} from './pcm-management.js';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { AnalyticsQuery } from './monitoring.types.js';
 
@@ -196,5 +197,5 @@ export async function loadPcmReports(
      ) AS relatorios`,
     [query.startAt, query.endAt, query.assetId],
   );
-  return result.rows[0]?.relatorios;
+  return { ...(result.rows[0]?.relatorios as Record<string,unknown> ?? {}), gestao: await loadPcmManagement(client,query) };
 }

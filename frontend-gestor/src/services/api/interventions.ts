@@ -74,6 +74,7 @@ export async function cancelAdminIntervention(workOrderId: string, justification
 }
 
 export async function createExternalService(workOrderId: string, input: {
+  costCategory?: string
   provider: string
   description: string
   amount: number | null
@@ -82,7 +83,7 @@ export async function createExternalService(workOrderId: string, input: {
 }): Promise<void> {
   const response = await callApi<{ servico?: { id: string } }>(
     'work-orders.external-services.create',
-    { token: adminToken(), ordem_id: workOrderId, prestador: input.provider, descricao: input.description, valor: input.amount, data_servico: input.serviceDate, observacao: input.notes },
+    { token: adminToken(), ordem_id: workOrderId, categoria_custo:input.costCategory ?? "UNCLASSIFIED", prestador: input.provider, descricao: input.description, valor: input.amount, data_servico: input.serviceDate, observacao: input.notes },
     undefined,
     { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE },
   )

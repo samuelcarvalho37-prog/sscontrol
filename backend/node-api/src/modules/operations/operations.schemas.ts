@@ -119,6 +119,7 @@ export const createWorkOrderBodySchema = Type.Object(
 
 export const externalServiceBodySchema = Type.Object(
   {
+    categoria_custo: Type.Optional(Type.Union([Type.Literal("LABOR"),Type.Literal("PARTS"),Type.Literal("OTHER"),Type.Literal("UNCLASSIFIED")])),
     prestador: Type.String({ minLength: 2, maxLength: 240 }),
     descricao: Type.String({ minLength: 3, maxLength: 2_000 }),
     valor: Type.Union([Type.Null(), Type.Number({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })]),

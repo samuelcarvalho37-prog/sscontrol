@@ -1,4 +1,5 @@
 import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import { Type } from 'typebox';
 
 import { successEnvelopeSchema } from '../auth/auth.schemas.js';
 import type { OperationsController } from './operations.controller.js';
@@ -148,6 +149,35 @@ export function createOperationsRoutes(
         summary: 'Consulta OS, validação, assinaturas e ações.',
       },
       handler: controller.getWorkOrder,
+    });
+    // Reuse the existing financial permissions; never grant cost access to executors.
+    app.get('/v1/maintenance/labor-rates', {
+      preHandler: request => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured },
+      handler: controller.listHourlyRates,
+    });
+    app.post('/v1/maintenance/labor-rates', {
+      preHandler: request => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, body: Type.Object({
+        usuario_id: Type.String({ format: 'uuid' }),
+        custo_hora: Type.Number({ minimum: 0, maximum: 1000000 }),
+        vigente_desde: Type.Optional(Type.Union([Type.Null(), Type.String({ format: 'date-time' })])),
+      }, { additionalProperties: false }) },
+      handler: controller.recordHourlyRate,
+    });
+    app.post('/v1/maintenance/external-labor-budget', {
+      preHandler: request => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, body: Type.Object({
+        mes: Type.String({ pattern: '^[1-9][0-9]{3}-(0[1-9]|1[0-2])$' }),
+        valor: Type.Number({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+      }, { additionalProperties: false }) },
+      handler: controller.saveExternalBudget,
+    });
+    app.post('/v1/maintenance/work-orders/:workOrderId/enable-external', {
+      preHandler: request => app.authorize(request, 'maintenance.work-orders.manage'),
+      schema: { ...secured, params: operationsIdentifierParamsSchema,
+        body: Type.Object({ justificativa: Type.String({ minLength: 10, maxLength: 1000 }) }, { additionalProperties: false }) },
+      handler: controller.enableExternalWork,
     });
     app.get('/v1/maintenance/work-orders/:workOrderId/external-services', {
       preHandler: (request) => app.authorize(request, 'maintenance.work-orders.read'),

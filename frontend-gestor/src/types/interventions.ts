@@ -68,6 +68,7 @@ export interface AdminIntervention {
   criado_em?: string
   atualizado_em?: string
   custos?: {
+    mao_obra_interna?: number | string
     materiais: number | string
     servicos_externos: number | string
     total_realizado: number | string
@@ -76,6 +77,7 @@ export interface AdminIntervention {
     dados_financeiros_pendentes: boolean
   }
   servicos_externos?: Array<{
+    categoria_custo?: string
     id: string
     prestador: string
     descricao: string

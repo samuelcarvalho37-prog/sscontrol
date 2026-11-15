@@ -953,7 +953,7 @@ export class OperationsRepository {
                work_order.released_at AS liberada_em,
                work_order.created_at AS criada_em, work_order.updated_at AS atualizada_em,
                jsonb_build_object(
-                 'materiais', cost.material_cost,
+                 'materiais', cost.material_cost, 'mao_obra_interna',cost.internal_labor_cost,
                  'servicos_externos', cost.external_service_cost,
                  'total_realizado', cost.realized_total,
                  'materiais_sem_preco', cost.materials_pending_price,
@@ -962,7 +962,7 @@ export class OperationsRepository {
                ) AS custos,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', service.id, 'prestador', service.provider_name,
-                 'descricao', service.description, 'valor', service.amount,
+                 'descricao', service.description, 'valor', service.amount, 'categoria_custo',service.cost_category,
                  'data_servico', service.service_date, 'observacao', service.notes,
                  'registrado_em', service.created_at
                ) ORDER BY service.created_at, service.id)
@@ -2799,7 +2799,7 @@ export class OperationsRepository {
     const result = await client.query<OperationsRow>(`
       SELECT service.id,service.provider_name AS prestador,service.description AS descricao,
              service.amount AS valor,service.service_date AS data_servico,
-             service.notes AS observacao,service.recorded_by AS registrado_por,
+             service.cost_category AS categoria_custo,service.notes AS observacao,service.recorded_by AS registrado_por,
              person.name AS registrado_por_nome,service.created_at AS registrado_em
       FROM maintenance.external_services service
       JOIN iam.users person ON person.id=service.recorded_by
@@ -2818,18 +2818,18 @@ export class OperationsRepository {
   ): Promise<OperationsRow> {
     const result = await client.query<OperationsRow>(`
       INSERT INTO maintenance.external_services (
-        tenant_id,work_order_id,provider_name,description,amount,service_date,notes,recorded_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        tenant_id,work_order_id,provider_name,description,amount,service_date,notes,recorded_by,cost_category
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING id,provider_name AS prestador,description AS descricao,amount AS valor,
                 service_date AS data_servico,notes AS observacao,created_at AS registrado_em
-    `,[tenantId,workOrderId,input.providerName,input.description,input.amount,input.serviceDate,input.notes,userId]);
+    `,[tenantId,workOrderId,input.providerName,input.description,input.amount,input.serviceDate,input.notes,userId,input.costCategory ?? "UNCLASSIFIED"]);
     return required(result.rows,'O serviço externo não foi registrado.');
   }
 
   async workOrderCosts(client: PoolClient, workOrderId: string): Promise<OperationsRow> {
     const result = await client.query<OperationsRow>(`
       SELECT work_order_id AS id,material_cost AS materiais,
-             external_service_cost AS servicos_externos,realized_total AS total_realizado,
+             internal_labor_cost AS mao_obra_interna,external_service_cost AS servicos_externos,realized_total AS total_realizado,
              materials_pending_price AS materiais_sem_preco,
              external_services_pending_price AS servicos_sem_preco,
              financial_data_pending AS dados_financeiros_pendentes

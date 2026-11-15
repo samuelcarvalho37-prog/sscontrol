@@ -1353,11 +1353,15 @@ export function nodeActionRequest(
         path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/external-services`,
         token,
       };
+    case "work-orders.enable-external": return {method:"POST",path:'/v1/maintenance/work-orders/'+encodeURIComponent(String(payload.ordem_id))+'/enable-external',token,body:{justificativa:payload.justificativa}};
+    case "external-budget.save": return {method:"POST",path:"/v1/maintenance/external-labor-budget",token,body:{mes:payload.mes,valor:payload.valor}};
+    case "labor-rates.list": return {method:"GET",path:"/v1/maintenance/labor-rates",token};
+    case "labor-rates.create": return {method:"POST",path:"/v1/maintenance/labor-rates",token,body:{usuario_id:payload.usuario_id,custo_hora:payload.custo_hora,vigente_desde:payload.vigente_desde}};
     case "work-orders.external-services.create":
       return {
         method: "POST",
         path: `/v1/maintenance/work-orders/${encodeURIComponent(String(payload.ordem_id))}/external-services`,
-        body: { prestador: payload.prestador, descricao: payload.descricao, valor: payload.valor, data_servico: payload.data_servico, observacao: payload.observacao },
+        body: { categoria_custo:payload.categoria_custo, prestador: payload.prestador, descricao: payload.descricao, valor: payload.valor, data_servico: payload.data_servico, observacao: payload.observacao },
         token,
       };
     case "material-usage.cost.update":
