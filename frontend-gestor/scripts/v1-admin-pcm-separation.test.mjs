@@ -30,7 +30,7 @@ test('PCM recebe navegação própria para reutilizar configurações do domíni
   const app = await source('../src/app/App.tsx')
   const navigation = await source('../src/components/AppNavigation.tsx')
   const workspace = await source('../src/components/PcmMaintenanceWorkspace.tsx')
-  assert.match(app, /canManageMaintenance = \['PCM', 'GESTOR'\]/)
+  assert.match(app, /canManageMaintenance = Boolean\(session\?\.user\.capacidades\?\.includes\('workspace\.maintenance\.open'\)\)/)
   assert.match(app, /section === 'maintenance' && canManageMaintenance/)
   assert.match(navigation, /id: 'maintenance' as const, label: 'Manutenção'/)
   assert.match(navigation, /if \(item\.id === 'maintenance'\) return canManageMaintenance/)

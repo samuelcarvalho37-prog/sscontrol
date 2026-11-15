@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createServer } from 'vite'
+import { fileURLToPath } from 'node:url'
 
 test('acompanhamento separa execução, bloqueios, conclusão e programação vencida', async () => {
-  const server = await createServer({ server: { middlewareMode: true, hmr:false }, appType: 'custom' })
+  const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), configFile: false, server: { middlewareMode: true, hmr:false }, appType: 'custom' })
   try {
     const { trackingState, isTrackingLate, matchesTrackingFilter } = await server.ssrLoadModule('/src/components/pcmTrackingModel.ts')
     const now = Date.parse('2026-11-11T12:00:00Z')

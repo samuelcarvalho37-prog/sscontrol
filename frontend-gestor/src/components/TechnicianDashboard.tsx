@@ -46,6 +46,7 @@ function label(value: string | null | undefined) {
     CORRETIVA: 'Corretiva',
     INSPECTION: 'Inspeção',
     INSPECAO: 'Inspeção',
+    EXECUTE_CHECKLIST: 'Execução de checklist',
     PREDICTIVE: 'Preditiva',
     PREDITIVA: 'Preditiva',
     IMPROVEMENT: 'Melhoria',

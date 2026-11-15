@@ -1,0 +1,132 @@
+/* Shared finish for the existing workspaces. Canvas appearance and permission rules stay independent. */
+html body .workspace-loading { width: 100%; min-height: 100dvh; margin: 0; padding: clamp(24px, 5vw, 64px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 16px; background: #f4f7fb; color: #17324a; }
+html body .workspace-loading h1 { color: inherit; font-size: clamp(23px, 3vw, 32px); }
+html body .workspace-loading p { color: #526579; max-width: 56ch; line-height: 1.6; }
+html body .workspace-loading button { padding: 12px 18px; min-height: 44px; border-radius: 10px; background: #0b65a8; color: #fff; }
+html[data-pcm-dashboard-theme="dark"] body .workspace-loading { background: #102234; color: #edf5fc; }
+html[data-pcm-dashboard-theme="dark"] body .workspace-loading p { color: #aec5d6; }
+.app-shell, .app-frame, .platform-screen, .admin-command-center-shell {
+  --ui-radius: 16px;
+  --ui-control-radius: 10px;
+  --ui-focus: #1671ba;
+  --ui-soft-shadow: 0 6px 24px rgb(16 43 70 / 5%);
+}
+:is(.app-shell, .app-frame, .platform-screen, .admin-command-center-shell) :is(button, a, input, select, textarea):focus-visible,
+.review-dialog :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--ui-focus, #1671ba);
+  outline-offset: 3px;
+}
+:is(.app-shell, .app-frame, .platform-screen) :is(button, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+:is(.app-shell, .app-frame, .platform-screen) button:disabled { cursor: not-allowed; }
+:is(.app-shell, .app-frame) :is(h1, h2, h3) { text-wrap: balance; }
+:is(.app-shell, .app-frame) :is(p, dd, label) { overflow-wrap: anywhere; }
+
+/* Main navigation stays in its current location and retains all profile-specific destinations. */
+html body .app-shell.app-shell--manager > .app-navigation {
+  border-radius: 18px; padding: 8px; gap: 4px;
+  box-shadow: 0 4px 20px rgb(16 43 70 / 8%);
+}
+html body .app-shell.app-shell--manager .app-navigation__item { border-radius: 12px; min-height: 48px; font-size: 12px; font-weight: 650; }
+html body .app-shell.app-shell--manager:not([data-pcm-workspace="true"]) > .topbar { padding: 14px 24px; min-height: 76px; }
+html body .app-shell.app-shell--manager .topbar :is(.logout-button, .manager-notification-trigger) { border-radius: 10px; min-height: 40px; }
+
+/* Requests and the full history are shared by all operational profiles. */
+html body .shared-work {
+  border-radius: 20px; box-shadow: var(--ui-soft-shadow, 0 6px 24px rgb(16 43 70 / 5%));
+  padding: clamp(18px, 2.4vw, 30px); border-color: color-mix(in srgb, currentColor 14%, transparent);
+}
+html body .shared-work h1 { font-size: clamp(22px, 2vw, 28px); letter-spacing: -.025em; line-height: 1.25; }
+html body .shared-work h2 { font-size: clamp(19px, 1.7vw, 23px); line-height: 1.35; }
+html body .shared-work :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  padding: 10px 12px; line-height: 1.4;
+}
+html body .shared-work button { border-radius: 10px; font-weight: 650; }
+html body .shared-work .shared-work__row {
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 14px;
+  padding: 18px 20px; transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+html body .shared-work .shared-work__row:hover { border-color: color-mix(in srgb, currentColor 38%, transparent); box-shadow: 0 3px 12px rgb(16 43 70 / 5%); }
+html body .shared-work .shared-work__row strong { font-size: 15px; font-weight: 650; line-height: 1.5; }
+html body .shared-work .shared-work__row small { font-size: 12px; opacity: .85; }
+html body .shared-work__dialog { border-radius: 20px; box-shadow: 0 22px 70px rgb(8 27 44 / 24%); }
+html body .shared-work__dialog-content { padding: clamp(18px, 3vw, 30px); }
+
+/* Technician workspace: keep the queue, next action and history, with clearer grouping. */
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard { gap: 20px; padding-block: 24px; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard :is(.technician-dashboard__panel, .technician-dashboard__metric, .technician-action) {
+  border-radius: 14px; box-shadow: var(--ui-soft-shadow); border-color: var(--tech-line);
+}
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__panel { padding: 20px; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__heading { border: 0; padding: 0 0 4px; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard h1 { font-size: clamp(23px, 2vw, 28px); letter-spacing: -.025em; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__metric { min-height: 96px; padding: 16px; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-action { border-width: 1px !important; border-left-width: 3px !important; }
+html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard :is(input, select, textarea, button) { border-radius: 10px; }
+
+/* Account, review and planning surfaces use their existing theme-aware colors. */
+html body .app-shell .more-page :is(.connection-panel, .session-panel) { border-radius: 16px; box-shadow: var(--ui-soft-shadow); padding: 22px; }
+html body .app-shell .more-page .page-heading { padding-block: 4px 18px; }
+html body .app-shell .more-page .session-panel dl { gap: 12px; }
+html body .app-shell .more-page .session-panel dl > div { border-radius: 10px; padding: 12px; }
+html body .app-shell .more-page .session-panel dt { font-size: 11px; letter-spacing: .03em; }
+html body .app-shell .more-page .session-panel dd { font-size: 13px; line-height: 1.5; }
+html body .app-shell .profile-experience-hero { border-radius: 20px; margin-bottom: 18px; }
+html body .app-shell .profile-experience-hero h1 { font-size: clamp(23px, 2.8vw, 32px); line-height: 1.2; }
+html body .app-shell .manager-decision-feature { border-radius: 18px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-heading { padding-bottom: 18px; margin-bottom: 20px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-heading h1 { font-size: 24px; letter-spacing: -.025em; }
+html body .app-shell.app-shell--manager[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-entry { border-radius: 12px; min-height: 84px; padding: 20px; transition: border-color 140ms ease, box-shadow 140ms ease; }
+html body .app-shell.app-shell--manager[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-entry:hover { border-color: var(--pcm-shell-muted); box-shadow: 0 4px 16px rgb(8 27 44 / 10%); }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page :is(input:not([type="checkbox"]), select, textarea) { border-radius: 8px; min-height: 40px; }
+html body .app-shell[data-pcm-workspace="true"] .pcm-maintenance-workspace .pcm-planning-page button { border-radius: 8px; }
+html body .validation-gate-dialog { border-radius: 20px; box-shadow: 0 22px 70px rgb(8 27 44 / 24%); }
+html body .validation-gate-dialog > header h2 { font-size: clamp(20px, 2vw, 26px); line-height: 1.3; }
+html body .validation-gate-dialog :is(textarea, footer button) { border-radius: 10px; }
+html body .validation-gate-dialog textarea { padding: 12px; min-height: 100px; }
+html body .validation-gate-dialog > footer { gap: 12px; background: #fff; }
+html body .validation-gate-dialog > footer button:disabled { background: #edf2f7; color: #526579; border: 1px solid #d6e1ea; opacity: 1; }
+
+/* TI and platform keep their window manager and commercial structure. */
+html body .admin-command-center-shell :is(.admin-workspace-editor, .admin-user-panel, .admin-catalog-panel) { border-radius: 12px; }
+html body .admin-command-center-shell :is(.admin-user-result-count, .admin-command-center-resource-count, .admin-welcome-help) { font-size: 12px; }
+html body .admin-command-center-shell .admin-users-summary > button > span { font-size: 11px; }
+html body .admin-command-center-shell :is(input:not([type="checkbox"]):not([type="range"]):not([type="color"]), select, textarea) { border-radius: 8px; min-height: 36px; }
+html body .platform-screen :is(.platform-login, .platform-section, .platform-company-card, .platform-module-health) { border-radius: 14px; }
+html body .platform-screen :is(.platform-section-intro, .platform-footnote, .platform-empty, .platform-module-health__note, .platform-table th, .platform-table td small) { font-size: 12px; line-height: 1.5; }
+html body .platform-screen :is(.platform-primary, .platform-tabs button, .platform-heading > button) { border-radius: 8px; min-height: 40px; }
+
+/* Legacy operator app uses the same spacing and field treatment, preserving its task screens. */
+html body .app-frame .state-panel { border-radius: 18px; }
+html body .app-frame :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: 10px; min-height: 44px; }
+html body .app-frame :is(.primary-button, .secondary-button) { border-radius: 10px; min-height: 44px; }
+
+@media (max-width: 700px) {
+  html body .app-shell.app-shell--manager:not([data-pcm-workspace="true"]) > .topbar { padding: 10px 14px; min-height: 68px; gap: 8px; }
+  html body .app-shell.app-shell--manager .user-badge { max-width: 140px; }
+  html body .app-shell.app-shell--manager > .app-navigation { gap: 2px; padding: 6px; border-radius: 16px; }
+  html body .app-shell.app-shell--manager .app-navigation__item { font-size: 11px; padding: 6px 3px; }
+  html body .shared-work { width: calc(100% - 20px); margin: 12px auto; padding: 18px; border-radius: 16px; }
+  html body .shared-work .shared-work__row { padding: 16px; flex-wrap: wrap; gap: 10px; }
+  html body .shared-work .shared-work__row > span:first-child { flex-basis: 100%; }
+  html body .shared-work__fields { grid-template-columns: minmax(0, 1fr); }
+  html body .app-shell .more-page :is(.connection-panel, .session-panel) { padding: 18px; }
+  html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard { padding: 16px 12px; gap: 16px; }
+  html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__panel { padding: 16px; }
+  html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+  html body .app-shell.app-shell--manager[data-technician-workspace="true"] .technician-dashboard__heading > button { width: auto; min-width: 92px; }
+  html body .validation-gate-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); border-radius: 16px; }
+  html body .validation-gate-dialog > header, html body .validation-gate-dialog__body, html body .validation-gate-dialog > footer { padding: 16px; }
+  html body .validation-gate-dialog > footer { flex-wrap: wrap; }
+  html body .validation-gate-dialog > footer button { flex: 1 1 180px; min-height: 44px; }
+  html body :is(.shared-work, .app-shell .more-page, .pcm-maintenance-workspace, .app-frame) :is(input, select, textarea) { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.app-shell, .app-frame, .platform-screen, .admin-command-center-shell, .review-dialog) *,
+  :is(.app-shell, .app-frame, .platform-screen, .admin-command-center-shell, .review-dialog) *::before,
+  :is(.app-shell, .app-frame, .platform-screen, .admin-command-center-shell, .review-dialog) *::after {
+    scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important;
+  }
+}
+
+html body .admin-command-mobile-block > button { background: #102f40; color: #fff; min-height: 44px; border-radius: 10px; }

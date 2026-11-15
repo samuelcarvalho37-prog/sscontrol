@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { awaitsPostInterventionCompletion } from './postInterventionPolicy'
+import { useDialogFocus } from '../hooks/useDialogFocus'
+import { operationalLabel } from '../../../frontend/src/components/operationalLabels'
 import {
   decideGestorTechnicalDemand,
   getGestorChecklistModelDetail,
@@ -33,6 +35,8 @@ function upper(value: unknown): string {
 }
 
 function humanize(value: unknown): string {
+  const knownLabel = operationalLabel(value)
+  if (knownLabel) return knownLabel
   const normalized = String(value ?? '')
     .trim()
     .replaceAll('_', ' ')
@@ -87,6 +91,7 @@ export function TechnicalDemandDialog({
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState('')
   const [attestationConfirmed, setAttestationConfirmed] = useState(false)
+  const dialogRef = useDialogFocus(onClose, submitting)
 
   useEffect(() => {
     if (!isChecklist(demand) || !demand.entidade_id) return
@@ -222,6 +227,7 @@ export function TechnicalDemandDialog({
   return (
     <div className="review-overlay validation-gate-overlay" role="presentation">
       <section
+        ref={dialogRef}
         className="review-dialog validation-gate-dialog"
         role="dialog"
         aria-modal="true"
@@ -239,7 +245,7 @@ export function TechnicalDemandDialog({
               {demand.ativo_nome ? ` · ${demand.ativo_nome}` : ''}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar">×</button>
+          <button type="button" disabled={submitting} onClick={onClose} aria-label="Fechar">×</button>
         </header>
 
         <div className="validation-gate-dialog__body">

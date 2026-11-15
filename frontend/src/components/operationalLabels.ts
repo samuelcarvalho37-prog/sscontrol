@@ -5,5 +5,6 @@ const labels:Record<string,string>={
   SHARED_REQUEST_CORRECTED:'Solicitação corrigida',WORK_ORDER_RELEASED:'OS liberada',
   EXECUTION_STARTED:'Execução iniciada',EXECUTION_COMPLETED:'Execução concluída',
   QUALITY:'Qualidade',SAFETY:'Segurança',PCM:'PCM',TECNICO:'Técnico',
+  LOW:'Baixa',MEDIUM:'Média',HIGH:'Alta',CRITICAL:'Crítica',EXECUTE_CHECKLIST:'Execução de checklist',
 }
 export function operationalLabel(value:unknown):string|undefined{return labels[String(value??'').trim().toUpperCase()]}

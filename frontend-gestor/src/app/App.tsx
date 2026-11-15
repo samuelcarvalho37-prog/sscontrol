@@ -7,8 +7,9 @@ import { callApi } from '../services/api/client'
 import { adaptPcmAppearance } from '../components/pcmAppearance'
 import type { CSSProperties } from 'react'
 import '../styles/pcm-workspace-shell.css'
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usesSharedHome } from '../../../frontend/src/components/sharedWorkModel'
+import { technicalContextLandingSection } from '../components/workspaceNavigation'
 import { getApiUrl, usesNodeApi } from '../services/api/config'
 import {
   AppNavigation,
@@ -118,6 +119,10 @@ function TenantApp() {
     () => new URLSearchParams(window.location.search).get('maintenance') === '1',
   )
   const [section, setSection] = useState<GestorSection>('home')
+  const contentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }, [section])
   const [trackingChecklistId,setTrackingChecklistId] = useState('')
   const [decisionView, setDecisionView] = useState<GestorWorkView>('demands')
   const [decisionFocus, setDecisionFocus] = useState<GestorDecisionFocus | null>(() => {
@@ -275,7 +280,7 @@ function TenantApp() {
     void getGestorTechnicalContext(controller.signal)
       .then((context) => {
         setTechnicalContext(context)
-        if (!context.pode_validar && !isTechnician) setSection(canReadAnalytics ? 'validations' : 'more')
+        setSection(current => technicalContextLandingSection(current, context.pode_validar, isTechnician, canReadAnalytics))
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
@@ -565,7 +570,7 @@ function TenantApp() {
         </> : null}
         </header>
 
-        <div className="app-content">
+        <div className="app-content" ref={contentRef}>
           {section === 'home' && !isPcmWorkspace && !isTechnician && profileExperience ? (
             <section className="profile-experience-hero" aria-label={`Resumo de ${profileTabTitle(normalizedProfile)}`}>
               <div>
@@ -655,7 +660,7 @@ function TenantApp() {
             />
           ) : null}
           {section === 'tools' && canTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={expireSession} /> : null}
-          {section === 'more' || (section === 'home' && !canAccessDecisionWorkspace && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
+          {section === 'more' || (section === 'home' && !isTechnician && !canUseSharedHome && !canAccessDecisionWorkspace && !canReportOccurrence) || (section === 'validations' && !canReadAnalytics) ? (
             <MorePage session={session} />
           ) : null}
         </div>
@@ -693,5 +698,5 @@ function TenantApp() {
 export function App() {
   const isPlatformRoute = window.location.pathname === '/plataforma'
     || window.location.pathname.startsWith('/plataforma/')
-  return <WorkspaceLoadBoundary><Suspense fallback={<main role="status" aria-live="polite" className="content"><h1>Carregando área de trabalho…</h1><p>Aguarde enquanto os recursos desta área são preparados.</p></main>}>{isPlatformRoute ? <PlatformConsole /> : <TenantApp />}</Suspense></WorkspaceLoadBoundary>
+  return <WorkspaceLoadBoundary><Suspense fallback={<main role="status" aria-live="polite" className="content workspace-loading"><h1>Carregando área de trabalho…</h1><p>Aguarde enquanto os recursos desta área são preparados.</p></main>}>{isPlatformRoute ? <PlatformConsole /> : <TenantApp />}</Suspense></WorkspaceLoadBoundary>
 }
