@@ -34,3 +34,11 @@ Esta revisão não equivale a testar todos os formulários e estados de cada mó
 ## Pendência funcional observada
 
 Os usuários de Qualidade e Segurança foram direcionados ao shell PCM, exibindo somente Ferramentas e Conta. Em Qualidade, Ferramentas informou revisão habilitada sem consulta à lista/detalhes. Isso limita a revisão visual do fluxo de validação. Investigar separadamente o direcionamento em `workspaceExperience` e as capacidades efetivas; não ampliar permissões como solução para um problema visual.
+
+### Correção posterior no mesmo dia
+
+O direcionamento foi corrigido: a categoria de autorização `MANAGER` é compartilhada pelos validadores e pelo PCM. `workspaceExperience` agora mantém as identidades de Qualidade e Segurança na área operacional de validação, antes de aplicar o fallback genérico de gestor. O tipo administrativo continua prioritário. Não houve alteração no banco, nos vínculos ou nas capacidades de acesso.
+
+Verificado com login real de homologação: Qualidade e Segurança exibiram `Validar` com duas pendências e seis relatórios técnicos. A Qualidade abriu a lista compartilhada com 14 OS. A Segurança abriu e fechou o detalhe da liberação pós-intervenção sem assumir, corrigir ou assinar. Dois testes executáveis cobrem os validadores com tipo MANAGER e a preservação de PCM, TI e operação; a compilação passou.
+
+A mensagem da ferramenta genérica de revisão sobre ausência de consulta de checklists continua respeitando as permissões existentes. A área `Validar` usa as demandas técnicas já autorizadas; esta correção não concede acesso ao catálogo de checklists.
