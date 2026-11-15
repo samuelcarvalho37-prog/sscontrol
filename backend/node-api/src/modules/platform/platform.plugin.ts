@@ -1,3 +1,4 @@
+import { PERMISSION_CATALOG } from '../auth/permission-catalog.js';
 import {
   createDecipheriv,
   createHash,
@@ -15,6 +16,14 @@ import { successEnvelope } from '../../core/http/envelope.js';
 import { readAllCapabilityTelemetry } from '../admin/integrity-telemetry.js';
 import { PasswordService } from '../auth/password.service.js';
 import { ObjectStorageError, type StoredObject } from '../../infrastructure/storage/object-storage.js';
+
+const permissionPolicySchema = Type.Object({personalizavel: Type.Boolean(),permissoes: Type.Union([Type.Null(),Type.Array(Type.String({minLength:1,maxLength:220}),{maxItems:500,uniqueItems:true})])},{additionalProperties:false});
+
+function validatePermissionPolicy(policy: {personalizavel:boolean;permissoes: string[] | null} | undefined): void {
+  if (policy?.permissoes?.some(code => !PERMISSION_CATALOG.some(item => item.id === code))) {
+    throw new AppError({code:'PLATFORM_PERMISSION_UNKNOWN',message:'Selecione somente funções disponíveis no catálogo de permissões.',statusCode:422});
+  }
+}
 
 const SESSION_MINUTES = 30;
 const AUTH_FAILURE = new AppError({
@@ -302,6 +311,30 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
     },
   });
 
+  app.get('/v1/platform/permissions/catalog', {
+    preHandler: async (request) => { await authenticatePlatform(request); },
+    handler: async (request) => successEnvelope(request, 'platform.permissions.catalog', { items: PERMISSION_CATALOG }),
+  });
+  app.get('/v1/platform/plans/:planId/permissions', {
+    preHandler: async (request) => { await authenticatePlatform(request); },
+    schema: { params: Type.Object({ planId: Type.String({ format: 'uuid' }) }) },
+    handler: async (request) => {
+      const result = await app.database.query<{ policy: unknown }>('SELECT platform.read_console_permission_policy($1) AS policy', [request.params.planId]);
+      if (!result.rows[0]?.policy) throw new AppError({code:'PLATFORM_PLAN_NOT_FOUND',message:'Plano não encontrado.',statusCode:404});
+      return successEnvelope(request, 'platform.permissions.read', result.rows[0].policy);
+    },
+  });
+  app.put('/v1/platform/plans/:planId/permissions', {
+    preHandler: async (request) => { await authenticatePlatform(request); },
+    schema: { params: Type.Object({ planId: Type.String({ format: 'uuid' }) }), body: permissionPolicySchema },
+    handler: async (request) => {
+      const identity = await authenticatePlatform(request);
+      validatePermissionPolicy(request.body);
+      await app.database.query('SELECT platform.save_console_permission_policy($1,$2,$3,$4,$5)', [identity.operatorId,request.params.planId,request.body.personalizavel,request.body.permissoes,request.id]);
+      return successEnvelope(request,'platform.permissions.save',{saved:true});
+    },
+  });
+
   app.put('/v1/platform/plans/:planId', {
     preHandler: async (request) => { await authenticatePlatform(request); },
     schema: {
@@ -313,15 +346,17 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
         status: Type.Union([Type.Literal('DRAFT'), Type.Literal('ACTIVE'), Type.Literal('RETIRED')]),
         monthly_price: Type.Number({ minimum: 0, maximum: 100000000 }),
         feature_codes: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 100 }),
+        permission_policy: Type.Optional(permissionPolicySchema),
       }, { additionalProperties: false }),
     },
     handler: async (request) => {
       const identity = await authenticatePlatform(request);
+      validatePermissionPolicy(request.body.permission_policy);
       const result = await app.database.query<{ plan_id: string }>(
-        'SELECT platform.save_console_plan($1,$2,$3,$4,$5,$6,$7,$8,$9) AS plan_id',
+        `WITH saved AS MATERIALIZED (SELECT platform.save_console_plan($1,$2,$3,$4,$5,$6,$7,$8,$9) AS plan_id) SELECT plan_id,platform.save_console_permission_policy($1,plan_id,$10,$11,$9) FROM saved`,
         [identity.operatorId, request.params.planId, request.body.code, request.body.name,
           request.body.description, request.body.status, request.body.monthly_price,
-          request.body.feature_codes, request.id],
+          request.body.feature_codes, request.id, request.body.permission_policy?.personalizavel ?? false, request.body.permission_policy?.permissoes ?? null],
       );
       return successEnvelope(request, 'platform.plans.save', { plan_id: result.rows[0]?.plan_id });
     },
@@ -336,15 +371,33 @@ const platformRoutes: FastifyPluginAsyncTypebox = (app) => {
       status: Type.Union([Type.Literal('DRAFT'), Type.Literal('ACTIVE'), Type.Literal('RETIRED')]),
       monthly_price: Type.Number({ minimum: 0, maximum: 100000000 }),
       feature_codes: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 100 }),
+        permission_policy: Type.Optional(permissionPolicySchema),
     }, { additionalProperties: false }) },
     handler: async (request) => {
       const identity = await authenticatePlatform(request);
+      validatePermissionPolicy(request.body.permission_policy);
       const result = await app.database.query<{ plan_id: string }>(
-        'SELECT platform.save_console_plan($1,NULL,$2,$3,$4,$5,$6,$7,$8) AS plan_id',
+        `WITH saved AS MATERIALIZED (SELECT platform.save_console_plan($1,NULL,$2,$3,$4,$5,$6,$7,$8) AS plan_id) SELECT plan_id,platform.save_console_permission_policy($1,plan_id,$9,$10,$8) FROM saved`,
         [identity.operatorId, request.body.code, request.body.name, request.body.description,
-          request.body.status, request.body.monthly_price, request.body.feature_codes, request.id],
+          request.body.status, request.body.monthly_price, request.body.feature_codes, request.id, request.body.permission_policy?.personalizavel ?? false, request.body.permission_policy?.permissoes ?? null],
       );
       return successEnvelope(request, 'platform.plans.save', { plan_id: result.rows[0]?.plan_id });
+    },
+  });
+
+  app.patch('/v1/platform/tenants/:tenantId/status', {
+    preHandler: async (request) => { await authenticatePlatform(request); },
+    schema: {
+      params: Type.Object({ tenantId: Type.String({ format: 'uuid' }) }),
+      body: Type.Object({ status: Type.Union([Type.Literal('ACTIVE'), Type.Literal('SUSPENDED')]) }, { additionalProperties: false }),
+    },
+    handler: async (request) => {
+      const identity = await authenticatePlatform(request);
+      const result = await app.database.query<{ status: string }>(
+        'SELECT platform.set_console_tenant_status($1,$2,$3,$4) AS status',
+        [identity.operatorId, request.params.tenantId, request.body.status, request.id],
+      );
+      return successEnvelope(request, 'platform.tenants.status.update', { status: result.rows[0]?.status });
     },
   });
 

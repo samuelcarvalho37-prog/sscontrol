@@ -1,3 +1,4 @@
+import { permitsRequest } from '../auth/permission-check.js';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { PoolClient } from 'pg';
@@ -429,10 +430,10 @@ export class CatalogService {
       async (client) => {
         const asset = await this.repository.findAsset(client, assetId);
         if (!asset) throw notFound('Ativo');
-        const components = await this.repository.listComponents(client, assetId);
-        const parameters = await this.repository.getAssetParameters(client, assetId);
-        const alerts = await this.repository.getAssetAlerts(client, assetId);
-        const history = await this.repository.getAssetHistory(client, assetId);
+        const components = permitsRequest(user,'GET','/v1/cmms/assets/:assetId/components','cmms.assets.read') ? await this.repository.listComponents(client, assetId) : [];
+        const parameters = permitsRequest(user,'GET','/v1/cmms/parameters/:parameterId/readings','cmms.parameters.read') ? await this.repository.getAssetParameters(client, assetId) : [];
+        const alerts = permitsRequest(user,'GET','/v1/maintenance/alerts','maintenance.alerts.read') ? await this.repository.getAssetAlerts(client, assetId) : [];
+        const history = permitsRequest(user,'GET','/v1/cmms/assets/:assetId/history','cmms.assets.read') ? await this.repository.getAssetHistory(client, assetId) : [];
         return {
           ativo: asset,
           componentes: components,
@@ -471,27 +472,27 @@ export class CatalogService {
           : null;
 
         // Uma transação usa uma conexão; consultas concorrentes no mesmo client não são seguras.
-        const components = await this.repository.listComponents(client, assetId);
-        const parameters = await this.repository.getAssetParameters(client, assetId);
-        const actions = await this.repository.getQrPendingActions(
+        const components = permitsRequest(user,'GET','/v1/cmms/assets/:assetId/components','cmms.assets.read') ? await this.repository.listComponents(client, assetId) : [];
+        const parameters = permitsRequest(user,'GET','/v1/cmms/parameters/:parameterId/readings','cmms.parameters.read') ? await this.repository.getAssetParameters(client, assetId) : [];
+        const actions = permitsRequest(user,'GET','/v1/maintenance/operator-actions','maintenance.executions.read') ? await this.repository.getQrPendingActions(
           client,
           assetId,
           componentId,
           user.id,
-        );
-        const historyRows = await this.repository.getAssetHistoryPage(
+        ) : [];
+        const historyRows = permitsRequest(user,'GET','/v1/cmms/assets/:assetId/history','cmms.assets.read') ? await this.repository.getAssetHistoryPage(
           client,
           assetId,
           componentId,
           null,
           4,
-        );
-        const stop = await this.repository.getQrOpenStop(client, assetId);
-        const occurrences = await this.repository.getQrOpenOccurrences(
+        ) : [];
+        const stop = permitsRequest(user,'GET','/v1/maintenance/stops','maintenance.stops.read') ? await this.repository.getQrOpenStop(client, assetId) : null;
+        const occurrences = permitsRequest(user,'GET','/v1/maintenance/occurrences','maintenance.occurrences.read') ? await this.repository.getQrOpenOccurrences(
           client,
           assetId,
           componentId,
-        );
+        ) : [];
 
         const history = historyRows.slice(0, 4);
         const hasMoreHistory = historyRows.length > 4;

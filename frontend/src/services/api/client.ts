@@ -1,3 +1,4 @@
+import { emitAccessBlock } from '../auth/accessBlock';
 import type { ApiEnvelope } from "../../types/api";
 import { getApiTransport, getApiUrl, getDevelopmentTenantSlug, getLegacyApiUrl } from "./config";
 
@@ -23,6 +24,7 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
     this.name = "ApiRequestError";
+    emitAccessBlock(code);
   }
 }
 
@@ -976,6 +978,7 @@ function nodeActionRequest(
             version: data.release_version,
             perfil: user?.perfil ?? "",
             usuario_id: user?.id ?? "",
+            usuario: user,
             elapsed_internal_ms: 0,
             loaded_tables: 0,
           };

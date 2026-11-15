@@ -1,3 +1,4 @@
+import { accessBlockMessage, isAccessBlockCode } from '../../../frontend/src/services/auth/accessBlock'
 import { useEffect, useState, type FormEvent, type PointerEvent } from 'react'
 import '../styles/login-refinement.css'
 import { ApiConnectionPanel } from '../components/ApiConnectionPanel'
@@ -17,6 +18,7 @@ import { ApiRequestError } from '../services/api/client'
 import { getApiUrl } from '../services/api/config'
 import { getSystemHealth } from '../services/api/system'
 import {
+  consumeAuthenticationMessage,
   hasCompletedLoginBootstrap,
   markLoginBootstrapCompleted,
 } from '../services/auth/session'
@@ -94,7 +96,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [showConnection, setShowConnection] = useState(() => !getApiUrl())
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(consumeAuthenticationMessage)
 
   useEffect(() => {
     if (view !== 'startup') return
@@ -241,6 +243,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       })
     } catch (cause) {
       if (cause instanceof ApiRequestError) {
+        if (isAccessBlockCode(cause.code)) {
+          setError(accessBlockMessage(cause.code, portal.profile === 'ADMIN'))
+          return
+        }
         if (cause.code === 'CORS_ORIGIN_DENIED') {
           setError('O endereço deste portal não está autorizado na API. Verifique a configuração da conexão.')
           return

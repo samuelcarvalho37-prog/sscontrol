@@ -11,7 +11,11 @@ import {
   listPlatformPlans,
   listPlatformFeatures,
   savePlatformPlan,
+  getPlatformPermissionCatalog,
+  getPlatformPlanPermissions,
+  type PlatformPermissionDefinition,
   updatePlatformTenantSubscription,
+  updatePlatformTenantStatus,
   loginPlatform,
   logoutPlatform,
   readPlatformTelemetry,
@@ -28,6 +32,9 @@ import {
   PLATFORM_DEMO_TELEMETRY,
   PLATFORM_DEMO_TENANTS,
 } from "./platformDemoData";
+
+type PlanPreset = "BASIC" | "INITIAL" | "BUSINESS" | "COMPLETE" | "CUSTOM";
+const PLAN_PRESET_LABELS: Record<PlanPreset, string> = { BASIC: "Básico", INITIAL: "Inicial", BUSINESS: "Empresarial", COMPLETE: "Completo", CUSTOM: "Personalizado" };
 
 const SESSION_KEY = "vorqix.platform.session.v1";
 
@@ -124,6 +131,7 @@ export function PlatformConsole() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [tenants, setTenants] = useState<PlatformTenantSummary[]>([]);
+  const [statusTenant, setStatusTenant] = useState<PlatformTenantSummary | null>(null);
   const [telemetry, setTelemetry] = useState<
     Array<{ tenant_id: string; modules: PlatformModuleMetric[] }>
   >([]);
@@ -143,13 +151,21 @@ export function PlatformConsole() {
   const [companySlug, setCompanySlug] = useState("");
   const [editingPlan, setEditingPlan] = useState<PlatformPlan | null>(null);
   const [planEditorOpen, setPlanEditorOpen] = useState(false);
-  const [planPreset, setPlanPreset] = useState<"COMPLETE" | "CUSTOM">("CUSTOM");
+  const [planPreset, setPlanPreset] = useState<PlanPreset>("CUSTOM");
   const [planName, setPlanName] = useState("");
   const [planCode, setPlanCode] = useState("");
   const [planCodeTouched, setPlanCodeTouched] = useState(false);
   const [planDescription, setPlanDescription] = useState("");
   const [planStatus, setPlanStatus] = useState<PlatformPlan["status"]>("DRAFT");
   const [planPrice, setPlanPrice] = useState("0");
+  const [planFeatureCodes, setPlanFeatureCodes] = useState<string[]>([]);
+  const [permissionCatalog, setPermissionCatalog] = useState<PlatformPermissionDefinition[]>([]);
+  const [planPermissionCodes, setPlanPermissionCodes] = useState<string[] | null>([]);
+  const [planPersonalizable, setPlanPersonalizable] = useState(false);
+  const [planPolicyLoading, setPlanPolicyLoading] = useState(false);
+  const [planPolicyError, setPlanPolicyError] = useState("");
+  const [planPermissionSearch, setPlanPermissionSearch] = useState("");
+  const [changedPlanPermissions, setChangedPlanPermissions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -166,19 +182,76 @@ export function PlatformConsole() {
       .toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "").slice(0, 80);
   }
 
-  function openPlanEditor(plan: PlatformPlan | null, preset: "COMPLETE" | "CUSTOM" = "CUSTOM") {
-    setEditingPlan(plan);
+  function applyPlanPreset(preset: PlanPreset) {
     setPlanPreset(preset);
-    setPlanName(plan?.name ?? (preset === "COMPLETE" ? "Plano Completo" : ""));
-    setPlanCode(plan?.code ?? (preset === "COMPLETE" ? "COMPLETO" : ""));
-    setPlanCodeTouched(Boolean(plan));
-    setPlanDescription(plan?.description ?? (preset === "COMPLETE"
-      ? "Plano de demonstração com todos os módulos do catálogo VORQIX. As permissões individuais continuam vinculadas aos perfis de usuário."
-      : ""));
-    setPlanStatus(plan?.status ?? (preset === "COMPLETE" ? "ACTIVE" : "DRAFT"));
-    setPlanPrice(String(plan?.monthly_price ?? 0));
+    setChangedPlanPermissions([]);
+    setPlanName(preset === "CUSTOM" ? "" : `Plano ${PLAN_PRESET_LABELS[preset]}`);
+    setPlanCode(preset === "BASIC" ? "BASICO" : preset === "INITIAL" ? "INICIAL" : preset === "BUSINESS" ? "EMPRESARIAL" : preset === "COMPLETE" ? "COMPLETO" : "");
+    setPlanCodeTouched(false);
+    setPlanDescription("");
+    setPlanStatus("DRAFT");
+    setPlanPrice("0");
+    setPlanFeatureCodes(preset === "CUSTOM" ? [] : features.map((feature) => feature.code));
+    setPlanPersonalizable(preset === "BUSINESS" || preset === "COMPLETE");
+    setPlanPermissionCodes(preset === "CUSTOM" ? [] : preset === "BASIC" ? permissionCatalog.filter((item) => item.id !== "workspace.tracking.open").map((item) => item.id) : null);
+  }
+
+  function openPlanEditor(plan: PlatformPlan | null, preset: PlanPreset = "CUSTOM") {
+    setError("");
+    setNotice("");
+    setChangedPlanPermissions([]);
+    setPlanPolicyError("");
+    setPlanPermissionSearch("");
+    setEditingPlan(plan);
+    if (plan) {
+      setPlanPreset("CUSTOM");
+      setPlanName(plan.name);
+      setPlanCode(plan.code);
+      setPlanCodeTouched(true);
+      setPlanDescription(plan.description);
+      setPlanStatus(plan.status);
+      setPlanPrice(String(plan.monthly_price));
+      setPlanFeatureCodes(plan.features.map((feature) => feature.code));
+      setPlanPermissionCodes([]);
+      setPlanPersonalizable(false);
+    } else applyPlanPreset(preset);
+    setPlanPolicyLoading(true);
     setPlanEditorOpen(true);
   }
+
+  useEffect(() => {
+    if (!planEditorOpen || !session || session.development) return;
+    const controller = new AbortController();
+    setPlanPolicyLoading(true);
+    setPlanPolicyError("");
+    void Promise.all([
+      getPlatformPermissionCatalog(session.token, controller.signal),
+      editingPlan ? getPlatformPlanPermissions(session.token, editingPlan.plan_id, controller.signal) : Promise.resolve(null),
+    ]).then(([catalog, policy]) => {
+      if (controller.signal.aborted) return;
+      setPermissionCatalog(catalog.items);
+      if (policy) {
+        setPlanPersonalizable(policy.personalizavel);
+        setPlanPermissionCodes(policy.permissoes);
+      } else {
+        setPlanPermissionCodes(planPreset === "CUSTOM" ? [] : planPreset === "BASIC" ? catalog.items.filter((item) => item.id !== "workspace.tracking.open").map((item) => item.id) : null);
+      }
+    }).catch((cause) => {
+      if (!controller.signal.aborted) setPlanPolicyError(cause instanceof Error ? cause.message : "Não foi possível carregar as permissões do plano.");
+    }).finally(() => { if (!controller.signal.aborted) setPlanPolicyLoading(false); });
+    return () => controller.abort();
+  }, [planEditorOpen, editingPlan?.plan_id, session?.token, session?.development, planPreset]);
+
+  function togglePlanPermission(id: string, allowed: boolean) {
+    setChangedPlanPermissions((current) => [...new Set([...current, id])]);
+    const selected = planPermissionCodes ?? permissionCatalog.map((item) => item.id);
+    setPlanPermissionCodes(allowed ? [...new Set([...selected, id])] : selected.filter((code) => code !== id));
+  }
+
+  const planPermissionGroups = [...new Set(permissionCatalog.map((item) => item.grupo))].map((group) => ({
+    group,
+    items: permissionCatalog.filter((item) => item.grupo === group && `${item.nome} ${item.acao} ${item.impacto}`.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").toLocaleLowerCase("pt-BR").includes(planPermissionSearch.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").toLocaleLowerCase("pt-BR"))),
+  })).filter(({ items }) => items.length);
 
   function openTenantPlan(tenant: PlatformTenantSummary | null) {
     setEditingTenant(tenant);
@@ -394,6 +467,20 @@ export function PlatformConsole() {
     }
   }
 
+  async function changeTenantStatus() {
+    if (!session || !statusTenant || session.development || saving) return;
+    const target = statusTenant;
+    const nextStatus = target.tenant_status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    setSaving(true); setError('');
+    try {
+      await updatePlatformTenantStatus(session.token, target.tenant_id, nextStatus);
+      setStatusTenant(null);
+      await loadConsole(session);
+      setNotice(`${target.display_name}: ${nextStatus === 'ACTIVE' ? 'empresa reativada' : 'acesso desativado'}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível alterar o acesso da empresa.'); }
+    finally { setSaving(false); }
+  }
+
   async function saveTenant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session || !editingTenant) return;
@@ -477,19 +564,21 @@ export function PlatformConsole() {
 
   async function savePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session) return;
+    if (!session || saving || planPolicyLoading || planPolicyError) return;
     const form = new FormData(event.currentTarget);
     setSaving(true); setError("");
     try {
+      const allowed = permissionCatalog.filter((item) => (!item.feature || planFeatureCodes.includes(item.feature)) && (planPermissionCodes === null || planPermissionCodes.includes(item.id))).map((item) => item.id);
       await savePlatformPlan(session.token, {
         ...(editingPlan ? { plan_id: editingPlan.plan_id } : {}),
         code: String(form.get("code")).trim().toUpperCase(), name: String(form.get("name")).trim(),
         description: String(form.get("description")).trim(), status: String(form.get("status")) as PlatformPlan["status"],
         monthly_price: Number(form.get("monthly_price")),
-        feature_codes: form.getAll("feature_codes").map(String),
+        feature_codes: planFeatureCodes,
+        permission_policy: { personalizavel: planPersonalizable, permissoes: planPermissionCodes === null && allowed.length === permissionCatalog.length ? null : allowed },
       });
-      setEditingPlan(null); setPlanEditorOpen(false); await loadConsole(session); setNotice("Plano salvo no catálogo comercial.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o plano."); }
+      setEditingPlan(null); setPlanEditorOpen(false); await loadConsole(session); setNotice("Plano e permissões salvos no catálogo comercial.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o plano e suas permissões."); }
     finally { setSaving(false); }
   }
 
@@ -658,7 +747,7 @@ export function PlatformConsole() {
               return <article className="platform-company-card" key={tenant.tenant_id}>
                 <header className="platform-company-card__header">
                   <div><h3>{tenant.display_name}</h3><span>{tenant.slug} · {tenant.environment}</span></div>
-                  <span className={`platform-company-status ${tenant.tenant_status === "ACTIVE" ? "is-active" : ""}`}>{tenant.tenant_status === "ACTIVE" ? "Empresa ativa" : tenant.tenant_status}</span>
+                  <span className={`platform-company-status ${tenant.tenant_status === "ACTIVE" ? "is-active" : ""}`}>{tenant.tenant_status === "ACTIVE" ? "Empresa ativa" : tenant.tenant_status === "SUSPENDED" ? "Empresa desativada" : tenant.tenant_status}</span>
                 </header>
                 <div className="platform-company-card__details">
                   <section><span>Plano</span><strong>{tenant.plan_name ?? "Nenhum plano"}</strong><small>{subscriptionActive ? "Assinatura ativa" : tenant.subscription_status ?? "Ainda não contratado"}</small></section>
@@ -668,6 +757,7 @@ export function PlatformConsole() {
                 </div>
                 <footer className="platform-company-card__actions">
                   <button type="button" disabled={session.development} onClick={() => openTenantPlan(tenant)}>{subscriptionActive ? "Gerenciar plano" : "Ativar plano"}</button>
+                  <button type="button" disabled={session.development || saving || tenant.tenant_status === 'ARCHIVED'} onClick={() => setStatusTenant(tenant)}>{tenant.tenant_status === 'ACTIVE' ? 'Desativar empresa' : 'Reativar empresa'}</button>
                   {!tenant.initial_admin_created ? <button type="button" className="platform-secondary-button" disabled={session.development || saving} onClick={() => { setAccessError(""); setAccessTenant(tenant); }}>Criar primeiro acesso TI</button> : null}
                 </footer>
               </article>;
@@ -773,16 +863,38 @@ export function PlatformConsole() {
               </article>;
             })()}
           </div>
-          <div className="platform-plan-grid">{plans.map(plan => <article key={plan.plan_id}><div><strong>{plan.name}</strong><span>{plan.code} · {plan.status}</span></div><b>{new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(Number(plan.monthly_price))}/mês</b><p>{plan.description || "Sem descrição."}</p><small>{plan.features.map(feature => feature.name).join(" · ") || "Sem módulos incluídos"}</small><button type="button" className="platform-link-button" disabled={session.development} onClick={() => { setEditingPlan(plan); setPlanEditorOpen(true); }}>Editar plano</button></article>)}</div>
+          <div className="platform-plan-grid">{plans.map(plan => <article key={plan.plan_id}><div><strong>{plan.name}</strong><span>{plan.code} · {plan.status}</span></div><b>{new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(Number(plan.monthly_price))}/mês</b><p>{plan.description || "Sem descrição."}</p><small>{plan.features.map(feature => feature.name).join(" · ") || "Sem módulos incluídos"}</small><button type="button" className="platform-link-button" disabled={session.development} onClick={() => openPlanEditor(plan)}>Editar plano</button></article>)}</div>
           {!plans.length ? <p className="platform-empty">Nenhum plano cadastrado. Use “Criar plano completo” para preparar o pacote com todos os módulos da demonstração.</p> : null}
         </section> : null}
 
       </div>
+      {statusTenant ? <div className="platform-modal-backdrop"><section className="platform-editor" role="dialog" aria-modal="true" aria-labelledby="company-status-title"><header><h2 id="company-status-title">{statusTenant.tenant_status === 'ACTIVE' ? 'Desativar empresa' : 'Reativar empresa'}</h2></header><p><strong>{statusTenant.display_name}</strong></p>{error ? <p className="platform-error" role="alert">{error}</p> : null}<p>{statusTenant.tenant_status === 'ACTIVE' ? 'Os usuários perderão o acesso ao ambiente. Os dados e o contrato serão preservados.' : 'O acesso ao ambiente será liberado conforme as permissões e o contrato existentes.'}</p><footer><button type="button" disabled={saving} onClick={() => setStatusTenant(null)}>Cancelar</button><button type="button" className="platform-primary" disabled={saving} onClick={() => void changeTenantStatus()}>{saving ? 'Salvando…' : 'Confirmar'}</button></footer></section></div> : null}
       {editingTenant ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) openTenantPlan(null); }}><form key={editingTenant.tenant_id} className="platform-editor" onSubmit={(event) => void saveTenant(event)}><header><div><span className="platform-eyebrow">CONTRATO DA EMPRESA</span><h2>Ativar ou alterar plano</h2></div><button type="button" onClick={() => openTenantPlan(null)}>Fechar</button></header><label>Empresa<select value={editingTenant.tenant_id} onChange={(event) => { const selected = customerTenants.find((tenant) => tenant.tenant_id === event.target.value); if (selected) openTenantPlan(selected); }} required>{customerTenants.map((tenant) => <option key={tenant.tenant_id} value={tenant.tenant_id}>{tenant.display_name}</option>)}</select></label><label>Plano<select name="plan_id" defaultValue={plans.find(plan => plan.code === editingTenant.plan_code)?.plan_id ?? plans.find(plan => plan.status === "ACTIVE")?.plan_id ?? ""} onChange={(event) => { const selected = plans.find((plan) => plan.plan_id === event.target.value); setContractFeatureCodes(selected?.features.map((feature) => feature.code) ?? []); }} required>{plans.filter(plan => plan.status === "ACTIVE").map(plan => <option key={plan.plan_id} value={plan.plan_id}>{plan.name}</option>)}</select></label><label>Status da assinatura<select name="status" defaultValue={editingTenant.subscription_status ?? "ACTIVE"}>{["TRIAL","ACTIVE","PAST_DUE","SUSPENDED","CANCELLED","EXPIRED"].map(status => <option key={status}>{status}</option>)}</select></label><div className="platform-form-grid"><label>Valor mensal (R$)<input name="monthly_price" type="number" min="0" step="0.01" defaultValue={Number(editingTenant.monthly_price ?? 0)} required /></label><label>Desconto (%)<input name="discount_percent" type="number" min="0" max="100" step="0.01" defaultValue={Number(editingTenant.discount_percent ?? 0)} required /></label><label>Implantação (dias)<input name="implementation_days" type="number" min="0" max="3650" step="1" defaultValue={editingTenant.implementation_days ?? 0} required /></label></div><fieldset><legend>Módulos habilitados</legend><div className="platform-module-grid">{features.map(feature => <label key={feature.code}><input type="checkbox" name="feature_codes" value={feature.code} checked={contractFeatureCodes.includes(feature.code)} onChange={(event) => setContractFeatureCodes((current) => event.target.checked ? [...new Set([...current, feature.code])] : current.filter((code) => code !== feature.code))} />{feature.name}</label>)}</div><small>A seleção inicial acompanha o plano. Você pode ajustar os módulos contratados antes de salvar.</small></fieldset><footer><button type="button" onClick={() => openTenantPlan(null)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving || !plans.some(plan => plan.status === "ACTIVE")}>{saving ? "Salvando…" : "Salvar contrato"}</button></footer></form></div> : null}
       {companyEditorOpen ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompanyEditorOpen(false); }}><form className="platform-editor" onSubmit={(event) => void createTenant(event)}><header><div><span className="platform-eyebrow">CADASTRO</span><h2>Nova empresa</h2></div><button type="button" onClick={() => setCompanyEditorOpen(false)}>Fechar</button></header><label>Nome da empresa<input name="display_name" minLength={2} maxLength={120} value={companyName} onChange={(event) => { const next = event.target.value; setCompanyName(next); setCompanySlug(generatedTenantSlug(next)); }} required autoFocus /></label><label>Razão social<input name="legal_name" minLength={2} maxLength={160} required /></label><label>CNPJ (opcional)<input name="tax_identifier" maxLength={32} /></label><label>Identificador do ambiente<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" minLength={3} maxLength={80} value={companySlug} onChange={(event) => setCompanySlug(event.target.value.toLowerCase())} required /><small>Endereço técnico gerado pelo nome e usado para abrir o ambiente.</small></label><p className="platform-footnote">Depois do cadastro, use as ações da empresa para ativar o plano e gerar o acesso TI.</p><footer><button type="button" onClick={() => setCompanyEditorOpen(false)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving}>{saving ? "Cadastrando…" : "Cadastrar empresa"}</button></footer></form></div> : null}
       {accessTenant ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccessTenant(null); }}><form className="platform-editor" onSubmit={(event) => void createInitialAdmin(event)}><header><div><span className="platform-eyebrow">PRIMEIRO ACESSO</span><h2>{accessTenant.display_name}</h2></div><button type="button" onClick={() => setAccessTenant(null)}>Fechar</button></header><p>Informe o responsável, a matrícula de login e o e-mail. A senha temporária será mostrada após a criação.</p>{accessError ? <div className="platform-error" role="alert">Não foi possível criar o acesso TI: {accessError}</div> : null}<label>Nome do responsável<input name="name" minLength={3} maxLength={160} required autoFocus /></label><div className="platform-form-grid"><label>Matrícula (login)<input name="employee_number" pattern="[A-Za-z0-9._-]{3,40}" maxLength={40} required /></label><label>E-mail<input name="email" type="email" maxLength={254} required /></label></div><footer><button type="button" onClick={() => setAccessTenant(null)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving}>{saving ? "Criando acesso…" : "Criar primeiro acesso"}</button></footer></form></div> : null}
       {accessReceipt ? <div className="platform-modal-backdrop" role="presentation"><section className="platform-editor" aria-labelledby="platform-access-receipt-title"><header><div><span className="platform-eyebrow">PRIMEIRO ACESSO TI</span><h2 id="platform-access-receipt-title">Acesso criado · {accessReceipt.tenantName}</h2></div><button type="button" onClick={() => setAccessReceipt(null)}>Fechar</button></header><p>Senha temporária exibida. Copie a mensagem ou prepare um e-mail; a pessoa deverá trocar a senha no primeiro acesso.</p><dl className="platform-credential-list"><dt>E-mail</dt><dd>{accessReceipt.email}</dd><dt>Login (matrícula)</dt><dd><code>{accessReceipt.login}</code></dd><dt>Senha temporária</dt><dd><code>{accessReceipt.password}</code></dd><dt>Empresa</dt><dd>{accessReceipt.tenantName}</dd></dl>{accessError ? <div className="platform-error" role="alert">{accessError}</div> : null}{accessMessageCopied ? <p className="platform-access-copied" role="status">Mensagem copiada. Cole-a no WhatsApp do responsável.</p> : null}<p className="platform-mail-note">Preparar e-mail abre um rascunho. A mensagem não é enviada automaticamente.</p><footer><button type="button" onClick={() => void navigator.clipboard?.writeText(`Empresa: ${accessReceipt.tenantName}\nLogin: ${accessReceipt.login}\nSenha temporária: ${accessReceipt.password}`)}>Copiar dados</button><button type="button" onClick={() => void copyInitialAccessMessage()}>Copiar mensagem para WhatsApp</button><a className="platform-primary" href={`mailto:${encodeURIComponent(accessReceipt.email)}?subject=${encodeURIComponent(`Acesso TI da ${accessReceipt.tenantName} · VORQIX`)}&body=${encodeURIComponent(initialAccessMessage(accessReceipt))}`}>Preparar e-mail</a><button className="platform-secondary-button" type="button" onClick={() => setAccessReceipt(null)}>Concluído</button></footer></section></div> : null}
-      {planEditorOpen ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlanEditorOpen(false); }}><form className="platform-editor" onSubmit={(event) => void savePlan(event)}><header><div><span className="platform-eyebrow">CATÁLOGO COMERCIAL</span><h2>{editingPlan ? "Editar plano" : planPreset === "COMPLETE" ? "Plano completo" : "Plano personalizado"}</h2></div><button type="button" onClick={() => setPlanEditorOpen(false)}>Fechar</button></header><label>Nome que aparece para a empresa<input name="name" minLength={2} maxLength={100} value={planName} onChange={(event) => { const nextName = event.target.value; setPlanName(nextName); if (!planCodeTouched) setPlanCode(generatedPlanCode(nextName)); }} required /></label><div className="platform-form-grid"><label>Código interno do plano<input name="code" pattern="[A-Za-z0-9_-]{2,40}" value={planCode} onChange={(event) => { setPlanCode(event.target.value.toUpperCase()); setPlanCodeTouched(true); }} required /><small>Identificador único gerado pelo nome. Ex.: “Plano Completo” vira “COMPLETO”.</small></label><label>Valor mensal de referência (R$)<input name="monthly_price" type="number" min="0" step="0.01" value={planPrice} onChange={(event) => setPlanPrice(event.target.value)} required /><small>O valor da assinatura da empresa pode ser ajustado no contrato.</small></label><label>Status do plano<select name="status" value={planStatus} onChange={(event) => setPlanStatus(event.target.value as PlatformPlan["status"])}>{["DRAFT","ACTIVE","RETIRED"].map(status => <option key={status} value={status}>{status === "DRAFT" ? "Rascunho" : status === "ACTIVE" ? "Ativo" : "Retirado"}</option>)}</select><small>Ativo: pode ser contratado. Rascunho: em preparação. Retirado: não usar em novos contratos.</small></label></div><label>Descrição<textarea name="description" maxLength={1000} rows={3} value={planDescription} onChange={(event) => setPlanDescription(event.target.value)} /></label><fieldset><legend>Módulos incluídos</legend><div className="platform-module-grid">{features.map(feature => <label key={feature.code}><input type="checkbox" name="feature_codes" value={feature.code} defaultChecked={editingPlan ? editingPlan.features.some(item => item.code === feature.code) : planPreset === "COMPLETE"} />{feature.name}</label>)}</div><small>{planPreset === "COMPLETE" && !editingPlan ? "Todos os módulos estão selecionados. Você pode remover os que não quiser incluir." : "Os módulos são os recursos comerciais reconhecidos pelo sistema."}</small></fieldset><footer><button type="button" onClick={() => setPlanEditorOpen(false)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar plano"}</button></footer></form></div> : null}
+      {planEditorOpen ? <div className="platform-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setPlanEditorOpen(false); }}><form className="platform-editor" onSubmit={(event) => void savePlan(event)}>
+        <header><div><span className="platform-eyebrow">CATÁLOGO COMERCIAL</span><h2>{editingPlan ? "Editar plano" : "Criar plano"}</h2></div><button type="button" disabled={saving} onClick={() => setPlanEditorOpen(false)}>Fechar</button></header>
+        {!editingPlan ? <label>Modelo inicial<select value={planPreset} onChange={(event) => applyPlanPreset(event.target.value as PlanPreset)} disabled={saving}>{Object.entries(PLAN_PRESET_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>Preenche um rascunho. Revise módulos, funções e valor antes de ativar o plano.</small></label> : null}
+        <label>Nome que aparece para a empresa<input name="name" minLength={2} maxLength={100} value={planName} onChange={(event) => { const nextName = event.target.value; setPlanName(nextName); if (!planCodeTouched) setPlanCode(generatedPlanCode(nextName)); }} required /></label>
+        <div className="platform-form-grid"><label>Código interno do plano<input name="code" pattern="[A-Za-z0-9_-]{2,40}" value={planCode} onChange={(event) => { setPlanCode(event.target.value.toUpperCase()); setPlanCodeTouched(true); }} required /></label><label>Valor mensal de referência (R$)<input name="monthly_price" type="number" min="0" step="0.01" value={planPrice} onChange={(event) => setPlanPrice(event.target.value)} required /><small>Defina o valor comercial. Os modelos não estabelecem preços.</small></label><label>Status do plano<select name="status" value={planStatus} onChange={(event) => setPlanStatus(event.target.value as PlatformPlan["status"])}>{["DRAFT","ACTIVE","RETIRED"].map(status => <option key={status} value={status}>{status === "DRAFT" ? "Rascunho" : status === "ACTIVE" ? "Ativo" : "Retirado"}</option>)}</select></label></div>
+        <label>Descrição<textarea name="description" maxLength={1000} rows={3} value={planDescription} onChange={(event) => setPlanDescription(event.target.value)} /></label>
+        <fieldset><legend>Módulos incluídos</legend><div className="platform-module-grid">{features.map((feature) => <label key={feature.code}><input type="checkbox" name="feature_codes" value={feature.code} checked={planFeatureCodes.includes(feature.code)} onChange={(event) => setPlanFeatureCodes((current) => event.target.checked ? [...new Set([...current, feature.code])] : current.filter((code) => code !== feature.code))} />{feature.name}</label>)}</div></fieldset>
+        {error ? <p className="platform-plan-policy-error" role="alert">{error}</p> : null}
+        <fieldset className="platform-plan-permissions"><legend>Funções disponíveis para a empresa</legend><p>Define o limite do plano. A contratação não liga permissões de usuários: o TI continua distribuindo os acessos por perfil.</p>
+          <label className="platform-plan-customization"><input type="checkbox" checked={planPersonalizable} onChange={(event) => setPlanPersonalizable(event.target.checked)} />Permitir que o TI personalize as permissões dos perfis</label>
+          {planPolicyLoading ? <p role="status">Carregando funções…</p> : planPolicyError ? <p className="platform-plan-policy-error" role="alert">{planPolicyError} Feche e abra o editor para tentar novamente.</p> : <>
+            <label>Buscar função<input type="search" value={planPermissionSearch} onChange={(event) => setPlanPermissionSearch(event.target.value)} placeholder="Ex.: criar checklist, ler QR Code" /></label>
+            {planPermissionGroups.map(({ group, items }) => <section key={group} className="platform-plan-permission-group"><h3>{group}</h3>{items.map((item) => {
+              const available = !item.feature || planFeatureCodes.includes(item.feature);
+              const allowed = available && (planPermissionCodes === null || planPermissionCodes.includes(item.id));
+              const dependencies = item.dependencias.map((id) => permissionCatalog.find((dependency) => dependency.id === id)?.nome || id);
+              return <article key={item.id} className="platform-plan-permission"><div><strong>{item.nome}</strong>{item.critico ? <small className="platform-plan-critical">Ação sensível</small> : null}<details><summary title="O que esta função afeta">?</summary><p>{item.impacto}</p>{dependencies.length ? <p>Depende de: {dependencies.join(", ")}.</p> : null}</details><small>{item.acao}{!available ? " · Módulo não incluído no plano" : ""}</small>{changedPlanPermissions.includes(item.id) ? <small role="status">Ao salvar, esta função ficará {allowed ? "disponível no plano" : "indisponível no plano"}. {item.impacto}</small> : null}</div><label className={`platform-plan-switch${allowed ? " is-on" : ""}`}><input type="checkbox" checked={allowed} disabled={!available || saving} aria-label={`${item.nome}: ${allowed ? "ON" : "OFF"}`} onChange={(event) => togglePlanPermission(item.id, event.target.checked)} /><span>{allowed ? "ON" : "OFF"}</span></label></article>})}</section>)}
+            {!planPermissionGroups.length ? <p>Nenhuma função corresponde à busca.</p> : null}
+          </>}
+        </fieldset>
+        <footer><button type="button" disabled={saving} onClick={() => setPlanEditorOpen(false)}>Cancelar</button><button className="platform-primary" type="submit" disabled={saving || planPolicyLoading || Boolean(planPolicyError)}>{saving ? "Salvando…" : "Salvar plano"}</button></footer>
+      </form></div> : null}
     </main>
   );
 }

@@ -1,0 +1,74 @@
+/* Central do técnico: escopo próprio, sem alterar TI ou a lousa. */
+html body .app-shell[data-technician-workspace="true"] {
+  --tech-bg: #f4f7fb; --tech-panel: #ffffff;
+  --tech-ink: #172f46; --tech-muted: #607387; --tech-line: #d6e1ea;
+  --background: var(--tech-bg); --surface: var(--tech-panel); --surface-soft: #edf3f8;
+  --text: var(--tech-ink); --muted: var(--tech-muted); --line: var(--tech-line);
+  --blue: #1769ae; --blue-soft: #e9f2fa; --red: #b82f3b; --orange: #956019;
+  color: var(--tech-ink); background: var(--tech-bg);
+}
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard {
+  container-type: inline-size; display: grid; gap: 16px; width: 100%; max-width: 1240px; min-width: 0;
+  padding: 20px; margin: 0 auto; color: var(--tech-ink); font: 14px/1.5 system-ui,sans-serif;
+}
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard :is(.technician-dashboard__heading,.technician-dashboard__panel,.technician-dashboard__metric,.technician-action) {
+  background: var(--tech-panel); background-image: none; color: var(--tech-ink); border: 1px solid var(--tech-line); border-radius: 5px; box-shadow: none;
+}
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard :is(.technician-dashboard__heading,.technician-dashboard__metric)::after { display: none; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__heading {
+  padding: 0 0 14px; border: 0; border-bottom: 1px solid var(--tech-line); background: transparent; display: flex; justify-content: space-between; align-items: center;
+}
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard h1 { font-size: 22px; color: var(--tech-ink); margin: 0; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard h2 { font-size: 17px; color: var(--tech-ink); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard :is(p,small,.pcm-section-kicker,.technician-dashboard__queue-count) { color: var(--tech-muted); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard button {
+  min-height: 44px; font: inherit; color: var(--tech-ink); background: var(--tech-panel); border: 1px solid var(--tech-line); border-radius: 5px; box-shadow: none; white-space: normal;
+}
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard button:not(:disabled):hover { background: color-mix(in srgb,var(--tech-ink) 5%,var(--tech-panel)); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard button:focus-visible { outline: 2px solid var(--blue,#2563eb); outline-offset: 3px; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metrics { gap: 8px; grid-template-columns: repeat(4,minmax(0,1fr)); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric { padding: 12px; min-height: 84px; text-align: left; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric span { color: var(--tech-muted); font-size: 13px; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric strong { color: var(--tech-ink); font-size: 26px; margin: 3px 0 0; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric.danger strong { color: var(--red,#b82f3b); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric.warning strong { color: var(--orange,#9a5f13); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metric[aria-pressed="true"] { border-color: var(--blue,#2563eb); background: var(--blue-soft,#eaf1ff); }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__panel { padding: 16px; min-width: 0; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__list { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 10px; }
+html body .app-shell[data-technician-workspace="true"] .technician-action { padding: 14px; width: 100%; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+html body .app-shell[data-technician-workspace="true"] .technician-action :is(strong,span,small) { min-width: 0; overflow-wrap: anywhere; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard :is(input,select,textarea) { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; background: var(--tech-panel); color: var(--tech-ink); border: 1px solid var(--tech-line); border-radius: 4px; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard input[type="checkbox"] { width: 20px; min-height: 20px; }
+html body .app-shell[data-technician-workspace="true"] > .topbar { padding: 10px 20px; min-height: 64px; height: auto; gap: 12px; align-items: center; }
+html body .app-shell[data-technician-workspace="true"] .topbar__actions { display: flex; gap: 8px; align-items: center; min-width: 0; }
+html body .app-shell[data-technician-workspace="true"] .topbar__actions > button { min-height: 40px; padding: 8px 12px; }
+html body .app-shell[data-technician-workspace="true"] .user-badge { min-width: 0; max-width: 210px; }
+html body .app-shell[data-technician-workspace="true"] .user-badge strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+@container (max-width: 700px) {
+  html body .app-shell[data-technician-workspace="true"] .technician-dashboard__metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  html body .app-shell[data-technician-workspace="true"] .technician-dashboard__facts,
+  html body .app-shell[data-technician-workspace="true"] .technician-dashboard__report { grid-template-columns: 1fr; }
+  html body .app-shell[data-technician-workspace="true"] .technician-dashboard__list { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  html body .app-shell[data-technician-workspace="true"] > .topbar { padding: 8px 12px; flex-wrap: wrap; gap: 6px; }
+  html body .app-shell[data-technician-workspace="true"] .topbar__identity { flex: 1 1 110px; min-width: 0; }
+  html body .app-shell[data-technician-workspace="true"] .topbar__identity img { width: 94px; }
+  html body .app-shell[data-technician-workspace="true"] .topbar__actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  html body .app-shell[data-technician-workspace="true"] .user-badge { max-width: 125px; }
+  html body .app-shell[data-technician-workspace="true"] .user-badge span { display: none; }
+  html body .app-shell[data-technician-workspace="true"] .technician-dashboard { padding: 14px 12px; }
+}
+
+html body .app-shell[data-technician-workspace="true"] > .topbar {
+  background: var(--tech-panel) !important; color: var(--tech-ink) !important; border-color: var(--tech-line);
+}
+html body .app-shell[data-technician-workspace="true"] .topbar :is(.topbar__identity,.topbar__identity strong,.topbar__identity span,.user-badge,.user-badge strong,.user-badge span) { color: var(--tech-ink) !important; }
+html body .app-shell[data-technician-workspace="true"] .topbar :is(.manager-notification-trigger,.logout-button) { color: var(--tech-ink) !important; background: transparent !important; border: 1px solid var(--tech-line); box-shadow: none; border-radius: 5px; }
+html body .app-shell[data-technician-workspace="true"] > .app-content { background: var(--tech-bg) !important; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__heading { background: transparent !important; }
+html body .app-shell[data-technician-workspace="true"] .app-navigation { background: var(--tech-panel) !important; border-color: var(--tech-line); box-shadow: 0 2px 12px #17324a0d; border-radius: 8px; }
+html body .app-shell[data-technician-workspace="true"] .app-navigation__item { background: transparent !important; color: var(--tech-muted) !important; border-radius: 5px; }
+html body .app-shell[data-technician-workspace="true"] .app-navigation__item[aria-current="page"],
+html body .app-shell[data-technician-workspace="true"] .app-navigation__item.is-active { background: var(--blue-soft) !important; color: var(--blue) !important; }
+html body .app-shell[data-technician-workspace="true"] .technician-dashboard__panel-heading > span { color: var(--tech-muted); background: var(--surface-soft); box-shadow: none; }

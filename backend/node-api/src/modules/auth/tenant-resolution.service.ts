@@ -52,6 +52,20 @@ export class TenantResolutionService {
   ) {}
 
   async resolve(context: TenantRequestContext): Promise<ResolvedTenant> {
+    const slug = this.slugFromRequest(context);
+    if (slug) {
+      const access = await this.database.query<{ state: string | null }>(
+        'SELECT platform.tenant_access_state($1,$2) AS state', [slug,this.environment.release.environment],
+      );
+      const state = access.rows[0]?.state;
+      if (state && state !== 'ACTIVE') {
+        throw new AppError({
+          code: state === 'EXPIRED' ? 'AUTH_SUBSCRIPTION_EXPIRED' : state === 'SUBSCRIPTION_DISABLED' ? 'AUTH_SUBSCRIPTION_DISABLED' : 'AUTH_TENANT_DISABLED',
+          message: 'O acesso da empresa está temporariamente indisponível. Entre em contato com o responsável da sua empresa.',
+          statusCode: 401,
+        });
+      }
+    }
     const tenant = await this.tryResolve(context);
     if (tenant) return tenant;
 

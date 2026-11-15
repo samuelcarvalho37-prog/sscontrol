@@ -1,3 +1,4 @@
+import { hasAction } from '../services/auth/permissionActions'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { UserEditorDialog, type AccountCredentialReceipt } from '../components/UserEditorDialog'
 import { AdminUserBulkImportDialog } from '../components/AdminUserBulkImportDialog'
@@ -35,6 +36,7 @@ import type {
   AdminCommercialAccess,
   AdminNotificationTarget,
   AdminPermissionMatrix,
+  AdminPermissionCapability,
   AdminUser,
   AdminUserProfile,
   AdminUserStatus,
@@ -86,6 +88,8 @@ interface AdminPageProps {
 }
 
 export type AdminModule =
+  | 'additional-qr'
+  | 'additional-tools'
   | 'overview'
   | 'imports'
   | 'imports-structure'
@@ -285,21 +289,18 @@ function describeCapability(description: string): string {
     .replaceAll('administrador', 'Centro de Comando')
 }
 
-function describePermissionImpact(profile: string, capability: { id: string; nome: string; descricao: string }): string {
+function describePermissionImpact(profile: string, capability: AdminPermissionCapability): string {
   const profileLabel = PROFILE_LABELS[profile as AdminUserProfile] ?? presentProfile(profile)
-  const id = capability.id.toLocaleLowerCase('pt-BR')
-  const name = capability.nome.toLocaleLowerCase('pt-BR')
-  let effect = `perderá acesso a “${capability.nome}”`
-  if (id.startsWith('cmms.assets.') && name.includes('consult')) {
-    effect = 'deixará de consultar ativos técnicos e seus componentes; as permissões de ordens de serviço e checklists continuam definidas pelas capacidades correspondentes'
-  } else if (id.startsWith('maintenance.work-orders.') || name.includes('ordens de serviço')) {
-    effect = 'deixará de consultar ou executar as operações de ordem de serviço descritas nesta capacidade'
-  } else if (id.startsWith('maintenance.checklists.') || name.includes('checklist')) {
-    effect = 'deixará de consultar ou executar as operações de checklist descritas nesta capacidade'
-  } else if (id.startsWith('maintenance.plans.') || name.includes('plano de manutenção')) {
-    effect = 'deixará de consultar ou executar as operações de plano descritas nesta capacidade'
-  }
-  return `Ao salvar, ${profileLabel} ${effect}. ${describeCapability(capability.descricao)}`
+  const effect = capability.permitido ? 'poderá' : 'não poderá'
+  return `Ao salvar, ${profileLabel} ${effect} usar “${capability.nome}”. ${capability.impacto || describeCapability(capability.descricao)}`
+}
+
+function permissionGroup(capability: AdminPermissionCapability): string {
+  return capability.grupo?.trim() || 'Outras permissões'
+}
+
+function permissionSearchText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
 }
 
 export function AdminPage({
@@ -353,6 +354,7 @@ export function AdminPage({
   const [selectedPermissionProfile, setSelectedPermissionProfile] = useState<EditablePermissionProfile>('GESTOR')
   const [permissionSearch, setPermissionSearch] = useState('')
   const [permissionStateFilter, setPermissionStateFilter] = useState<'all' | 'on' | 'off'>('all')
+  const [permissionCategory, setPermissionCategory] = useState('all')
   const lastPermissionProfileRequestRef = useRef<number | null>(null)
   const [monitoring, setMonitoring] = useState<AdminMonitoringState | null>(null)
   const [monitoringError, setMonitoringError] = useState('')
@@ -424,7 +426,7 @@ export function AdminPage({
   }, [loadData, onSessionExpired, tab, userDataRevision])
 
   useEffect(() => {
-    if (tab !== 'permissions' || !permissionMatrix || defaultProfilesProvisionAttempted.current) return
+    if (tab !== 'permissions' || !permissionMatrix || permissionMatrix.editavel === false || defaultProfilesProvisionAttempted.current) return
     const selectableProfiles = permissionMatrix.perfis.filter((profile) => profile.roleType?.toLocaleUpperCase('pt-BR') !== 'ADMIN' && profile.perfil.toLocaleUpperCase('pt-BR') !== 'ADMIN')
     if (selectableProfiles.some((profile) => profile.editavel)) {
       defaultProfilesProvisionAttempted.current = true
@@ -685,6 +687,12 @@ export function AdminPage({
     return () => controller.abort()
   }, [tab])
 
+  const canCreateUser = hasAction('POST', '/v1/admin/users', 'admin.identity.manage')
+  const canEditUser = hasAction('PATCH', '/v1/admin/users/:userId', 'admin.identity.manage')
+  const canImportUsers = hasAction('POST', '/v1/admin/users/import', 'admin.identity.manage')
+  const canUnlockUser = hasAction('POST', '/v1/admin/users/:userId/unlock', 'admin.identity.manage')
+  const canResetUserPassword = hasAction('POST', '/v1/admin/users/:userId/reset-password', 'admin.identity.manage')
+  const canRevokeUserSessions = hasAction('POST', '/v1/admin/users/:userId/revoke-sessions', 'admin.identity.manage')
   const selectedPermissions = permissionMatrix?.perfis.find(
     (profile) => profile.perfil === selectedPermissionProfile,
   )
@@ -702,15 +710,18 @@ export function AdminPage({
   })
 
   const filteredCapabilities = useMemo(() => {
-    const term = permissionSearch.trim().toLocaleLowerCase('pt-BR')
+    const term = permissionSearchText(permissionSearch.trim())
     return (selectedPermissions?.capacidades ?? []).filter((capability) => {
+      if (permissionCategory !== 'all' && permissionGroup(capability) !== permissionCategory) return false
       if (permissionStateFilter === 'on' && !capability.permitido) return false
       if (permissionStateFilter === 'off' && capability.permitido) return false
       if (!term) return true
-      return `${capability.nome} ${capability.descricao} ${capability.id} ${capability.acoes.join(' ')}`
-        .toLocaleLowerCase('pt-BR').includes(term)
+      return permissionSearchText(`${capability.nome} ${capability.descricao} ${capability.id} ${capability.acoes.join(' ')} ${capability.grupo ?? ''} ${capability.acao ?? ''} ${capability.impacto ?? ''}`).includes(term)
     })
-  }, [permissionSearch, permissionStateFilter, selectedPermissions])
+  }, [permissionSearch, permissionStateFilter, permissionCategory, selectedPermissions])
+
+  const permissionCategories = [...new Set((selectedPermissions?.capacidades ?? []).map(permissionGroup))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const groupedCapabilities = permissionCategories.map((group) => ({ group, items: filteredCapabilities.filter((capability) => permissionGroup(capability) === group) })).filter(({ items }) => items.length)
 
   useEffect(() => {
     if (tab !== 'permissions' || !permissionMatrix || !permissionProfileRequest) return
@@ -723,6 +734,7 @@ export function AdminPage({
     setSelectedPermissionProfile(requestedProfile.perfil)
     setPermissionSearch(permissionProfileRequest.capabilityName ?? '')
     setPermissionStateFilter('all')
+    setPermissionCategory('all')
   }, [permissionMatrix, permissionProfileRequest, tab])
 
   async function refresh(message?: string) {
@@ -743,6 +755,7 @@ export function AdminPage({
   }
 
   async function resetUserPassword(user: AdminUser) {
+    if (!canResetUserPassword) return
     setActionUserId(user.id)
     setError('')
     setNotice('')
@@ -791,6 +804,7 @@ export function AdminPage({
   }
 
   async function applyUserStatusChanges(userIds: string[], nextStatus: AdminUserStatus) {
+    if (!canEditUser) return
     const targets = users.filter((user) => userIds.includes(user.id) && user.id !== session.user.id && user.status !== nextStatus)
     if (!targets.length) return
     setSavingUserStatuses(true)
@@ -952,6 +966,7 @@ export function AdminPage({
   }, [loadOverviewData, tab])
 
   async function unlockUser(user: AdminUser) {
+    if (!canUnlockUser) return
     setActionUserId(user.id)
     setError('')
     try {
@@ -969,6 +984,7 @@ export function AdminPage({
   }
 
   async function revokeSessions(user: AdminUser) {
+    if (!canRevokeUserSessions) return
     if (!window.confirm(`Encerrar todas as sessões ativas de ${user.nome}?`)) return
     setActionUserId(user.id)
     setError('')
@@ -988,7 +1004,7 @@ export function AdminPage({
 
   function togglePermission(capabilityId: string, allowed: boolean) {
     setPermissionMatrix((current) => {
-      if (!current) return current
+      if (!current || current.editavel === false || !selectedPermissions?.editavel) return current
       return {
         ...current,
         perfis: current.perfis.map((profile) => (
@@ -997,7 +1013,7 @@ export function AdminPage({
             : {
                 ...profile,
                 capacidades: profile.capacidades.map((capability) => (
-                  capability.id === capabilityId
+                  capability.id === capabilityId && !capability.padrao && (!allowed || capability.disponivel_no_plano !== false)
                     ? { ...capability, permitido: allowed }
                     : capability
                 )),
@@ -1009,7 +1025,7 @@ export function AdminPage({
   }
 
   async function savePermissions() {
-    if (!selectedPermissions) return
+    if (!selectedPermissions?.editavel || permissionMatrix?.editavel === false || savingPermissions) return
     const permissions = Object.fromEntries(
       selectedPermissions.capacidades.map((capability) => [capability.id, capability.permitido]),
     )
@@ -1049,7 +1065,7 @@ export function AdminPage({
 
   async function createPermissionProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (profileDraftName.trim().length < 3 || savingProfile) return
+    if (profileDraftName.trim().length < 3 || savingProfile || permissionMatrix?.editavel === false) return
     setSavingProfile(true)
     setError('')
     try {
@@ -1073,7 +1089,7 @@ export function AdminPage({
   }
 
   async function retryDefaultPermissionProfiles() {
-    if (provisioningDefaultProfiles) return
+    if (provisioningDefaultProfiles || permissionMatrix?.editavel === false) return
     defaultProfilesProvisionAttempted.current = true
     setProvisioningDefaultProfiles(true)
     setError('')
@@ -1451,11 +1467,11 @@ export function AdminPage({
         <section className="admin-users" role="tabpanel">
           <nav className="admin-users-inline-tabs" aria-label="Gestão de pessoas">
             <button type="button" className={!userBulkImportOpen ? 'is-active' : ''} aria-current={!userBulkImportOpen ? 'page' : undefined} onClick={() => setUserBulkImportOpen(false)}>Contas</button>
-            <button type="button" className={userBulkImportOpen ? 'is-active' : ''} aria-current={userBulkImportOpen ? 'page' : undefined} onClick={() => setUserBulkImportOpen(true)}>Importar equipe</button>
+            {canImportUsers ? <button type="button" className={userBulkImportOpen ? 'is-active' : ''} aria-current={userBulkImportOpen ? 'page' : undefined} onClick={() => setUserBulkImportOpen(true)}>Importar equipe</button> : null}
             <button type="button" className="admin-users-inline-tabs__module-link" onClick={() => onModuleChange?.('workforce')}>Equipes técnicas</button>
             <button type="button" className="admin-users-inline-tabs__module-link" onClick={() => onModuleChange?.('permissions')}>Perfis de acesso</button>
           </nav>
-          {userBulkImportOpen ? <AdminUserBulkImportDialog
+          {userBulkImportOpen && canImportUsers ? <AdminUserBulkImportDialog
             profiles={permissionMatrix?.perfis ?? []}
             areas={technicalAreas}
             roles={technicalRoles}
@@ -1475,7 +1491,7 @@ export function AdminPage({
             <header className="admin-user-panel__header">
               <div><h2>Usuários</h2><span className="admin-user-result-count">{visibleUsers.length} de {metrics.total}</span></div>
               <div className="admin-user-panel__tools">
-                <button className="admin-secondary-action admin-user-add" type="button" onClick={() => onOpenUserSettings?.(null, 'identity')}><PlusIcon /><span>Criar usuário</span></button>
+                {canCreateUser ? <button className="admin-secondary-action admin-user-add" type="button" onClick={() => onOpenUserSettings?.(null, 'identity')}><PlusIcon /><span>Criar usuário</span></button> : null}
               </div>
             </header>
 
@@ -1496,6 +1512,8 @@ export function AdminPage({
                 const displayedStatus = bulkStatusPreview?.ids.includes(user.id) ? bulkStatusPreview.status : user.status
                 const technicalAreaName = user.area_nome || technicalAreas.find((area) => area.id === user.area_id)?.nome
                 const technicalRoleName = user.cargo_nome || technicalRoles.find((role) => role.id === user.cargo_id)?.nome
+                const userProfileLabel = PROFILE_LABELS[user.perfil as AdminUserProfile] || presentProfile(user.perfil)
+                const assignmentLabel = [...new Set([userProfileLabel, technicalRoleName || technicalAreaName].filter(Boolean))].join(' · ')
                 const scopeNames = (() => {
                   try {
                     const ids = JSON.parse(user.escopo_ids_json || '[]') as string[]
@@ -1522,11 +1540,12 @@ export function AdminPage({
                   <article className={`admin-user-record${open ? ' is-expanded' : ''}`} key={user.id}>
                     <div className="admin-user-row">
                       <button type="button" className="admin-user-open" aria-expanded={open} onClick={() => void toggleUserDetails(user)}>
-                        <span className="admin-user-open__text">
+                        <span className="admin-user-open__text" title={[user.nome, technicalAreaName, technicalRoleName, PROFILE_LABELS[user.perfil as AdminUserProfile] || presentProfile(user.perfil)].filter(Boolean).join(' · ')}>
                           <strong>{user.nome}{self ? ' · Você' : ''}</strong>
+                          <span className="admin-user-assignment">{assignmentLabel}</span>
                         </span>
                       </button>
-                      <button
+                      {canEditUser ? <button
                         type="button"
                         className={`admin-user-status-control is-${displayedStatus.toLocaleLowerCase('pt-BR')}${bulkStatusPreview?.ids.includes(user.id) ? ' is-preview' : ''}`}
                         aria-pressed={displayedStatus === 'ATIVO'}
@@ -1542,7 +1561,7 @@ export function AdminPage({
                           }
                           void applyUserStatusChanges([user.id], user.status === 'ATIVO' ? 'INATIVO' : 'ATIVO')
                         }}
-                      >{displayedStatus === 'ATIVO' ? 'ON' : 'OFF'}</button>
+                      >{displayedStatus === 'ATIVO' ? 'ON' : 'OFF'}</button> : <span className="admin-user-status-label">{displayedStatus === 'ATIVO' ? 'ON' : 'OFF'}</span>}
                     </div>
                     {open ? <div className="admin-user-details">
                       <div className="admin-user-detail-toolbar">
@@ -1584,10 +1603,10 @@ export function AdminPage({
                           ))}
                         </div>
                         <div className="admin-user-detail-actions">
-                          <button type="button" className="admin-icon-action" disabled={busy} onClick={() => onOpenUserSettings?.(user, 'identity')} aria-label={`Editar ${user.nome}`} title="Editar usuário"><SettingsIcon /></button>
-                          {blocked ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void unlockUser(user)} aria-label={`Desbloquear ${user.nome}`} title="Desbloquear"><ShieldIcon /></button> : null}
-                          {!self ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void resetUserPassword(user)} aria-label={`Redefinir senha de ${user.nome}`} title="Redefinir senha e preparar e-mail"><KeyIcon /></button> : null}
-                          {!self && Number(user.sessoes_ativas ?? 0) > 0 ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void revokeSessions(user)} aria-label={`Revogar sessões de ${user.nome}`} title="Revogar sessões"><StopIcon /></button> : null}
+                          {canEditUser ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => onOpenUserSettings?.(user, 'identity')} aria-label={`Editar ${user.nome}`} title="Editar usuário"><SettingsIcon /></button> : null}
+                          {canUnlockUser && blocked ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void unlockUser(user)} aria-label={`Desbloquear ${user.nome}`} title="Desbloquear"><ShieldIcon /></button> : null}
+                          {canResetUserPassword && !self ? <button type="button" className={`admin-icon-action${user.recuperacao_pendente ? " admin-icon-action--recovery" : ""}`} disabled={busy} onClick={() => void resetUserPassword(user)} aria-label={`${user.recuperacao_pendente ? "Atender recuperação de acesso" : "Redefinir senha"} de ${user.nome}`} title={user.recuperacao_pendente ? "Recuperação solicitada: redefinir senha e concluir pendência" : "Redefinir senha e preparar e-mail"}><KeyIcon />{user.recuperacao_pendente ? <span className="admin-recovery-dot" aria-hidden="true" /> : null}</button> : null}
+                          {canRevokeUserSessions && !self && Number(user.sessoes_ativas ?? 0) > 0 ? <button type="button" className="admin-icon-action" disabled={busy} onClick={() => void revokeSessions(user)} aria-label={`Revogar sessões de ${user.nome}`} title="Revogar sessões"><StopIcon /></button> : null}
                         </div>
                       </div>
                       <div className="admin-user-detail-panel" id={`user-${user.id}-details-panel`} role="tabpanel" aria-labelledby={`user-${user.id}-${expandedUserDetailTab}-tab`}>
@@ -1608,8 +1627,8 @@ export function AdminPage({
                             <div><dt>Escopo</dt><dd>{scopeNames.length ? scopeNames.join(', ') : user.escopo_ids_json ? (() => { try { const parsed = JSON.parse(user.escopo_ids_json); return Array.isArray(parsed) && parsed.length ? `${parsed.length} setor(es) ou linha(s)` : 'Não definido' } catch { return 'Atribuído' } })() : 'Não definido'}</dd></div>
                           </dl>
                           <div className="admin-user-config-links">
-                            <button type="button" onClick={() => onOpenUserSettings?.(user, 'specialties')}>Especialidades</button>
-                            <button type="button" onClick={() => onOpenUserSettings?.(user, 'scope')}>Escopo</button>
+                            {canEditUser ? <button type="button" onClick={() => onOpenUserSettings?.(user, 'specialties')}>Especialidades</button> : null}
+                            {canEditUser ? <button type="button" onClick={() => onOpenUserSettings?.(user, 'scope')}>Escopo</button> : null}
                             <button type="button" onClick={() => { setSelectedPermissionProfile(user.perfil); setTab('permissions') }}>Permissões do perfil</button>
                           </div>
                         </section> : null}
@@ -1658,7 +1677,7 @@ export function AdminPage({
 
       {isUserSettingsModule ? (
         <section className="admin-user-settings" role="tabpanel" aria-label="Configuração da conta">
-          {userSettingsUser !== undefined ? (
+          {userSettingsUser !== undefined && (userSettingsUser ? canEditUser : canCreateUser) ? (
             <UserEditorDialog
               user={userSettingsUser}
               currentUserId={session.user.id}
@@ -1680,24 +1699,24 @@ export function AdminPage({
           <aside className="permission-profiles">
             <div><span className="eyebrow">ACESSO</span><h2>Perfis</h2></div>
             <div className="permission-profile-list">
-              {(permissionMatrix?.perfis.filter((item) => item.roleType?.toLocaleUpperCase('pt-BR') !== 'ADMIN' && item.perfil.toLocaleUpperCase('pt-BR') !== 'ADMIN') ?? []).map((item) => (
+              {(permissionMatrix?.perfis ?? []).map((item) => (
                 <div key={item.perfil} className={`permission-profile-entry${selectedPermissionProfile === item.perfil ? ' is-active' : ''}`}>
-                  <button type="button" className="permission-profile-card" aria-pressed={selectedPermissionProfile === item.perfil} onClick={() => { setSelectedPermissionProfile(item.perfil); setPermissionSearch(''); setPermissionStateFilter('all') }}><UsersIcon /><span><strong>{item.nome ?? PROFILE_LABELS[item.perfil as AdminUserProfile] ?? item.perfil}</strong><small>{item.capacidades.filter((capability) => capability.permitido).length} ligadas de {item.capacidades.length}</small></span>{!item.editavel ? <b>Somente leitura</b> : null}</button>
+                  <button type="button" className="permission-profile-card" aria-pressed={selectedPermissionProfile === item.perfil} onClick={() => { setSelectedPermissionProfile(item.perfil); setPermissionSearch(''); setPermissionStateFilter('all'); setPermissionCategory('all') }}><UsersIcon /><span><strong>{item.nome ?? PROFILE_LABELS[item.perfil as AdminUserProfile] ?? item.perfil}</strong><small>{item.capacidades.filter((capability) => capability.permitido).length} ligadas de {item.capacidades.length}</small></span>{!item.editavel ? <b>Somente leitura</b> : null}</button>
                 </div>
               ))}
-              {!provisioningDefaultProfiles && !(permissionMatrix?.perfis.some((item) => item.roleType?.toLocaleUpperCase('pt-BR') !== 'ADMIN' && item.perfil.toLocaleUpperCase('pt-BR') !== 'ADMIN')) ? (
+              {!provisioningDefaultProfiles && !permissionMatrix?.perfis.length ? (
                 <div className="permission-profile-empty" role="status">
-                  <p>Nenhum perfil operacional cadastrado.</p>
-                  <button type="button" disabled={provisioningDefaultProfiles} onClick={() => void retryDefaultPermissionProfiles()}>
+                  <p>Nenhum perfil cadastrado.</p>
+                  <button type="button" disabled={provisioningDefaultProfiles || permissionMatrix?.editavel === false} onClick={() => void retryDefaultPermissionProfiles()}>
                     Preparar perfis padrão
                   </button>
                 </div>
               ) : provisioningDefaultProfiles ? <p className="permission-profile-empty" role="status">Preparando perfis padrão…</p> : null}
               {profileCreateOpen ? <form className="permission-profile-inline-create" onSubmit={(event) => void createPermissionProfile(event)}>
                 <input id="permission-profile-name" aria-label="Nome do perfil" autoFocus maxLength={100} value={profileDraftName} onChange={(event) => setProfileDraftName(event.target.value)} placeholder="Nome do perfil" />
-                <button type="submit" aria-label="Confirmar perfil" title="Confirmar perfil" disabled={savingProfile || profileDraftName.trim().length < 3}>{savingProfile ? '…' : '✓'}</button>
+                <button type="submit" aria-label="Confirmar perfil" title="Confirmar perfil" disabled={savingProfile || permissionMatrix?.editavel === false || profileDraftName.trim().length < 3}>{savingProfile ? '…' : '✓'}</button>
                 <button type="button" aria-label="Cancelar criação" title="Cancelar criação" disabled={savingProfile} onClick={() => { setProfileCreateOpen(false); setProfileDraftName(''); setError('') }}>×</button>
-              </form> : <button type="button" className="permission-profile-add" aria-label="Adicionar perfil" title="Adicionar perfil" disabled={savingProfile} onClick={() => { setError(''); setNotice(''); setProfileDraftName(''); setProfileCreateOpen(true) }}>+</button>}
+              </form> : <button type="button" className="permission-profile-add" aria-label="Adicionar perfil" title="Adicionar perfil" disabled={savingProfile || permissionMatrix?.editavel === false} onClick={() => { setError(''); setNotice(''); setProfileDraftName(''); setProfileCreateOpen(true) }}>+</button>}
             </div>
           </aside>
 
@@ -1709,7 +1728,8 @@ export function AdminPage({
               </div>
             </header>
             <div className="permission-capability-toolbar">
-              <label className="search-field"><SearchIcon /><input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Buscar capacidade, descrição ou ação" /></label>
+              <label className="search-field"><SearchIcon /><input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} aria-label="Buscar permissão" placeholder="Buscar permissão ou o que ela permite" /></label>
+              <label className="permission-category-filter"><span>Categoria</span><select aria-label="Categoria de permissões" value={permissionCategory} onChange={(event) => setPermissionCategory(event.target.value)}><option value="all">Todas as categorias</option>{permissionCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
               <div role="group" aria-label="Filtrar capacidades por estado">
                 <button type="button" className={permissionStateFilter === 'all' ? 'is-active' : ''} onClick={() => setPermissionStateFilter('all')}>Todas</button>
                 <button type="button" className={permissionStateFilter === 'on' ? 'is-active' : ''} onClick={() => setPermissionStateFilter('on')}>Ligadas</button>
@@ -1718,30 +1738,31 @@ export function AdminPage({
             </div>
             <div className="permission-capability-list">
               {!selectedPermissions ? <p className="permission-capability-empty">Selecione ou crie um perfil para configurar as permissões.</p> : null}
-              {filteredCapabilities.map((capability) => {
-                const savedValue = savedSelectedPermissions?.capacidades.find((saved) => saved.id === capability.id)?.permitido
-                const disablingSavedAccess = capability.permitido === false && savedValue === true
-                return (
-                  <label className="permission-capability" key={capability.id}>
-                    <span>
-                      <strong>{capability.nome}</strong>
+              {permissionMatrix?.editavel === false ? <p className="permission-plan-notice" role="status">{permissionMatrix.bloqueio_motivo || 'O plano atual permite consultar os perfis, mas não personalizar as permissões.'}</p> : null}
+              {groupedCapabilities.map(({ group, items }) => <section className="permission-category" key={group} aria-label={group}>
+                <h3>{group}<span>{items.length}</span></h3>
+                {items.map((capability) => {
+                  const savedValue = savedSelectedPermissions?.capacidades.find((saved) => saved.id === capability.id)?.permitido
+                  const changed = savedValue !== capability.permitido
+                  const blocked = capability.disponivel_no_plano === false
+                  const protectedPermission = capability.padrao === true
+                  const dependencies = (capability.dependencias ?? []).map((id) => selectedPermissions?.capacidades.find((item) => item.id === id)?.nome || id)
+                  const unavailableDependencies = (capability.dependencias ?? []).some((id) => !selectedPermissions?.capacidades.find((item) => item.id === id)?.permitido)
+                  return <article className="permission-capability" key={capability.id}>
+                    <div className="permission-capability-description">
+                      <div className="permission-capability-title"><strong>{capability.nome}</strong>{capability.acao ? <span className="permission-action-label">{capability.acao}</span> : null}{protectedPermission ? <span className="permission-action-label" title="Permissão protegida para preservar o controle de acesso">Protegida</span> : null}{capability.critico ? <span className="permission-critical-label">Sensível</span> : null}<details className="permission-capability-help"><summary aria-label={`O que muda com ${capability.nome}`} title="O que esta permissão afeta">?</summary><p>{capability.impacto || describeCapability(capability.descricao)}</p>{dependencies.length ? <p>Depende de: {dependencies.join(', ')}.</p> : null}{protectedPermission ? <p>Esta permissão preserva o acesso à administração de permissões e não pode ser alterada neste perfil.</p> : null}{capability.critico ? <p>Esta ação altera dados ou acessos sensíveis. Confira o perfil antes de salvar.</p> : null}</details></div>
                       <small>{describeCapability(capability.descricao)}</small>
-                      {disablingSavedAccess ? <small className="permission-capability-impact" role="status">Impacto ao salvar: {describePermissionImpact(selectedPermissionProfile, capability)}</small> : null}
-                      <i>{capability.acoes.length} {capability.acoes.length === 1 ? 'operação protegida' : 'operações protegidas'}</i>
-                    </span>
-                    <span className={`permission-switch${capability.permitido ? ' is-on' : ' is-off'}`} title={capability.permitido ? 'Capacidade ligada' : 'Capacidade desligada'}>
-                      <input
-                        type="checkbox"
-                        checked={capability.permitido}
-                        disabled={!selectedPermissions?.editavel || savingPermissions}
-                        aria-label={`${capability.nome}: ${capability.permitido ? 'ligada' : 'desligada'}`}
-                        onChange={(event) => togglePermission(capability.id, event.target.checked)}
-                      />
+                      {blocked ? <small className="permission-capability-blocked">{capability.bloqueio_motivo || 'Não incluída no plano da empresa.'}</small> : null}
+                      {changed ? <small className="permission-capability-impact" role="status">{describePermissionImpact(selectedPermissionProfile, capability)}{capability.critico ? ' Alteração sensível: confira o impacto antes de salvar.' : ''}</small> : null}
+                      {capability.permitido && unavailableDependencies ? <small className="permission-capability-impact">Há permissões necessárias desligadas. A operação continuará indisponível enquanto essas dependências não forem atendidas.</small> : null}
+                    </div>
+                    <label className={`permission-switch${capability.permitido ? ' is-on' : ' is-off'}`} title={protectedPermission ? 'Permissão protegida para preservar o controle de acesso' : blocked ? capability.bloqueio_motivo || 'Não incluída no plano' : capability.permitido ? 'Permissão ligada' : 'Permissão desligada'}>
+                      <input type="checkbox" checked={capability.permitido} disabled={protectedPermission || !selectedPermissions?.editavel || permissionMatrix?.editavel === false || savingPermissions || (blocked && !capability.permitido)} aria-label={`${capability.nome}: ${capability.permitido ? 'ligada' : 'desligada'}`} onChange={(event) => togglePermission(capability.id, event.target.checked)} />
                       <strong>{capability.permitido ? 'ON' : 'OFF'}</strong><i aria-hidden="true" />
-                    </span>
-                  </label>
-                )
-              })}
+                    </label>
+                  </article>
+                })}
+              </section>)}
               {!filteredCapabilities.length && selectedPermissions ? <div className="admin-empty-state">Nenhuma capacidade para este filtro.</div> : null}
             </div>
             <footer className="permission-actions-bar">
@@ -1759,7 +1780,7 @@ export function AdminPage({
                   })
                   setNotice('Rascunho descartado. As permissões salvas foram restauradas.')
                 }}>Descartar</button> : null}
-                <button className="primary-button" type="button" disabled={savingPermissions || !selectedPermissions?.editavel || !selectedPermissionChanges.length} onClick={() => void savePermissions()}>{savingPermissions ? 'Salvando…' : 'Salvar alterações'}</button>
+                <button className="primary-button" type="button" disabled={savingPermissions || permissionMatrix?.editavel === false || !selectedPermissions?.editavel || !selectedPermissionChanges.length} onClick={() => void savePermissions()}>{savingPermissions ? 'Salvando…' : 'Salvar alterações'}</button>
               </div>
             </footer>
           </section>

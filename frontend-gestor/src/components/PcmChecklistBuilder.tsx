@@ -1,3 +1,4 @@
+import { hasAction } from '../services/auth/permissionActions'
 import './PcmChecklistRefinement.css'
 import { estimateChecklistMinutes } from './pcmChecklistEstimate'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -364,8 +365,10 @@ export function PcmChecklistBuilder({
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     const [nextModels, assetList, componentList, nextAreas] = await Promise.all([
-      listAdminChecklistModels(signal), listAdminEntity('ativos', signal), listAdminEntity('componentes', signal),
-      listAllTechnicalAreas(signal),
+      listAdminChecklistModels(signal),
+      hasAction('GET', '/v1/cmms/assets', 'cmms.assets.read') ? listAdminEntity('ativos', signal) : Promise.resolve({ rows: [] }),
+      hasAction('GET', '/v1/cmms/components', 'cmms.assets.read') ? listAdminEntity('componentes', signal) : Promise.resolve({ rows: [] }),
+      hasAction('GET', '/v1/admin/technical-areas', 'cmms.structure.read') ? listAllTechnicalAreas(signal) : Promise.resolve([]),
     ])
     setModels(nextModels)
     setAssets(assetList.rows)
@@ -409,8 +412,15 @@ export function PcmChecklistBuilder({
     )),
     [components, plan.ativo_id, plan.componente_id],
   )
-  const canEdit = ['RASCUNHO', 'DEVOLVIDO_CORRECAO', ''].includes(String(plan.workflow_status ?? '').toUpperCase())
-  const canCreateRevision = normalizedWorkflow(plan.workflow_status) === 'VALIDADO'
+  const canCreate = hasAction('POST', '/v1/maintenance/checklists', 'maintenance.checklists.manage')
+  const canUpdate = hasAction('PATCH', '/v1/maintenance/checklists/:checklistId', 'maintenance.checklists.manage')
+  const canPublish = hasAction('POST', '/v1/maintenance/checklists/:checklistId/publish', 'maintenance.checklists.publish')
+  const canSubmitDirect = canPublish && hasAction('POST', '/v1/maintenance/checklists/:checklistId/submit', 'maintenance.checklists.manage')
+  const canRequestSignatures = hasAction('POST', '/v1/maintenance/checklists/:checklistId/submit-configured', 'maintenance.checklists.manage')
+  const canDelete = hasAction('DELETE', '/v1/maintenance/checklists/:checklistId', 'maintenance.checklists.manage')
+  const canRevise = hasAction('POST', '/v1/maintenance/checklists/:checklistId/revisions', 'maintenance.checklists.manage')
+  const canEdit = (plan.id ? canUpdate : canCreate) && ['RASCUNHO', 'DEVOLVIDO_CORRECAO', ''].includes(String(plan.workflow_status ?? '').toUpperCase())
+  const canCreateRevision = canRevise && normalizedWorkflow(plan.workflow_status) === 'VALIDADO'
 
   useEffect(() => {
     const input = workspaceRef.current?.querySelector<HTMLInputElement>(
@@ -422,6 +432,7 @@ export function PcmChecklistBuilder({
   }, [activeItemIndex, items.length])
 
   function newModel() {
+    if (!canCreate) return
     setView('editor')
     setStage(0)
     setPlan(emptyPlan())
@@ -434,6 +445,7 @@ export function PcmChecklistBuilder({
   }
 
   async function duplicateModel(modelId: string) {
+    if (!canCreate) return
     setDetailLoading(true)
     setError('')
     try {
@@ -622,6 +634,7 @@ export function PcmChecklistBuilder({
   }
 
   async function saveModel(): Promise<AdminChecklistPlan | null> {
+    if (!canEdit) return null
     const validation = validateDraft()
     if (validation) {
       setError(validation)
@@ -656,6 +669,7 @@ export function PcmChecklistBuilder({
   }
 
   async function sendForValidation() {
+    if (!canEdit || (signaturesRequired ? !canRequestSignatures : !canSubmitDirect)) return
     if (signaturesRequired &&
       routing.politica_assinatura === 'PERSONALIZADA' &&
       !routing.responsavel_atual_id
@@ -699,6 +713,7 @@ export function PcmChecklistBuilder({
   }
 
   async function createRevision(modelId: string) {
+    if (!canRevise) return
     setLibraryBusy(true)
     setError('')
     setNotice('')
@@ -721,6 +736,7 @@ export function PcmChecklistBuilder({
   }
 
   async function deleteDraftModel() {
+    if (!canDelete) return
     if (!modelToDelete) return
     setLibraryBusy(true)
     setError('')
@@ -748,7 +764,7 @@ export function PcmChecklistBuilder({
     <section className="pcm-resource-checklist-workspace pcm-checklist-workspace" data-view={view} data-stage={stage} ref={workspaceRef}>
       <nav className="pcm-checklist-navigation" aria-label="Checklists">
         <button type="button" aria-pressed={view === 'library'} onClick={() => setView('library')}><ChecklistIcon />Biblioteca de modelos</button>
-        <button type="button" className="primary-button" aria-pressed={view === 'editor'} onClick={newModel}><PlusIcon />Criar modelo</button>
+        {canCreate ? <button type="button" className="primary-button" aria-pressed={view === 'editor'} onClick={newModel}><PlusIcon />Criar modelo</button> : null}
       </nav>
       {view === 'home' ? <div className="pcm-checklist-welcome"><ChecklistIcon /><p>Crie um modelo ou consulte sua biblioteca.</p></div> : null}
       {error ? <div className="dashboard-error" role="alert"><strong>Ação não concluída.</strong><span>{error}</span></div> : null}
@@ -758,7 +774,7 @@ export function PcmChecklistBuilder({
         <aside className="pcm-resource-checklist-library">
           <header><div><span className="eyebrow">BIBLIOTECA</span><h2>Modelos técnicos</h2></div><span className="manager-live-sync manager-live-sync--compact" title="Biblioteca sincronizada automaticamente"><i aria-hidden="true" />Ao vivo</span></header>
           <label><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar checklist ou ativo" /></label>
-          <button className="primary-button pcm-resource-checklist-new" type="button" onClick={newModel}>+ Novo checklist</button>
+          {canCreate ? <button className="primary-button pcm-resource-checklist-new" type="button" onClick={newModel}>+ Novo checklist</button> : null}
           <div className="pcm-resource-checklist-models">
             {filteredModels.map((model) => (
               <article key={model.id} className={plan.id === model.id ? 'is-active' : ''}>
@@ -770,9 +786,9 @@ export function PcmChecklistBuilder({
                   <small className="pcm-resource-checklist-model-asset">{[model.ativo_tag, model.ativo_nome].filter(Boolean).join(' · ') || 'Ativo não informado'}{model.componente_nome ? ` / ${model.componente_nome}` : ''}</small>
                   <span className="pcm-resource-checklist-model-meta">{model.itens_count ?? 0} itens <span>•</span> R{model.revisao || 1}</span>
                 </button>
-                <div className="pcm-resource-checklist-model-actions"><button type="button" title="Duplicar modelo" aria-label={`Duplicar ${model.nome}`} disabled={detailLoading || libraryBusy} onClick={() => void duplicateModel(model.id)}><CopyIcon /></button>
-                  {normalizedWorkflow(model.workflow_status) === 'VALIDADO' ? <button type="button" title="Nova revisão" aria-label={`Criar nova revisão de ${model.nome}`} disabled={libraryBusy} onClick={() => void createRevision(model.id)}><CopyIcon /></button> : null}
-                  {normalizedWorkflow(model.workflow_status) === 'RASCUNHO' && !model.revisao_origem_id && !model.substitui_plano_id ? <button className="is-danger" type="button" title="Excluir rascunho" aria-label={`Excluir rascunho ${model.nome}`} disabled={libraryBusy} onClick={() => setModelToDelete(model)}><TrashIcon /></button> : null}
+                <div className="pcm-resource-checklist-model-actions">{canCreate ? <button type="button" title="Duplicar modelo" aria-label={`Duplicar ${model.nome}`} disabled={detailLoading || libraryBusy} onClick={() => void duplicateModel(model.id)}><CopyIcon /></button> : null}
+                  {canRevise && normalizedWorkflow(model.workflow_status) === 'VALIDADO' ? <button type="button" title="Nova revisão" aria-label={`Criar nova revisão de ${model.nome}`} disabled={libraryBusy} onClick={() => void createRevision(model.id)}><CopyIcon /></button> : null}
+                  {canDelete && normalizedWorkflow(model.workflow_status) === 'RASCUNHO' && !model.revisao_origem_id && !model.substitui_plano_id ? <button className="is-danger" type="button" title="Excluir rascunho" aria-label={`Excluir rascunho ${model.nome}`} disabled={libraryBusy} onClick={() => setModelToDelete(model)}><TrashIcon /></button> : null}
                 </div>
               </article>
             ))}
@@ -802,7 +818,7 @@ export function PcmChecklistBuilder({
                   <b>{normalizedCriticality(sourceAnalysis.prioridade)}</b>
                 </div>
               ) : null}
-              {!canEdit ? <div className="pcm-resource-checklist-lock"><ShieldIcon /><span><strong>Versão protegida</strong><small>Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.</small></span></div> : null}
+              {!canEdit ? <div className="pcm-resource-checklist-lock"><ShieldIcon /><span><strong>{(plan.id ? !canUpdate : !canCreate) ? 'Somente consulta' : 'Versão protegida'}</strong><small>{(plan.id ? !canUpdate : !canCreate) ? 'Seu perfil pode consultar este modelo, mas não alterá-lo.' : 'Este modelo está em validação ou já foi validado. Ele não pode ser alterado diretamente.'}</small></span></div> : null}
               <nav className="pcm-checklist-stages" aria-label="Etapas de criação">{['Etapas', 'Nome e tipo', 'Aplicação', 'Configurar etapas', 'Revisão'].map((label, index) => <button type="button" key={label} aria-current={stage === index ? 'step' : undefined} disabled={index > 0 && !items.length} onClick={() => setStage(index)}>{index + 1}. {label}</button>)}</nav>
               <div className="pcm-checklist-step-composer" hidden={stage !== 0}>
               {canEdit ? (
@@ -895,15 +911,15 @@ export function PcmChecklistBuilder({
               <div className="pcm-checklist-stage-actions">{stage > 0 ? <button type="button" disabled={saving || sending} onClick={() => setStage(current => Math.max(0, current - 1))}>Voltar</button> : null}{stage < 4 ? <button type="button" className="primary-button" disabled={!items.length || saving || sending || (stage === 1 && !plan.nome.trim()) || (stage === 2 && !plan.ativo_id)} onClick={() => setStage(current => Math.min(4, current + 1))}>{stage === 0 ? 'Confirmar etapas' : 'Continuar'}</button> : null}</div>
               <footer className="pcm-resource-checklist-actions">
                 <span><CheckIcon /><small>Salvar mantém o modelo em rascunho. A publicação libera esta versão.</small></span>
-                {plan.operacional && onCreateOrder ? <button type="button" onClick={() => onCreateOrder(plan.id)}>Criar OS com este checklist</button> : null}
-                {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" type="button" disabled={saving || sending} onClick={() => { setError(''); setRoutingOpen(true) }}>Publicar ou solicitar assinatura</button></div> : normalizedWorkflow(plan.workflow_status) === 'VALIDADO' && !plan.operacional ? <div><button type="button" disabled={sending} onClick={async () => { setSending(true); setError(''); try { await publishPcmChecklist(plan.id, false); await openModel(plan.id); setModels(await listAdminChecklistModels()); setNotice('Checklist publicado.') } catch (cause) { handleFailure(cause, 'Não foi possível publicar o checklist.') } finally { setSending(false) } }}>Publicar versão aprovada</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
+                {plan.operacional && onCreateOrder && hasAction('POST', '/v1/maintenance/work-orders', 'maintenance.work-orders.manage') ? <button type="button" onClick={() => onCreateOrder(plan.id)}>Criar OS com este checklist</button> : null}
+                {canEdit ? <div><button type="button" disabled={saving || sending} onClick={() => void saveModel()}>{saving ? 'Salvando…' : 'Salvar rascunho'}</button>{canSubmitDirect || canRequestSignatures ? <button className="primary-button" type="button" disabled={saving || sending} onClick={() => { if (!canSubmitDirect && canRequestSignatures) updatePlan('assinaturas_exigidas', 1); if (canSubmitDirect && !canRequestSignatures) updatePlan('assinaturas_exigidas', 0); setError(''); setRoutingOpen(true) }}>Publicar ou solicitar assinatura</button> : null}</div> : canPublish && normalizedWorkflow(plan.workflow_status) === 'VALIDADO' && !plan.operacional ? <div><button type="button" disabled={sending} onClick={async () => { setSending(true); setError(''); try { await publishPcmChecklist(plan.id, false); await openModel(plan.id); setModels(await listAdminChecklistModels()); setNotice('Checklist publicado.') } catch (cause) { handleFailure(cause, 'Não foi possível publicar o checklist.') } finally { setSending(false) } }}>Publicar versão aprovada</button></div> : canCreateRevision ? <div><button className="primary-button" type="button" disabled={libraryBusy} onClick={() => void createRevision(plan.id)}>{libraryBusy ? 'Criando revisão…' : 'Criar nova revisão'}</button></div> : null}
               </footer>
             </>
           )}
         </section>
       </div>
 
-      {routingOpen && canEdit ? (
+      {routingOpen && canEdit && (canSubmitDirect || canRequestSignatures) ? (
         <div
           className="pcm-resource-catalog-dialog pcm-resource-checklist-routing-dialog"
           role="presentation"
@@ -923,7 +939,7 @@ export function PcmChecklistBuilder({
               <header><ShieldIcon /><span><strong>Liberar modelo</strong><small>Escolha se esta versão precisa de assinatura antes de ser publicada.</small></span></header>
               {error ? <div className="dashboard-error" role="alert"><strong>Revise o envio.</strong><span>{error}</span></div> : null}
               <div>
-                <label><span>Exigir assinatura?</span><select value={signaturesRequired ? 'SIM' : 'NAO'} onChange={event => updatePlan('assinaturas_exigidas', event.target.value === 'SIM' ? 1 : 0)}><option value="NAO">Não · publicar diretamente</option><option value="SIM">Sim · solicitar revisão</option></select></label>
+                <label><span>Exigir assinatura?</span><select value={signaturesRequired ? 'SIM' : 'NAO'} onChange={event => updatePlan('assinaturas_exigidas', event.target.value === 'SIM' ? 1 : 0)}>{canSubmitDirect ? <option value="NAO">Não · publicar diretamente</option> : null}{canRequestSignatures ? <option value="SIM">Sim · solicitar revisão</option> : null}</select></label>
                 {signaturesRequired ? <label><span>Quem deve assinar?</span><select value={routing.politica_assinatura} onChange={event => setRouting(current => ({ ...current, politica_assinatura: event.target.value as ValidationRouteDraft['politica_assinatura'] }))}><option value="QUALIDADE_OU_SEGURANCA">Qualidade ou Segurança · uma assinatura</option><option value="QUALIDADE">Somente Qualidade</option><option value="SEGURANCA">Somente Segurança</option><option value="QUALIDADE_E_SEGURANCA">Qualidade e Segurança · duas assinaturas</option></select></label> : <label><span>Área de destino do modelo</span><select value={String(plan.area_tecnica_id || '')} onChange={event => updatePlan('area_tecnica_id', event.target.value)}><option value="">Biblioteca geral de manutenção</option>{areas.filter(area => area.status === 'ATIVO').map(area => <option key={area.id} value={area.id}>{area.nome}</option>)}</select><small>Classifica o modelo para uso. Não inicia uma ordem de serviço.</small></label>}
                 <label><span>{signaturesRequired ? 'Orientação para revisão *' : 'Observação opcional'}</span><textarea rows={3} value={routing.comentario} onChange={event => setRouting(current => ({ ...current, comentario: event.target.value }))} /></label>
               </div>
@@ -932,7 +948,7 @@ export function PcmChecklistBuilder({
               <span>{signaturesRequired ? 'A publicação depende das assinaturas escolhidas.' : 'Sem assinaturas: a versão será publicada após a conferência do servidor.'}</span>
               <div>
                 <button type="button" disabled={sending} onClick={() => setRoutingOpen(false)}>Cancelar</button>
-                <button className="primary-button" type="button" disabled={saving || sending} onClick={() => void sendForValidation()}>{sending ? 'Processando…' : signaturesRequired ? 'Solicitar assinaturas' : 'Publicar checklist'}</button>
+                <button className="primary-button" type="button" disabled={saving || sending || (signaturesRequired ? !canRequestSignatures : !canSubmitDirect)} onClick={() => void sendForValidation()}>{sending ? 'Processando…' : signaturesRequired ? 'Solicitar assinaturas' : 'Publicar checklist'}</button>
               </div>
             </footer>
           </section>

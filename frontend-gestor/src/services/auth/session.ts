@@ -20,7 +20,7 @@ const LEGACY_PREVIEW_KEYS = [
   'fab-control.gestor-auth-preview-expires-at',
 ]
 
-export type AuthenticationNotice = 'session-expired'
+export type AuthenticationNotice = 'session-expired' | 'company-access-blocked'
 
 function removeSessionData(): void {
   window.sessionStorage.removeItem(AUTH_SESSION_KEY)
@@ -45,7 +45,7 @@ export function markExpiredGestorSession(): void {
     removeSessionData()
     clearGestorToken()
     window.sessionStorage.removeItem(STARTUP_COMPLETED_KEY)
-    window.sessionStorage.setItem(AUTH_NOTICE_KEY, 'session-expired')
+    if (window.sessionStorage.getItem(AUTH_NOTICE_KEY) !== 'company-access-blocked') window.sessionStorage.setItem(AUTH_NOTICE_KEY, 'session-expired')
   } catch {
     // O estado em memória ainda será encerrado pelo aplicativo.
   }
@@ -152,8 +152,27 @@ export function consumeAuthenticationNotice(): AuthenticationNotice | '' {
   try {
     const notice = window.sessionStorage.getItem(AUTH_NOTICE_KEY) ?? ''
     window.sessionStorage.removeItem(AUTH_NOTICE_KEY)
-    return notice === 'session-expired' ? notice : ''
+    return notice === 'session-expired' || notice === 'company-access-blocked' ? notice : ''
   } catch {
     return ''
   }
+}
+
+export function markBlockedGestorSession(message: string): void {
+  markExpiredGestorSession()
+  try {
+    window.sessionStorage.setItem(AUTH_NOTICE_KEY, 'company-access-blocked')
+    window.sessionStorage.setItem(`${AUTH_NOTICE_KEY}.message`, message)
+  } catch { /* O encerramento em memória permanece ativo. */ }
+}
+
+export function consumeAuthenticationMessage(): string {
+  const notice = consumeAuthenticationNotice()
+  if (notice === 'session-expired') return 'Sua sessão expirou. Entre novamente para continuar.'
+  if (notice !== 'company-access-blocked') return ''
+  try {
+    const message = window.sessionStorage.getItem(`${AUTH_NOTICE_KEY}.message`) || 'O acesso da empresa está temporariamente indisponível. Entre em contato com o responsável da sua empresa.'
+    window.sessionStorage.removeItem(`${AUTH_NOTICE_KEY}.message`)
+    return message
+  } catch { return 'O acesso da empresa está temporariamente indisponível.' }
 }

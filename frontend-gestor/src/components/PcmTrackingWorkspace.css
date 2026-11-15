@@ -166,3 +166,32 @@ html
     gap: 8px;
   }
 }
+
+.pcm-tracking { container-type: inline-size; }
+html body .pcm-tracking .pcm-planning-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+html body .pcm-tracking .pcm-tracking-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+html body .pcm-tracking .pcm-tracking-actions button { min-height: 36px; white-space: nowrap; background: transparent; border: 1px solid var(--pcm-shell-line); color: var(--pcm-shell-ink); border-radius: 4px; }
+html body .pcm-tracking .pcm-tracking-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--pr-line); margin: 0 0 20px; padding-bottom: 8px; }
+html body .pcm-tracking .pcm-tracking-tabs button { min-height: 36px; padding-inline: 14px; }
+html body .pcm-tracking .pcm-tracking-tabs button[aria-pressed="true"] { background: var(--pr-surface) !important; border-color: var(--pr-ink); }
+html body .pcm-tracking .pcm-tracking-kpis { gap: 8px; margin-bottom: 20px; }
+html body .pcm-tracking .pcm-tracking-kpis button { align-items: flex-start; justify-content: center; text-align: left; min-height: 76px; }
+html body .pcm-tracking .pcm-tracking-kpis strong { font-size: 24px; }
+html body .pcm-tracking .pcm-tracking-filters { align-items: end; padding-bottom: 12px; border-bottom: 1px solid var(--pr-line); }
+@container (max-width: 640px) {
+  html body .pcm-tracking .pcm-tracking-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  html body .pcm-tracking .pcm-planning-heading { align-items: start; }
+}
+
+html body .pcm-tracking .pcm-tracking-filters { display: grid; grid-template-columns: minmax(180px,2fr) minmax(180px,1fr) auto; gap: 16px; margin: 0 0 18px; padding: 0 0 18px; border-bottom: 0; }
+html body .pcm-tracking .pcm-tracking-filters label { max-width: none; }
+html body .pcm-tracking .pcm-tracking-filters > small { justify-self: end; align-self: end; padding-block: 9px; color: var(--pr-muted); }
+html body .pcm-tracking .pcm-tracking-list-heading { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); gap: 16px; padding: 10px; border-bottom: 1px solid var(--pr-line); color: var(--pr-muted); font-size: 11px; }
+html body .pcm-tracking .pcm-tracking-order-status { width: fit-content; padding: 2px 7px; border-radius: 3px; background: var(--pr-surface); font-size: 12px; }
+html body .pcm-tracking .pcm-tracking-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 18px; }
+html body .pcm-tracking .pcm-tracking-pagination > span { margin-right: auto; color: var(--pr-muted); font-size: 12px; }
+@container (max-width: 640px) {
+  html body .pcm-tracking .pcm-tracking-filters { grid-template-columns: 1fr; gap: 10px; }
+  html body .pcm-tracking .pcm-tracking-filters > small { justify-self: start; padding: 0; }
+  html body .pcm-tracking .pcm-tracking-list-heading { display: none; }
+}

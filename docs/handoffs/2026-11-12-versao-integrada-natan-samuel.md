@@ -1,0 +1,114 @@
+# Entrega integrada para Samuel
+
+Branch de referência: `dev/natan-refinamento-frontend`.
+
+## Marco principal de finalização do TI
+
+O commit `6bc8500` consolida a navegação aprovada por Natan, junto aos commits anteriores desta branch. Samuel deve integrar esse histórico completo. Se a interface no ambiente dele ainda mostrar os atalhos removidos, a integração visual não está concluída: conferir a versão executada, recompilar o frontend e remover conflitos que tenham reintroduzido a navegação anterior.
+
+A lista aprovada de entradas da lateral é **somente**:
+
+1. Integridade do sistema
+2. Equipes técnicas
+3. Gestão de pessoas
+4. Configurações de acesso
+5. Importação e exportação
+6. Lotes de importação
+7. Criar uma cópia
+8. Indicadores
+9. Documentos
+10. Auditoria
+11. Suporte VORQIX
+
+Não acrescentar à lateral Estrutura fabril, Cadastro técnico, Materiais e peças, Homologação de planos, Configurações avançadas ou Configurações do sistema. Os recursos de importação de estrutura, ativos e almoxarifado permanecem dentro de Importação e exportação. Ocultar esses atalhos não significa excluir os módulos, APIs ou dados. As permissões e o plano podem restringir o acesso às entradas aprovadas; não devem reintroduzir outras entradas.
+
+Esta lista deve ser usada na revisão de conflitos e na conferência final da interface após o pull. Mudanças futuras nessa navegação precisam ser combinadas antes de substituir o padrão aprovado.
+
+**Ação obrigatória na integração:** se existirem outras áreas ou atalhos de primeiro nível no TI fora desta lista, removê-los da navegação apresentada ao usuário, inclusive acessos equivalentes pela busca de módulos ou pelo menu do perfil. Eles não fazem parte do escopo visual aprovado. Preservar subfluxos necessários das onze entradas, como as categorias de Importação e exportação. Não apagar tabelas, dados, APIs ou recursos compartilhados para fazer essa limpeza visual.
+
+Esta entrega inclui frontend, backend e migrações já versionados nesta branch. Integrar a branch completa; copiar somente o frontend deixa de fora as regras de acesso e as rotas correspondentes. Não substituir a interface desta branch pela camada visual antiga após a integração.
+
+## Padrão visual
+
+- Manter o Centro de Comando do TI, sua navegação lateral, Ctrl+K e painéis redimensionáveis.
+- Estrutura, ativos e almoxarifado ficam concentrados em Importação e exportação. Não reintroduzir atalhos separados de Estrutura fabril, Cadastro técnico ou Materiais e peças na lateral do TI.
+- Configurações do sistema (motor de configuração) também fica oculto na navegação, busca de módulos e menu do perfil do TI. O módulo e sua API permanecem no código; não reintroduzir seu acesso visual nesta versão.
+- Checklists, planejamento, execução e publicação de planos ficam no fluxo do PCM. Homologação não deve reaparecer como atalho do TI.
+- O CSS global não deve impor dimensões e aparência a todo botão sem classe: isso quebra controles de janela e componentes com estilos próprios.
+- `visual-polish.css` não é mais importado pelo aplicativo gestor. Novas alterações visuais devem respeitar os estilos e os escopos dos componentes.
+- O tema do PCM continua próprio de suas telas; o técnico mantém sua identidade independente.
+
+## Fechamento de equipes técnicas e teste de importação
+
+Atualização de 13/11/2026: integrar também o commit `15d20a6` e os anteriores da mesma branch. Ele simplifica o formulário de áreas/cargos: Nome da área ou Nome do cargo em destaque, área previamente selecionada ao adicionar um cargo e código gerado automaticamente nos novos cadastros. Código de identificação, status, assinatura e descrição ficam em Mais detalhes. Códigos e vínculos dos registros existentes são preservados. As listas priorizam os nomes, deixando os códigos no contexto de consulta.
+
+Nesta última etapa **não houve alteração no código do importador nem no modelo de download do sistema**. Foi gerada uma planilha XLSX externa com oito contas fictícias, sem TI nem PCM. Natan informou que a análise ficou pronta para criar, confirmou a importação e verificou as áreas/cargos após atualizar a tela. Trata-se de confirmação manual do usuário no ambiente local, não de um novo teste automatizado.
+
+As oito contas e suas áreas/cargos gravados na TOZZI são dados locais e não acompanham o commit/pull. A planilha preenchida e as credenciais temporárias também não entram no repositório. Samuel deve puxar o código completo e testar a importação no próprio ambiente com seus dados. Não copiar banco ou credenciais locais para reproduzir a interface.
+
+## Regras de acesso e migrações
+
+Inclui as correções anteriores de recuperação/notificações e o controle de acesso da empresa. As migrações 0062 e 0063 fazem parte da entrega: ativação/suspensão pela plataforma e verificação de acesso/validade da assinatura. Aplicar todas as migrações pendentes, na ordem do migrador, sem selecionar apenas esses dois arquivos.
+
+Empresa bloqueada ou assinatura vencida: a API rejeita acesso; os aplicativos limpam a sessão e apresentam o aviso correspondente. Sessões abertas detectam o bloqueio na próxima chamada ou na verificação periódica. Não se trata de desconexão instantânea por WebSocket.
+
+## Integração e execução
+
+1. Buscar a branch com `git fetch origin` e integrar seu histórico completo à branch de trabalho do Samuel. Se houver alterações locais ou divergência, resolver a integração preservando esta interface e as regras da API; não usar reset forçado.
+2. Com a branch integrada, instalar as dependências pelos lockfiles:
+
+```powershell
+npm --prefix frontend ci
+npm --prefix frontend-gestor ci
+npm --prefix backend/node-api ci
+```
+
+3. Com o ambiente do próprio Samuel configurado e backup do banco de destino, executar o migrador usando uma conta autorizada a alterar o esquema:
+
+```powershell
+npm --prefix backend/node-api run db:migrate
+```
+
+4. Compilar e reiniciar os serviços com a nova versão:
+
+```powershell
+npm --prefix backend/node-api run build
+npm --prefix frontend run build
+npm --prefix frontend-gestor run build
+```
+
+Usar Node 24 e npm 11, conforme o backend. Reiniciar a API compilada e os frontends pelo processo de execução do ambiente; atualizar somente os arquivos sem reiniciar a API pode causar “Rota não encontrada”.
+
+## Fora do Git
+
+Banco local, dados das empresas, backup, credenciais, arquivos `.env`, sessões e uploads não são transferidos por esta entrega. A limpeza local feita para testar a TOZZI não será reproduzida no banco do Samuel por um pull. Manter o ambiente e os dados dele.
+
+## Verificação desta correção visual
+
+Maximização de painel conferida e controles separados. A lateral indica a aba visível em foco, não todas as abas do mesmo grupo. A verificação visual não substitui homologar todos os fluxos no ambiente do Samuel.
+
+## Entrega PCM de 13/11/2026 — integrar frontend e backend juntos
+
+Esta entrega complementa a versão integrada acima. Puxar toda a branch `dev/natan-refinamento-frontend`, incluindo o histórico anterior, e não copiar apenas arquivos de interface.
+
+Implementado nesta etapa:
+- Removidos da biblioteca da lousa os cards Exportar CSV e Imprimir / PDF, junto com seus geradores de relatório. A impressão da lousa no topo permanece; exportação de dados continua no TI.
+- Consulta de indicador com cabeçalho compacto, melhor contraste e listas no tema do PCM.
+- Contextos reais de disponibilidade por ativo, falhas, reincidências, ordens abertas e preventivas concluídas no prazo ou com atraso. Listas de contexto limitadas a 500 registros; execuções detalhadas mantêm o limite existente de 100.
+- API ampliada com saldo de materiais e consumo por OS, setor e linha, além do custo de materiais do ano corrente. Custo anual representa materiais consumidos em execuções concluídas, não o custo financeiro total da empresa.
+- Reincidência calculada sem depender do ranking visual de ativos. Detalhes consultivos podem ser somente leitura.
+
+Não está concluído nesta entrega:
+- Novos cards opcionais de almoxarifado e seus filtros por setor/linha/ativo. Os dados foram preparados na API, mas os novos cards ainda não foram entregues.
+- Homologação visual completa de cada indicador e de todos os temas.
+- Estoque por localização, entrega e entrada de peças: não inferir esses movimentos a partir de consumo ou saldo geral.
+
+Validação: consulta real de dashboard e relatórios executada com RLS da API em transação READ ONLY, revertida ao final, sem alterar dados da TOZZI. Verificar também builds e fluxos no ambiente de destino. Não há migração nova nesta etapa, mas o histórico anterior contém migrações e deve ser integrado por completo.
+
+Para Samuel: preservar a navegação TI aprovada de onze entradas e o frontend padronizado. Integrar os arquivos de backend junto com o frontend; manter seu próprio ambiente e banco. Dados importados localmente e planilhas de teste não são transferidos pelo Git.
+
+Verificações finais desta entrega: typecheck do frontend e backend, build do frontend e backend e git diff --check passaram. O build do Vite mantém aviso de pacotes grandes; não houve falha de compilação.
+
+## Atualização de 14/11 — permissões e planos
+
+Integrar também a entrega descrita em [Permissões e planos](2026-11-14-permissoes-e-planos.md), com o [catálogo das 214 ações e habilitações](2026-11-14-catalogo-de-permissoes.md). Esta etapa inclui backend, ambos os frontends e migrações 0064–0067. É obrigatório aplicar as migrações e reiniciar a API; puxar somente a interface não ativa o controle granular. Preservar a navegação TI e os estilos de cada portal.

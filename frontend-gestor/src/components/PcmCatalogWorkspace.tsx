@@ -1,3 +1,4 @@
+import { actionCapabilityId, hasAction, hasCapability } from '../services/auth/permissionActions'
 import { Filter } from 'lucide-react'
 import { filterPcmCatalog } from './pcmCatalogFilters'
 import type { PcmColumnRules, PcmColumnRule } from './pcmCatalogFilters'
@@ -395,6 +396,13 @@ function statusLabel(value: unknown): string {
   return labels[upper(value)] ?? valueText(value)
 }
 
+function canReadCatalogEntity(entity: AdminEntity): boolean {
+  if (['plantas', 'setores', 'linhas'].includes(entity)) return hasAction('GET', '/v1/cmms/structure', 'cmms.structure.read')
+  if (entity === 'planos') return hasAction('GET', '/v1/maintenance/plans', 'maintenance.plans.read')
+  const resource = { ativos: 'assets', componentes: 'components', materiais: 'materials' }[entity as 'ativos' | 'componentes' | 'materiais']
+  return Boolean(resource && hasAction('GET', `/v1/cmms/${resource}`, entity === 'materiais' ? 'cmms.materials.read' : 'cmms.assets.read'))
+}
+
 export function PcmCatalogWorkspace({
   scope,
   onSessionExpired,
@@ -402,7 +410,7 @@ export function PcmCatalogWorkspace({
   showImports = true,
   approvalOnly = false,
 }: PcmCatalogWorkspaceProps) {
-  const scopeEntities = SCOPE_ENTITIES[scope]
+  const scopeEntities = SCOPE_ENTITIES[scope].filter(canReadCatalogEntity)
   const [selectedEntity, setSelectedEntity] = useState<AdminEntity>(scopeEntities[0])
   const [records, setRecords] = useState<Partial<Record<AdminEntity, AdminEntityRecord[]>>>({})
   const [checklistModels, setChecklistModels] = useState<AdminChecklistPlan[]>([])
@@ -425,16 +433,16 @@ export function PcmCatalogWorkspace({
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
-    setSelectedEntity(SCOPE_ENTITIES[scope][0])
+    setSelectedEntity(SCOPE_ENTITIES[scope].find(canReadCatalogEntity) ?? SCOPE_ENTITIES[scope][0])
     setEditing(undefined)
     setActionRecord(null)
   }, [scope])
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
-    const entities = approvalOnly ? ['planos' as AdminEntity] : SCOPE_REFERENCES[scope]
+    const entities = (approvalOnly ? ['planos' as AdminEntity] : SCOPE_REFERENCES[scope]).filter(canReadCatalogEntity)
     const [lists, models] = await Promise.all([
       Promise.all(entities.map((entity) => listAdminEntity(entity, signal))),
-      scope === 'maintenance' && !approvalOnly ? listAdminChecklistModels(signal) : Promise.resolve([]),
+      scope === 'maintenance' && !approvalOnly && hasAction('GET', '/v1/maintenance/checklists', 'maintenance.checklists.read') ? listAdminChecklistModels(signal) : Promise.resolve([]),
     ])
     setRecords(Object.fromEntries(lists.map((list) => [list.entidade, list.rows])))
     setChecklistModels(models)
@@ -474,8 +482,29 @@ export function PcmCatalogWorkspace({
 
   const [assetContext, setAssetContext] = useState<AdminEntityRecord | null>(null)
   const definition = ENTITY_DEFINITIONS[selectedEntity]
+  const resourceAccess = selectedEntity === 'planos'
+    ? { path: '/v1/maintenance/plans', item: '/v1/maintenance/plans/:planId', legacy: 'maintenance.plans.manage' }
+    : ({ ativos: { path: '/v1/cmms/assets', item: '/v1/cmms/assets/:assetId', legacy: 'cmms.assets.manage' }, componentes: { path: '/v1/cmms/components', item: '/v1/cmms/components/:componentId', legacy: 'cmms.assets.manage' }, materiais: { path: '/v1/cmms/materials', item: '/v1/cmms/materials/:materialId', legacy: 'cmms.materials.manage' }, plantas: { path: '/v1/cmms/plants', item: '/v1/cmms/plants/:plantId', legacy: 'cmms.structure.manage' }, setores: { path: '/v1/cmms/sectors', item: '/v1/cmms/sectors/:sectorId', legacy: 'cmms.structure.manage' }, linhas: { path: '/v1/cmms/lines', item: '/v1/cmms/lines/:lineId', legacy: 'cmms.structure.manage' } } as Partial<Record<AdminEntity, { path: string; item: string; legacy: string }>>)[selectedEntity]
+  const canCreateResource = Boolean(resourceAccess && hasAction('POST', resourceAccess.path, resourceAccess.legacy))
+  const canUpdateResource = Boolean(resourceAccess && hasAction('PATCH', resourceAccess.item, resourceAccess.legacy))
+  const updateResourceId = resourceAccess ? actionCapabilityId('PATCH', resourceAccess.item) : ''
+  const canStatusResource = Boolean(resourceAccess && hasCapability(`${updateResourceId}.status`, resourceAccess.legacy))
+  const canArchiveResource = Boolean(resourceAccess && hasCapability(`${updateResourceId}.archive`, resourceAccess.legacy))
+  const canStockResource = selectedEntity === 'materiais' && hasCapability(`${updateResourceId}.stock`, 'cmms.materials.manage')
+  const canCostResource = selectedEntity === 'materiais' && hasCapability(`${updateResourceId}.cost`, 'cmms.materials.manage')
+  const canEditResourceFields = canUpdateResource || canStatusResource || canStockResource || canCostResource
+  function canEditResourceField(key: string): boolean {
+    if (!editing) return canCreateResource
+    if (key === 'status') return canStatusResource
+    if (selectedEntity === 'materiais' && ['estoque_atual', 'estoque_minimo'].includes(key)) return canStockResource
+    if (selectedEntity === 'materiais' && key === 'valor_unitario') return canCostResource
+    return canUpdateResource
+  }
+  const canPublishPlan = hasAction('POST', '/v1/maintenance/plans/:planId/publish', 'maintenance.plans.publish')
+  const canImportResource = hasAction('GET', '/v1/pcm/imports/models', 'cmms.imports.manage') && hasAction('POST', '/v1/pcm/imports/validate', 'cmms.imports.manage') && hasAction('POST', '/v1/pcm/imports/:batchId/confirm', 'cmms.imports.manage')
+
   const hasColumnFilters = Object.values(columnFilters).some(rule => rule.value || rule.order)
-  const editingReadOnly = approvalOnly || (selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing)))
+  const editingReadOnly = (editing ? !canEditResourceFields : !canCreateResource) || approvalOnly || (selectedEntity === 'planos' && Boolean(editing && isProtectedPlan(editing)))
   useEffect(() => { setColumnFilters({}); setFilterKey(null) }, [selectedEntity])
   const visibleRecords = useMemo(() => filterPcmCatalog((records[selectedEntity] ?? []).filter(record => !assetContext || selectedEntity !== 'componentes' || String(record.ativo_id) === String(assetContext.id)), columnFilters, (row, key) => key.endsWith('_id') ? displayCell(key, row[key]) : row[key]), [records, selectedEntity, assetContext, columnFilters])
   const activeFilter = filterKey ? columnFilters[filterKey] ?? { value: '', operator: 'contains' as const, order: '' as const } : null
@@ -528,6 +557,7 @@ export function PcmCatalogWorkspace({
   }
 
   function openEditor(record?: AdminEntityRecord) {
+    if (!record && !canCreateResource) return
     const base: AdminEntityRecord = record ? { ...record } : { ...definition.defaults, ...(selectedEntity === 'componentes' && assetContext ? { ativo_id: assetContext.id } : {}) }
     const normalizedBase = selectedEntity === 'ativos'
       ? {
@@ -557,6 +587,7 @@ export function PcmCatalogWorkspace({
   }
 
   function updateDraftField(field: FieldDefinition, rawValue: string) {
+    if (!canEditResourceField(field.key)) return
     setDraft((current) => {
       const next: AdminEntityRecord = {
         ...current,
@@ -690,6 +721,7 @@ export function PcmCatalogWorkspace({
   }
 
   async function performStatusAction(status: string, action: 'ALTERAR_STATUS' | 'PUBLICAR' = 'ALTERAR_STATUS') {
+    if (action === 'PUBLICAR' ? !canPublishPlan : !canStatusResource) return
     if (!actionRecord) return
     setActionBusy(true)
     setActionError('')
@@ -721,6 +753,7 @@ export function PcmCatalogWorkspace({
   }
 
   async function deleteRecord() {
+    if (!canArchiveResource) return
     if (!actionRecord) return
     setActionBusy(true)
     setActionError('')
@@ -749,6 +782,7 @@ export function PcmCatalogWorkspace({
   }
 
   async function planAction(record: AdminEntityRecord, publish: boolean) {
+    if (publish ? !canPublishPlan : !canStatusResource) return
     setPlanBusyId(String(record.id)); setError('')
     try {
       const result = await actionAdminEntity({ entidade: 'planos', id: record.id, acao: publish ? 'PUBLICAR' : 'ALTERAR_STATUS', status: publish ? 'ATIVO' : 'INATIVO' })
@@ -762,10 +796,11 @@ export function PcmCatalogWorkspace({
 
   function planRowActions(record: AdminEntityRecord) {
     const draftPlan = upper(record.workflow_status) === 'RASCUNHO'
-    return <div className="pcm-plan-row-actions"><button type="button" disabled={Boolean(planBusyId)} onClick={() => openEditor(record)}>{draftPlan ? 'Editar' : 'Consultar'}</button>{draftPlan && upper(record.status) !== 'INATIVO' ? <><button type="button" disabled={Boolean(planBusyId)} onClick={() => void planAction(record, true)}>Disponibilizar</button><button type="button" disabled={Boolean(planBusyId)} onClick={() => { if (archivePlanId === record.id) void planAction(record, false); else setArchivePlanId(String(record.id)) }}>{archivePlanId === record.id ? 'Confirmar arquivamento' : 'Arquivar'}</button>{archivePlanId === record.id ? <button type="button" onClick={() => setArchivePlanId('')}>Cancelar</button> : null}</> : null}</div>
+    return <div className="pcm-plan-row-actions"><button type="button" disabled={Boolean(planBusyId)} onClick={() => openEditor(record)}>{draftPlan && canEditResourceFields ? 'Editar' : 'Consultar'}</button>{draftPlan && upper(record.status) !== 'INATIVO' ? <>{canPublishPlan ? <button type="button" disabled={Boolean(planBusyId)} onClick={() => void planAction(record, true)}>Disponibilizar</button> : null}{canStatusResource ? <button type="button" disabled={Boolean(planBusyId)} onClick={() => { if (archivePlanId === record.id) void planAction(record, false); else setArchivePlanId(String(record.id)) }}>{archivePlanId === record.id ? 'Confirmar arquivamento' : 'Arquivar'}</button> : null}{archivePlanId === record.id ? <button type="button" onClick={() => setArchivePlanId('')}>Cancelar</button> : null}</> : null}</div>
   }
 
   async function save() {
+    if (editingReadOnly) return
     const missing = definition.fields.filter((field) => field.required && valueText(draft[field.key]) === '—')
     if (missing.length) {
       setError(`Preencha: ${missing.map((field) => field.label).join(', ')}.`)
@@ -798,7 +833,7 @@ export function PcmCatalogWorkspace({
   const selectedStatus = upper(actionRecord?.status)
   const selectedWorkflow = upper(actionRecord?.workflow_status)
   const selectedRelations = actionRecord ? relationSummary(actionRecord) : []
-  const canDeleteSelected = Boolean(actionRecord) && (
+  const canDeleteSelected = canArchiveResource && Boolean(actionRecord) && (
     selectedEntity !== 'planos'
     || (
       selectedWorkflow === 'RASCUNHO'
@@ -807,6 +842,7 @@ export function PcmCatalogWorkspace({
     )
   )
 
+  if (!canReadCatalogEntity(selectedEntity)) return <p role="status">Seu perfil não pode consultar esta lista.</p>
   if (loading) return <div className="dashboard-loading">Carregando cadastros administrativos…</div>
 
   return (
@@ -815,12 +851,12 @@ export function PcmCatalogWorkspace({
       {notice ? <div className="dashboard-notice" role="status">{notice}</div> : null}
 
       {editing === undefined && !actionRecord ? <>
-      <section className="pcm-resource-catalog-summary" data-single={scopeEntities.length === 1 && !showImports} aria-label="Listas disponíveis">
+      <section className="pcm-resource-catalog-summary" data-single={scopeEntities.length === 1 && !(showImports && canImportResource)} aria-label="Listas disponíveis">
         {scopeEntities.map((entity) => {
           const item = ENTITY_DEFINITIONS[entity]
           return <button key={entity} type="button" className={selectedEntity === entity ? 'is-active' : ''} onClick={() => { setSelectedEntity(entity); setAssetContext(null); setEditing(undefined); setActionRecord(null) }}><span>{item.label}</span><small>{records[entity]?.length ?? 0}</small></button>
         })}
-        {showImports ? (
+        {showImports && canImportResource ? (
           <button type="button" className="pcm-resource-catalog-import" onClick={onOpenImports}><SettingsIcon /><span><strong>Importar</strong><small>Usar modelo .xlsx</small></span></button>
         ) : null}
       </section>
@@ -830,7 +866,7 @@ export function PcmCatalogWorkspace({
         {selectedEntity === 'planos' && previewPlan ? <section className="pcm-plan-example" aria-label="Plano de exemplo"><header><strong>Exemplo fictício · não salvo</strong><button type="button" onClick={() => setPreviewPlan(false)}>Fechar exemplo</button></header><dl><dt>Plano</dt><dd>Inspeção mensal do compressor</dd><dt>Tipo</dt><dd>Preventiva</dd><dt>Programação</dt><dd>A cada 30 dias</dd><dt>Checklist</dt><dd>Inspeção técnica · 6 etapas</dd><dt>Tempo sugerido</dt><dd>35 min · estimativa indicativa</dd><dt>Parada</dt><dd>Decisão do executor</dd></dl><p>Este exemplo não gera ordens nem altera os dados da empresa.</p></section> : null}
         <header>
           <div><h2>{definition.label}</h2><button type="button" className="pcm-resource-help" aria-label="Ajuda desta lista" title={definition.description}>?</button></div>
-          <div>{selectedEntity === 'planos' ? <button type="button" onClick={() => setPreviewPlan(current => !current)}>Ver exemplo</button> : null}{!approvalOnly ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
+          <div>{selectedEntity === 'planos' ? <button type="button" onClick={() => setPreviewPlan(current => !current)}>Ver exemplo</button> : null}{!approvalOnly && canCreateResource ? <button className="primary-button" type="button" onClick={() => openEditor()}>Novo {definition.singular}</button> : null}</div>
         </header>
         {selectedEntity === 'planos' ? <p className="pcm-resource-rule" title="O plano nasce em rascunho e só pode ser publicado com um checklist validado. As assinaturas configuradas continuam obrigatórias."><CheckIcon />Publicação vinculada a checklist validado</p> : null}
         {filterKey && activeFilter && activeColumn ? <section className="pcm-column-filter" onKeyDown={event => { if (event.key === 'Escape') setFilterKey(null) }} aria-label={`Filtrar ${activeColumn.label}`}>
@@ -844,7 +880,7 @@ export function PcmCatalogWorkspace({
         <div className="pcm-resource-catalog-table">
           <table>
             <thead><tr>{definition.columns.map((column) => <th key={column.key}>{column.key === 'linha_id' ? column.label : <button type="button" className="pcm-column-trigger" aria-expanded={filterKey === column.key} aria-label={`Filtrar ${column.label}`} data-active={Boolean(columnFilters[column.key]?.value || columnFilters[column.key]?.order)} onClick={() => toggleColumnFilter(column.key)}>{column.label}<Filter size={12} /></button>}</th>)}<th>Detalhes</th></tr></thead>
-            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td>{selectedEntity === 'planos' && !approvalOnly ? planRowActions(record) : <button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button>}</td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{hasColumnFilters ? 'Nenhum resultado para esses filtros' : EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{hasColumnFilters ? 'Ajuste as colunas ou limpe os filtros para ver a lista completa.' : approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{hasColumnFilters ? <button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button> : !approvalOnly ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
+            <tbody>{visibleRecords.length ? visibleRecords.map((record) => <tr key={record.id}>{definition.columns.map((column) => <td key={column.key} title={displayCell(column.key, record[column.key])}>{selectedEntity === 'ativos' && column.key === 'nome' ? <button type="button" className="pcm-asset-open" title="Ver componentes deste ativo" onClick={() => { setAssetContext(record); setSelectedEntity('componentes'); setEditing(undefined); setActionRecord(null) }}>{displayCell(column.key, record[column.key])}</button> : <span className={column.key === 'status' || column.key === 'workflow_status' ? `pcm-resource-catalog-chip pcm-resource-catalog-chip--${String(record[column.key] || '').toLowerCase()}` : ''}>{displayCell(column.key, record[column.key])}</span>}</td>)}<td>{selectedEntity === 'planos' && !approvalOnly ? planRowActions(record) : <button className="pcm-resource-catalog-manage" type="button" onClick={() => openActions(record)}><MoreIcon />{approvalOnly ? 'Revisar' : 'Abrir'}</button>}</td></tr>) : <tr><td colSpan={definition.columns.length + 1}><div className="pcm-resource-empty-state pcm-resource-catalog-empty"><AssetIcon /><strong>{hasColumnFilters ? 'Nenhum resultado para esses filtros' : EMPTY_STATE_CONTENT[selectedEntity].title}</strong><span>{hasColumnFilters ? 'Ajuste as colunas ou limpe os filtros para ver a lista completa.' : approvalOnly ? 'Não há planos disponíveis para homologação.' : EMPTY_STATE_CONTENT[selectedEntity].description}</span>{hasColumnFilters ? <button type="button" onClick={() => { setColumnFilters({}); setFilterKey(null) }}>Limpar filtros</button> : !approvalOnly && canCreateResource ? <button type="button" onClick={() => openEditor()}>Criar {definition.singular}</button> : null}</div></td></tr>}</tbody>
           </table>
         </div>
       </section>
@@ -869,10 +905,10 @@ export function PcmCatalogWorkspace({
 
               <section className="pcm-resource-entity-actions__commands">
                 <button type="button" disabled={actionBusy} onClick={() => { const record = actionRecord; setActionRecord(null); openEditor(record) }}>
-                  <AssetIcon /><span><strong>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Visualizar cadastro' : 'Editar cadastro'}</strong><small>{approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Consulta sem edição operacional.' : 'Alterar dados técnicos e vínculos permitidos.'}</small></span>
+                  <AssetIcon /><span><strong>{!canEditResourceFields || approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Visualizar cadastro' : 'Editar cadastro'}</strong><small>{!canEditResourceFields || approvalOnly || (selectedEntity === 'planos' && isProtectedPlan(actionRecord)) ? 'Consulta sem edição operacional.' : 'Alterar dados técnicos e vínculos permitidos.'}</small></span>
                 </button>
 
-                {!approvalOnly && selectedEntity === 'ativos' ? (
+                {!approvalOnly && canStatusResource && selectedEntity === 'ativos' ? (
                   <>
                     {selectedStatus !== 'OPERANDO' ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('OPERANDO')}><CheckIcon /><span><strong>Colocar em operação</strong><small>Reativa o equipamento para novos fluxos.</small></span></button> : null}
                     {selectedStatus !== 'PARADO' ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('PARADO')}><StopIcon /><span><strong>Registrar parada</strong><small>Mantém o cadastro ativo, mas sinaliza indisponibilidade.</small></span></button> : null}
@@ -880,7 +916,7 @@ export function PcmCatalogWorkspace({
                   </>
                 ) : null}
 
-                {!approvalOnly && ['plantas', 'setores', 'linhas', 'componentes', 'materiais'].includes(selectedEntity) ? (
+                {!approvalOnly && canStatusResource && ['plantas', 'setores', 'linhas', 'componentes', 'materiais'].includes(selectedEntity) ? (
                   selectedStatus === 'INATIVO'
                     ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction(selectedEntity === 'componentes' ? 'OPERANDO' : 'ATIVO')}><CheckIcon /><span><strong>Reativar cadastro</strong><small>Volta a disponibilizá-lo nos novos cadastros.</small></span></button>
                     : <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('INATIVO')}><StopIcon /><span><strong>Desativar cadastro</strong><small>Preserva histórico e vínculos existentes.</small></span></button>
@@ -888,14 +924,14 @@ export function PcmCatalogWorkspace({
 
                 {selectedEntity === 'planos' && isProtectedPlan(actionRecord) ? <div className="pcm-resource-entity-actions__guidance"><CheckIcon /><span><strong>{approvalOnly ? 'Plano já homologado' : 'Versão protegida'}</strong><small>{approvalOnly ? 'A consulta é somente leitura. O PCM administra revisões técnicas e checklists.' : 'Use o construtor de checklists para abrir uma nova revisão. A versão atual não pode ser alterada ou apagada.'}</small></span></div> : null}
 
-                {selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
+                {canPublishPlan && selectedEntity === 'planos' && selectedWorkflow === 'RASCUNHO' ? (
                   <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO', 'PUBLICAR')}>
                     <CheckIcon /><span><strong>{approvalOnly ? 'Homologar e publicar plano' : 'Publicar plano'}</strong><small>{approvalOnly ? 'Confirma a revisão final, registra auditoria e libera o plano para o fluxo do PCM.' : 'Valida o vínculo com o checklist e disponibiliza o plano para criar intervenções.'}</small></span>
                   </button>
                 ) : null}
 
 
-                {!approvalOnly && selectedEntity === 'planos' && selectedWorkflow === 'VALIDADO' ? (
+                {!approvalOnly && canStatusResource && selectedEntity === 'planos' && selectedWorkflow === 'VALIDADO' ? (
                   selectedStatus === 'INATIVO'
                     ? <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('ATIVO')}><CheckIcon /><span><strong>Reativar plano</strong><small>Volta a disponibilizar o plano para novas intervenções.</small></span></button>
                     : <button type="button" disabled={actionBusy} onClick={() => void performStatusAction('INATIVO')}><StopIcon /><span><strong>Desativar plano</strong><small>Preserva as OS e execuções já vinculadas.</small></span></button>
@@ -922,12 +958,13 @@ export function PcmCatalogWorkspace({
             <fieldset className="pcm-resource-catalog-form" disabled={editingReadOnly || saving || loadingChecklistDefaults}>
               {definition.fields.filter(field => selectedEntity !== 'planos' || editingReadOnly || (planStep < 3 && planFieldStep(field.key) === planStep)).filter(field => selectedEntity !== 'planos' || field.key !== 'recorrencia_dias').map((field) => {
                 const fieldValue = draft[field.key] ?? ''
+                const fieldDisabled = !canEditResourceField(field.key)
                 if (field.type === 'select') {
                   const hasCurrentOption = field.options?.some((option) => option.value === String(fieldValue))
                   return (
                     <label key={field.key}>
                       <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
-                      <select value={String(fieldValue)} onChange={(event) => updateDraftField(field, event.target.value)}>
+                      <select disabled={fieldDisabled} value={String(fieldValue)} onChange={(event) => updateDraftField(field, event.target.value)}>
                         {fieldValue !== '' && !hasCurrentOption ? <option value={String(fieldValue)}>{String(fieldValue)} · valor atual</option> : null}
                         {field.options?.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
                       </select>
@@ -942,7 +979,7 @@ export function PcmCatalogWorkspace({
                       <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select
                         value={String(fieldValue)}
-                        disabled={Boolean(dependencyMissing)}
+                        disabled={fieldDisabled || Boolean(dependencyMissing)}
                         onChange={(event) => updateDraftField(field, event.target.value)}
                       >
                         <option value="">{dependencyMissing ? 'Selecione o campo anterior…' : field.required ? 'Selecione…' : 'Sem vínculo'}</option>
@@ -959,7 +996,7 @@ export function PcmCatalogWorkspace({
                       <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                       <select
                         value={String(fieldValue)}
-                        disabled={!draft.ativo_id || loadingChecklistDefaults}
+                        disabled={fieldDisabled || !draft.ativo_id || loadingChecklistDefaults}
                         onChange={(event) => void chooseChecklist(event.target.value)}
                       >
                         <option value="">{draft.ativo_id ? 'Selecione um checklist publicado…' : 'Selecione primeiro o ativo…'}</option>
@@ -981,6 +1018,7 @@ export function PcmCatalogWorkspace({
                     <span title={field.help}>{field.label}{field.required ? ' *' : ''}</span>
                     <input
                       type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                      disabled={fieldDisabled}
                       value={inputValue}
                       onChange={(event) => updateDraftField(field, event.target.value)}
                     />

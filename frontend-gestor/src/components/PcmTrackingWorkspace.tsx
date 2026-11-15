@@ -1,6 +1,6 @@
 import "./PcmPlanning.css";
 import "./PcmTrackingWorkspace.css";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 import {
   getPcmTracking,
@@ -70,10 +70,12 @@ export function PcmTrackingWorkspace({
   onSessionExpired,
   initialChecklistId,
   canManage = true,
+  requestsContent,
 }: {
   onSessionExpired: () => void;
   initialChecklistId?: string;
   canManage?: boolean;
+  requestsContent?: ReactNode;
 }) {
   const [orders, setOrders] = useState<AdminIntervention[]>([]);
   const [filter, setFilter] = useState<TrackingFilter>("all");
@@ -88,7 +90,7 @@ export function PcmTrackingWorkspace({
   const [selected, setSelected] = useState<AdminIntervention | null>(null);
   const [detail, setDetail] = useState<GestorActionDetail | null>(null);
   const [creating, setCreating] = useState(false);
-  const [view, setView] = useState<"orders" | "occurrences">("orders");
+  const [view, setView] = useState<"orders" | "occurrences" | "requests">("orders");
   const [qualityValidation, setQualityValidation] = useState(false);
   const [safetyValidation, setSafetyValidation] = useState(false);
   const [validationReason, setValidationReason] = useState('');
@@ -366,9 +368,10 @@ export function PcmTrackingWorkspace({
     >
       <header className="pcm-planning-heading">
         <h1>Acompanhamento</h1>
-        <div>
+        <div className="pcm-tracking-actions">
           <button
             type="button"
+            title="Atualizar acompanhamento"
             onClick={() => void load()}
             disabled={loading || busy}
             aria-label="Atualizar acompanhamento"
@@ -383,6 +386,7 @@ export function PcmTrackingWorkspace({
             <Plus size={16} />
             Criar OS
           </button>
+
         </div>
       </header>
       <div className="pcm-planning-page">
@@ -412,10 +416,11 @@ export function PcmTrackingWorkspace({
           >
             Ocorrências
           </button>
+          {requestsContent ? <button type="button" aria-pressed={view === "requests"} onClick={() => { setView("requests"); setCreating(false); setSelected(null); }}>Solicitações</button> : null}
         </nav>
         {error ? <p role="alert">{error}</p> : null}
         {notice ? <p role="status">{notice}</p> : null}
-        {view === "occurrences" ? (
+        {view === "requests" ? requestsContent : view === "occurrences" ? (
           <PcmOccurrences
             canManage={canManage}
             onCreateOrder={(occurrence) => void beginCreate(occurrence)}
@@ -777,25 +782,10 @@ export function PcmTrackingWorkspace({
               <small>
                 {loading
                   ? "Atualizando…"
-                  : `${counts[filter] ?? 0} ordens · página ${page + 1} · atualização a cada 30 segundos`}
+                  : `${counts[filter] ?? 0} ordens`}
               </small>
             </div>
-            <div className="pcm-tracking-pagination">
-              <button
-                type="button"
-                disabled={loading || page === 0}
-                onClick={() => setPage((current) => current - 1)}
-              >
-                Anterior
-              </button>
-              <button
-                type="button"
-                disabled={loading || (page + 1) * 50 >= (counts[filter] ?? 0)}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Próxima
-              </button>
-            </div>
+            <div className="pcm-tracking-list-heading" aria-hidden="true"><span>Ordem e localização</span><span>Situação e responsável</span><span>Programação</span></div>
             <div className="pcm-tracking-orders">
               {visible.map((order) => (
                 <button
@@ -820,7 +810,7 @@ export function PcmTrackingWorkspace({
                     </small>
                   </div>
                   <div>
-                    <span>{label(order.status)}</span>
+                    <span className="pcm-tracking-order-status">{label(order.status)}</span>
                     <small>
                       {order.executor_nome ||
                         order.responsavel_nome ||
@@ -845,6 +835,24 @@ export function PcmTrackingWorkspace({
             {!loading && !visible.length ? (
               <p>Nenhuma ordem corresponde a esta seleção.</p>
             ) : null}
+            <div className="pcm-tracking-pagination">
+              <span>Página {page + 1}</span>
+              <button
+                type="button"
+                disabled={loading || page === 0}
+                onClick={() => setPage((current) => current - 1)}
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                disabled={loading || (page + 1) * 50 >= (counts[filter] ?? 0)}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Próxima
+              </button>
+            </div>
+
           </>
         )}
       </div>

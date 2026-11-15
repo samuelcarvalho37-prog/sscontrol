@@ -19,7 +19,7 @@ export async function loadPcmReports(
        SELECT $1::timestamptz AS start_at, LEAST($2::timestamptz, now()) AS end_at
      ), scoped_orders AS (
        SELECT work_order.*, asset.tag AS ativo_tag, asset.name AS ativo_nome,
-         sector.name AS setor_nome, responsible.name AS responsavel_nome
+         sector.name AS setor_nome,line.name AS linha_nome, responsible.name AS responsavel_nome
        FROM maintenance.work_orders work_order
        JOIN cmms.assets asset ON asset.id=work_order.asset_id AND asset.tenant_id=work_order.tenant_id
        JOIN cmms.lines line ON line.id=asset.line_id AND line.tenant_id=asset.tenant_id
@@ -70,16 +70,25 @@ export async function loadPcmReports(
        ORDER BY execution.completed_at DESC
        LIMIT 100
      ), material_costs AS (
-       SELECT usage.total_cost, action.work_order_id, work_order.asset_id,
-         asset.tag AS ativo_tag, asset.name AS ativo_nome
+       SELECT usage.total_cost, usage.quantity AS quantidade, work_order.id AS work_order_id,
+         work_order.operational_code AS ordem_codigo,work_order.title AS titulo,work_order.asset_id,
+         work_order.setor_nome,work_order.linha_nome,asset.tag AS ativo_tag, asset.name AS ativo_nome
        FROM maintenance.material_usage usage
        JOIN maintenance.executions execution ON execution.id=usage.execution_id
-       JOIN maintenance.work_order_actions action ON action.id=execution.work_order_action_id
-       JOIN scoped_orders work_order ON work_order.id=action.work_order_id AND work_order.tenant_id=action.tenant_id
+       JOIN scoped_orders work_order ON work_order.id=execution.work_order_id AND work_order.tenant_id=execution.tenant_id
        JOIN cmms.assets asset ON asset.id=work_order.asset_id AND asset.tenant_id=work_order.tenant_id
        CROSS JOIN bounds
        WHERE execution.completed_at IS NOT NULL
          AND execution.completed_at >= bounds.start_at AND execution.completed_at <= bounds.end_at
+     ), annual_material_costs AS (
+       SELECT usage.total_cost FROM maintenance.material_usage usage
+       JOIN maintenance.executions execution ON execution.id=usage.execution_id
+       JOIN maintenance.work_orders work_order ON work_order.id=execution.work_order_id
+         AND work_order.tenant_id=execution.tenant_id
+       JOIN cmms.assets asset ON asset.id=work_order.asset_id AND asset.tenant_id=work_order.tenant_id
+       WHERE execution.completed_at>=date_trunc('year',now()) AND execution.completed_at<=now()
+         AND asset.lifecycle_status='ACTIVE' AND asset.deleted_at IS NULL
+         AND ($3::uuid IS NULL OR asset.id=$3)
      ), low_stock_materials AS (
        SELECT material.sku, COALESCE(NULLIF(material.friendly_name, ''), material.name) AS nome,
          material.unit AS unidade, material.current_stock AS estoque_atual,
@@ -124,13 +133,28 @@ export async function loadPcmReports(
          'programadas_no_periodo', (SELECT count(*) FROM period_orders WHERE work_type='PREVENTIVE' AND scheduled_for IS NOT NULL),
          'concluidas_no_prazo', (SELECT count(*) FROM period_orders WHERE work_type='PREVENTIVE' AND status='COMPLETED' AND completed_at <= scheduled_for),
          'concluidas_com_atraso', (SELECT count(*) FROM period_orders WHERE work_type='PREVENTIVE' AND status='COMPLETED' AND completed_at > scheduled_for),
-         'pendentes', (SELECT count(*) FROM scoped_orders WHERE work_type='PREVENTIVE' AND status NOT IN ('COMPLETED','CANCELLED'))
+         'pendentes', (SELECT count(*) FROM scoped_orders WHERE work_type='PREVENTIVE' AND status NOT IN ('COMPLETED','CANCELLED')),
+         'concluidas_detalhes',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT id,operational_code AS codigo,title AS titulo,ativo_tag,ativo_nome,setor_nome,
+             responsavel_nome,scheduled_for AS programada_para,completed_at AS concluida_em,
+             completed_at > scheduled_for AS com_atraso
+           FROM period_orders WHERE work_type='PREVENTIVE' AND status='COMPLETED'
+             AND scheduled_for IS NOT NULL
+           ORDER BY completed_at DESC,id LIMIT 500
+         ) row),'[]'::jsonb)
        ),
        'tecnicos', COALESCE((SELECT jsonb_agg(row) FROM (
          SELECT operator_id AS id, nome, execucoes, segundos_apontados FROM execution_by_technician
          ORDER BY segundos_apontados DESC, execucoes DESC, nome LIMIT 20
        ) row), '[]'::jsonb),
        'custos_materiais', jsonb_build_object(
+         'total_ano_atual',COALESCE((SELECT sum(total_cost) FROM annual_material_costs),0),
+         'por_ordem',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT work_order_id AS ordem_id,ordem_codigo,titulo,ativo_tag,ativo_nome,setor_nome,linha_nome,
+             sum(total_cost) AS custo_total,count(*)::integer AS registros_consumo
+           FROM material_costs GROUP BY work_order_id,ordem_codigo,titulo,ativo_tag,ativo_nome,setor_nome,linha_nome
+           ORDER BY custo_total DESC,ordem_codigo LIMIT 500
+         ) row),'[]'::jsonb),
          'total', COALESCE((SELECT sum(total_cost) FROM material_costs), 0),
          'itens_consumidos', (SELECT count(*)::integer FROM material_costs),
          'ordens_com_consumo', (SELECT count(DISTINCT work_order_id)::integer FROM material_costs),
@@ -151,6 +175,15 @@ export async function loadPcmReports(
            LIMIT 10
          ) row), '[]'::jsonb)
        ),
+       'almoxarifado',jsonb_build_object(
+         'disponiveis',(SELECT count(*) FROM cmms.materials WHERE status='ACTIVE' AND deleted_at IS NULL AND current_stock>0),
+         'sem_saldo',(SELECT count(*) FROM cmms.materials WHERE status='ACTIVE' AND deleted_at IS NULL AND current_stock<=0),
+         'itens',COALESCE((SELECT jsonb_agg(row) FROM (
+           SELECT id,sku,name AS nome,friendly_name AS nome_facil,unit AS unidade,
+             current_stock AS estoque_atual,minimum_stock AS estoque_minimo,unit_cost AS valor_unitario
+           FROM cmms.materials WHERE status='ACTIVE' AND deleted_at IS NULL
+           ORDER BY sku,id LIMIT 500
+         ) row),'[]'::jsonb)),
        'execucoes_detalhadas', COALESCE((SELECT jsonb_agg(row) FROM (
          SELECT id, ordem_id, acao_id, tecnico_nome, ordem_codigo, titulo, ativo_tag, iniciada_em,
            concluida_em, duracao_segundos, segundos_pausados,

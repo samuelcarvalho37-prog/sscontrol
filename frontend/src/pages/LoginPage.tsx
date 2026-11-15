@@ -1,3 +1,4 @@
+import { accessBlockMessage, isAccessBlockCode } from '../services/auth/accessBlock'
 import { useEffect, useState, type FormEvent } from 'react'
 import '../styles/login-refinement.css'
 import { APP_RELEASE_VERSION, isCompatibleRelease } from '../release'
@@ -11,7 +12,7 @@ import {
 } from '../services/api/auth'
 import { getSystemHealth } from '../services/api/operator'
 import {
-  consumeAuthenticationNotice,
+  consumeAuthenticationMessage,
   hasCompletedStartup,
   markStartupCompleted,
 } from '../services/auth/session'
@@ -83,11 +84,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [connectionErrorMessage, setConnectionErrorMessage] = useState(
     'Verifique a rede do dispositivo e tente novamente. Nenhuma credencial foi alterada.',
   )
-  const [message, setMessage] = useState(() => {
-    return consumeAuthenticationNotice() === 'session-expired'
-      ? 'Sua sessão expirou. Entre novamente para continuar.'
-      : ''
-  })
+  const [message, setMessage] = useState(consumeAuthenticationMessage)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -238,6 +235,10 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       })
     } catch (cause) {
       if (cause instanceof ApiRequestError) {
+        if (isAccessBlockCode(cause.code)) {
+          setError(accessBlockMessage(cause.code))
+          return
+        }
         if (cause.code === 'CORS_ORIGIN_DENIED') {
           setError('O endereço deste portal não está autorizado na API. Verifique a configuração da conexão.')
           return

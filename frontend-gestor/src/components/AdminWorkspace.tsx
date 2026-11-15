@@ -1,3 +1,7 @@
+import { PermissionTools, hasPermissionTools } from '../../../frontend/src/components/PermissionTools'
+import { permitsAction } from '../../../frontend/src/services/auth/permissionActions'
+import { getApiUrl } from '../services/api/config'
+import { GestorQrWorkspace } from '../pages/GestorQrWorkspace'
 import {
   useCallback,
   useEffect,
@@ -136,6 +140,8 @@ type WindowLayout = 'smart' | 'focus' | 'columns' | 'rows' | 'grid' | 'cascade' 
 type WindowSnapTarget = 'maximize' | 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 const MODULES: WorkspaceModule[] = [
+  { id: 'additional-qr', code: 'QR', label: 'Ler QR Code', description: 'Câmera, webcam ou consulta por código', searchTerms: 'qr câmera webcam tag código equipamento', Icon: SearchIcon },
+  { id: 'additional-tools', code: 'FA', label: 'Ferramentas autorizadas', description: 'Funções adicionais liberadas para a conta', searchTerms: 'parâmetro checklist revisão funções', Icon: WrenchIcon },
   { id: 'overview', code: 'VG', label: 'Integridade do sistema', description: 'Saúde e alertas automáticos', searchTerms: 'visão geral diagnóstico desempenho latência módulo operação sistema ambiente telemetria', Icon: DashboardIcon },
   { id: 'structure', code: 'EF', label: 'Estrutura fabril', description: 'Plantas, setores e linhas', searchTerms: 'empresa fábrica unidade setor linha planta', Icon: FactoryIcon, feature: 'CADASTROS' },
   { id: 'assets', code: 'AT', label: 'Cadastro técnico', description: 'Ativos e componentes', searchTerms: 'equipamento máquina tag componente ativo patrimônio', Icon: AssetIcon, feature: 'CADASTROS' },
@@ -158,7 +164,7 @@ const MODULES: WorkspaceModule[] = [
   { id: 'exports-master', code: 'EM', label: 'Exportar planilha mestre', description: 'Cadastros atuais em um arquivo', Icon: UploadIcon, feature: 'IMPORTACOES' },
   { id: 'exports-zone', code: 'EZ', label: 'Exportação de dados', description: 'Estrutura, ativos e almoxarifado', Icon: UploadIcon, feature: 'IMPORTACOES' },
   { id: 'import-history', code: 'IR', label: 'Lotes de importação', description: 'Histórico, resultados e reversões', Icon: UploadIcon, feature: 'IMPORTACOES' },
-  { id: 'configuration', code: 'MC', label: 'Configurações avançadas', description: 'Regras, versões e publicação', searchTerms: 'motor configuração operação evidência workflow indicador metas salvar validar publicar reverter versão', Icon: SettingsIcon, feature: 'MOTOR_LIMITADO' },
+  { id: 'configuration', code: 'MC', label: 'Configurações do sistema', description: 'Regras, versões e publicação', searchTerms: 'motor configuração operação evidência workflow indicador metas salvar validar publicar reverter versão', Icon: SettingsIcon, feature: 'MOTOR_LIMITADO' },
   { id: 'users', code: 'US', label: 'Gestão de pessoas', description: 'Contas, equipes e perfis de acesso', searchTerms: 'usuário pessoa conta login senha sessão revogar acesso segurança cadastro área cargo equipe perfil', Icon: UserDirectoryIcon, feature: 'CADASTROS' },
   { id: 'permissions', code: 'PE', label: 'Configurações de acesso', description: 'Permissões por perfil', searchTerms: 'permissão perfil gestor técnico operador planejador produção qualidade segurança ligar desligar autorização papel role', Icon: KeyIcon, feature: 'CADASTROS' },
   { id: 'governance', code: 'AU', label: 'Auditoria', description: 'Histórico de alterações e responsáveis', searchTerms: 'log evento histórico alteração quem fez quando antes depois', Icon: AuditIcon, feature: 'AUDITORIA' },
@@ -172,6 +178,7 @@ const NAVIGATION_GROUPS: Array<{
   label: string
   modules: readonly AdminModule[]
 }> = [
+  { id: 'additional', label: 'MÓDULOS ADICIONAIS', modules: ['additional-qr', 'additional-tools'] },
   {
     id: 'overview',
     label: 'DIAGNÓSTICO',
@@ -199,7 +206,7 @@ const NAVIGATION_GROUPS: Array<{
   },
 ]
 const ADMIN_MAINTENANCE_MODULES = new Set<AdminModule>([
-  'structure', 'assets', 'checklists', 'maintenance', 'inventory', 'operations',
+  'structure', 'assets', 'inventory', 'checklists', 'maintenance', 'operations', 'plan-approvals', 'configuration',
 ])
 const COMPANY_PROFILE_CACHE_KEY = 'fab_control_admin_company_profile_v1'
 const DEFAULT_COMPANY_PROFILE: AdminCompanyProfile = {
@@ -789,6 +796,8 @@ export function AdminWorkspace({
   const [workspaceTabContext, setWorkspaceTabContext] = useState<{ module: AdminModule; x: number; y: number; dropX: number; dropY: number } | null>(null)
   const [paletteProfiles, setPaletteProfiles] = useState<AdminPermissionProfile[]>([])
   const [paletteProfilesError, setPaletteProfilesError] = useState('')
+  const canUseTools = hasPermissionTools(session.user.capacidades)
+  const canReadQr = permitsAction(session.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
   const [permissionProfileRequest, setPermissionProfileRequest] = useState<{ profile: string; capabilityName?: string; requestId: number } | null>(null)
   const permissionProfileRequestIdRef = useRef(0)
   const [importReimportRequest, setImportReimportRequest] = useState<(AdminImportRetryRequest & { requestId: number; file: File }) | null>(null)
@@ -1022,10 +1031,12 @@ export function AdminWorkspace({
   const visibleModules = useMemo(
     () => MODULES.filter((module) => (
       !ADMIN_MAINTENANCE_MODULES.has(module.id)
+      && (module.id !== 'additional-qr' || canReadQr)
+      && (module.id !== 'additional-tools' || canUseTools)
       && module.id !== 'module-inspector'
       && (module.id !== 'plan-approvals' || session.user.capacidades?.includes('maintenance.plans.publish') === true)
     )),
-    [session.user.capacidades],
+    [session.user.capacidades, canReadQr, canUseTools],
   )
 
   const visibleNavigationGroups = useMemo(
@@ -1037,13 +1048,15 @@ export function AdminWorkspace({
   )
 
   const isModuleAvailable = useCallback((moduleId: AdminModule) => {
+    if (moduleId === 'additional-qr') return canReadQr
+    if (moduleId === 'additional-tools') return canUseTools
     const accessModuleId = moduleId === 'workforce-areas' || moduleId === 'workforce-roles' ? 'workforce' : moduleId
     const module = getModule(accessModuleId)
     if (ADMIN_MAINTENANCE_MODULES.has(accessModuleId)) return false
     if (accessModuleId === 'plan-approvals' && !session.user.capacidades?.includes('maintenance.plans.publish')) return false
     if (!commercialAccess || !module.feature) return true
     return commercialAccess.status === 'ATIVA' && grantedFeatures.has(module.feature)
-  }, [commercialAccess, grantedFeatures, session.user.capacidades])
+  }, [commercialAccess, grantedFeatures, session.user.capacidades, canReadQr, canUseTools])
 
   const systemModuleStatuses = useMemo<AdminWorkspaceModuleStatus[]>(() => MODULES
     .filter((module) => !ADMIN_MAINTENANCE_MODULES.has(module.id) && module.id !== 'module-inspector' && !module.id.startsWith('imports-') && !module.id.startsWith('exports-'))
@@ -2165,6 +2178,11 @@ export function AdminWorkspace({
     let entityType = String(notification.entidade_tipo ?? '').trim().toUpperCase()
     let entityId = String(notification.entidade_id ?? '').trim()
 
+    if (notificationType === 'AUTH_RECOVERY_REQUESTED' && entityId) {
+      openModule('users');
+      return;
+    }
+
     if (entityType === 'DEMANDAS_TECNICAS' && entityId) {
       const demand = (await listAdminTechnicalDemands())
         .find((item) => String(item.id) === entityId)
@@ -2233,7 +2251,8 @@ export function AdminWorkspace({
   const renderNavigationModule = (module: WorkspaceModule) => {
     const { id, label, description, Icon } = module
     const windowItem = windows.find((item) => item.module === id)
-    const focused = windowItem && windowItem.zIndex === Math.max(0, ...windows.map((item) => item.zIndex))
+    const focused = windowItem && !windowItem.layoutHidden && !windowItem.minimized &&
+      windowItem.zIndex === Math.max(0, ...windows.filter((item) => !item.layoutHidden && !item.minimized).map((item) => item.zIndex))
     const available = isModuleAvailable(id)
     return (
       <div className="admin-command-center-nav-entry" key={id}>
@@ -2328,7 +2347,6 @@ export function AdminWorkspace({
           {profileOpen ? (
             <aside className="admin-profile-menu" aria-label="Menu do perfil">
               <header><span>TI</span><div><strong>Equipe de TI</strong><small>{companyProfile.nome}</small></div></header>
-              <button type="button" aria-disabled={!isModuleAvailable('configuration')} title="Preparar, validar e publicar configurações versionadas" onClick={() => openModule('configuration')}>Configurações avançadas</button>
               <button type="button" aria-disabled={!isModuleAvailable('users')} title="O painel não oferece edição do perfil pessoal" onClick={() => openModule('users')}>Usuários e acessos</button>
               <button type="button" disabled={loggingOut} onClick={onLogout}>{loggingOut ? 'Saindo…' : 'Sair'}</button>
             </aside>
@@ -2683,7 +2701,7 @@ export function AdminWorkspace({
                       ))}
                   </div>
                   <div className="admin-app-window__body">
-                    <AdminPage
+                    {item.module === 'additional-qr' ? (canReadQr ? <GestorQrWorkspace embedded onSessionExpired={onSessionExpired} /> : <p role="status">Esta função não está habilitada para esta conta.</p>) : item.module === 'additional-tools' ? (canUseTools ? <PermissionTools apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades ?? []} onSessionExpired={onSessionExpired} /> : <p role="status">Esta função não está habilitada para esta conta.</p>) : <AdminPage
                       session={session}
                       onSessionExpired={onSessionExpired}
                       activeModule={item.module}
@@ -2757,7 +2775,7 @@ export function AdminWorkspace({
                         }
                       }}
                       userDataRevision={userDataRevision}
-                    />
+                    />}
                   </div>
                 </section>
               )

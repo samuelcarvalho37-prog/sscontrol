@@ -1,3 +1,4 @@
+import { hasAction } from '../services/auth/permissionActions'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -192,6 +193,23 @@ const DEMO_IMPORT_BATCHES: AdminImportBatch[] = [
 ]
 
 export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, onOpenSection, onDetachZone, onRestoreZone, onOpenHistory, onOpenReimport, reimportRequest, exportRequestId }: AdminImportCenterProps) {
+  const canReadModels = hasAction('GET', '/v1/admin/imports/models', 'admin.governance.read')
+  const canReadHistory = hasAction('GET', '/v1/admin/imports', 'admin.governance.read')
+  const canReadBatch = hasAction('GET', '/v1/admin/imports/:batchId', 'admin.governance.read')
+  const canValidateImport = hasAction('POST', '/v1/admin/imports/validate', 'admin.governance.manage')
+  const canConfirmImport = hasAction('POST', '/v1/admin/imports/:batchId/confirm', 'admin.governance.manage') && hasAction('POST', '/v1/admin/backups', 'admin.governance.manage')
+  const canRollbackImport = hasAction('POST', '/v1/admin/imports/:batchId/rollback', 'admin.governance.manage')
+  const canDismissImport = hasAction('POST', '/v1/admin/imports/:batchId/dismiss', 'admin.governance.manage')
+  const canImportMaster = canValidateImport && canConfirmImport && canRollbackImport
+  function canReadExportModel(model: AdminImportModel): boolean {
+    const entity = exportableEntityForImportType(model.tipo)
+    if (!entity) return false
+    if (['plantas', 'setores', 'linhas'].includes(entity)) return hasAction('GET', '/v1/cmms/structure', 'cmms.structure.read')
+    if (entity === 'planos') return hasAction('GET', '/v1/maintenance/plans', 'maintenance.plans.read')
+    const resource = { ativos: 'assets', componentes: 'components', materiais: 'materials' }[entity as 'ativos' | 'componentes' | 'materiais']
+    return Boolean(resource && hasAction('GET', `/v1/cmms/${resource}`, entity === 'materiais' ? 'cmms.materials.read' : 'cmms.assets.read'))
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const historyFileInputRef = useRef<HTMLInputElement>(null)
   const pendingRetryRef = useRef<AdminImportRetryRequest | null>(null)
@@ -226,7 +244,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   const [batchStatusOverrides, setBatchStatusOverrides] = useState<Record<string, string>>({})
 
   function requestBatchFile(batch: AdminImportBatch, intent: AdminImportRetryRequest['intent']) {
-    if (batch.id.startsWith('DEMO-') || !onOpenReimport) return
+    if (!canValidateImport || !canConfirmImport || batch.id.startsWith('DEMO-') || !onOpenReimport) return
     pendingRetryRef.current = {
       batchId: batch.id,
       type: batch.tipo,
@@ -274,8 +292,8 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     const [nextCatalog, nextBatches] = await Promise.all([
-      getAdminImportCatalog(signal),
-      listAdminImportBatches(signal),
+      hasAction('GET', '/v1/admin/imports/models', 'admin.governance.read') ? getAdminImportCatalog(signal) : Promise.resolve({ max_linhas: 0, modelos: [] }),
+      hasAction('GET', '/v1/admin/imports', 'admin.governance.read') ? listAdminImportBatches(signal) : Promise.resolve([]),
     ])
     setCatalog(nextCatalog)
     setBatches(nextBatches)
@@ -348,7 +366,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }, [catalog])
 
   const exportGroups = useMemo(() => groupedModels
-    .map(([group, models]) => [group, models.filter((model) => exportableEntityForImportType(model.tipo) !== null)] as const)
+    .map(([group, models]) => [group, models.filter(canReadExportModel)] as const)
     .filter(([, models]) => models.length > 0), [groupedModels])
 
   const visibleModels = useMemo(
@@ -365,7 +383,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   const exporting = mode === 'export' || exportingMaster
   const exportModels = useMemo(
     () => {
-      const candidates = (exportingMaster ? catalog?.modelos ?? [] : visibleModels).filter((model) => exportableEntityForImportType(model.tipo) !== null)
+      const candidates = (exportingMaster ? catalog?.modelos ?? [] : visibleModels).filter(canReadExportModel)
       return candidates.filter((model, index) => candidates.findIndex((item) => item.entidade === model.entidade) === index)
     },
     [catalog, exportingMaster, visibleModels],
@@ -509,7 +527,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function downloadMasterTemplate() {
-    if (!catalog) return
+    if (!canReadModels || !catalog) return
     setBusy('template')
     setError('')
     try {
@@ -522,6 +540,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function exportBatch(batch: AdminImportBatch, format: AdminImportExportFormat) {
+    if (!canReadBatch) return
     setBusy(`export:${batch.id}`)
     setExportError('')
     setNotice('')
@@ -541,7 +560,8 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function exportCurrentData() {
-    const models = exportingMaster ? exportModels : selectedModel ? [selectedModel] : []
+    const models = (exportingMaster ? exportModels : selectedModel ? [selectedModel] : []).filter(canReadExportModel)
+    if (!models.length) return
     const sources = models.flatMap((model) => {
       const entity = exportableEntityForImportType(model.tipo)
       return entity ? [{ entity, name: model.nome, sheetName: model.nome }] : []
@@ -615,6 +635,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function analyze() {
+    if (!canValidateImport) return
     if (!selectedModel || !parsed) return
     setBusy('validating')
     setError('')
@@ -647,13 +668,13 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
         const existingBatchId = typeof details.lote_existente === 'string'
           ? details.lote_existente
           : ''
-        if (existingBatchId) {
+        if (existingBatchId && canReadBatch) {
           try {
             const existing = await getAdminImportBatch(existingBatchId)
             setDuplicateBatch(existing)
             setAnalysis(null)
             setBatches((current) => [existing, ...current.filter((item) => item.id !== existing.id)] )
-            if (retryContext?.intent === 'correct') {
+            if (retryContext?.intent === 'correct' && canDismissImport) {
               try {
                 await dismissAdminImportBatch(retryContext.batchId)
                 setBatches((current) => current.filter((item) => item.id !== retryContext.batchId))
@@ -678,6 +699,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function confirm() {
+    if (!canConfirmImport) return
     if (!analysis || analysis.status !== 'VALIDADO') return
     const isUpdating = retryContext?.intent === 'update'
     const operationLabel = isUpdating ? 'atualizar' : 'importar'
@@ -701,7 +723,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
       setBusy('confirming')
       const confirmed = await confirmAdminImport(analysis.id, analysis.validacao_hash)
       setAnalysis(confirmed)
-      if (retryContext?.intent === 'correct') {
+      if (retryContext?.intent === 'correct' && canDismissImport) {
         try {
           await dismissAdminImportBatch(retryContext.batchId)
           setBatches((current) => [confirmed, ...current.filter((item) => item.id !== confirmed.id && item.id !== retryContext.batchId)])
@@ -737,6 +759,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function importAllSheets() {
+    if (!canImportMaster) return
     if (!selectedFile || !parsed || !catalog) return
 
     const candidates: Array<{ parsed: ParsedAdminWorkbook; model: AdminImportModel }> = []
@@ -842,6 +865,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   }
 
   async function dismissBatch(batch: AdminImportBatch) {
+    if (!canDismissImport) return
     const confirmed = window.confirm(
       `Remover “${batch.arquivo_nome}” do histórico de importações?\n\n` +
         'Apenas o registro do lote será removido desta lista. Os dados importados permanecem no sistema. ' +
@@ -866,6 +890,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
     }
   }
 
+  if ((mode === 'history' && !canReadHistory) || (mode !== 'history' && !canReadModels)) return <p role="status">Seu perfil não pode consultar esta área de importação.</p>
   if (loading) return <div className="dashboard-loading">Carregando Central de Importação…</div>
 
   return (
@@ -941,7 +966,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                       </button>
                     )})}
                   </nav>
-                  {importing ? <footer className="admin-import-zone__footer"><span>{batches.length} lote(s) registrado(s)</span><button className="admin-import-hub__history" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={onOpenHistory}>Abrir lotes importados</button></footer> : <footer className="admin-import-zone__footer"><span>{exportGroups.reduce((count, [, models]) => count + models.length, 0)} cadastros legíveis pela sessão</span><span>Arraste a zona para fora para destacá-la.</span></footer>}
+                  {importing ? <footer className="admin-import-zone__footer"><span>{batches.length} lote(s) registrado(s)</span>{canReadHistory ? <button className="admin-import-hub__history" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={onOpenHistory}>Abrir lotes importados</button> : null}</footer> : <footer className="admin-import-zone__footer"><span>{exportGroups.reduce((count, [, models]) => count + models.length, 0)} cadastros legíveis pela sessão</span><span>Arraste a zona para fora para destacá-la.</span></footer>}
                 </section>
               )
             })}
@@ -1021,7 +1046,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                 }}
               /> : null}
 
-              {!exporting && !parsed ? (
+              {canValidateImport && !exporting && !parsed ? (
                 <button
                   className={`admin-import-dropzone${isDraggingFile ? ' is-dragging' : ''}`}
                   type="button"
@@ -1041,16 +1066,16 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                   <strong>{busy === 'reading' ? 'Lendo arquivo…' : 'Selecionar arquivo de dados'}</strong>
                   <small title={`Formatos aceitos: XLSX, XLS, CSV ou JSON. Limite do arquivo: 8 MB.${importingMaster ? ' O limite de linhas é validado separadamente para cada cadastro.' : ` Máximo de ${selectedModel.max_linhas} linhas por modelo.`}`}>XLSX, XLS, CSV ou JSON · {importingMaster ? 'limite por cadastro' : `até ${selectedModel.max_linhas} linhas`}</small>
                 </button>
-              ) : !exporting && parsed ? (
+              ) : canValidateImport && !exporting && parsed ? (
                 <section className="admin-import-file-card">
-                  <header><div><CheckIcon /><span><strong>{parsed.fileName}</strong><small>{parsed.rows.length} linha(s) · {parsed.headers.length} coluna(s){importingMaster ? ` · ${parsed.sheetNames.length} aba(s)/lista(s)` : ''}</small></span></div><div>{importingMaster ? <button type="button" disabled={Boolean(busy)} onClick={() => void importAllSheets()}>{busy === 'bulk-import' ? 'Importando…' : 'Importar planilha mestre'}</button> : null}<button type="button" disabled={Boolean(busy)} onClick={() => resetFile(Boolean(retryContext))}>Trocar arquivo</button></div></header>
+                  <header><div><CheckIcon /><span><strong>{parsed.fileName}</strong><small>{parsed.rows.length} linha(s) · {parsed.headers.length} coluna(s){importingMaster ? ` · ${parsed.sheetNames.length} aba(s)/lista(s)` : ''}</small></span></div><div>{importingMaster && canImportMaster ? <button type="button" disabled={Boolean(busy)} onClick={() => void importAllSheets()}>{busy === 'bulk-import' ? 'Importando…' : 'Importar planilha mestre'}</button> : null}<button type="button" disabled={Boolean(busy)} onClick={() => resetFile(Boolean(retryContext))}>Trocar arquivo</button></div></header>
                   {parsed.sheetNames.length > 1 ? (
                     <label><span>Aba a importar</span><select value={parsed.selectedSheet} onChange={(event) => selectedFile && void readFile(selectedFile, event.target.value)}>{parsed.sheetNames.map((name) => <option key={name}>{name}</option>)}</select></label>
                   ) : null}
                   <div className="admin-import-preview-table">
                     <table><thead><tr><th>Linha</th>{previewColumns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{parsed.rows.slice(0, 6).map((row) => <tr key={row.__linha}><td>{row.__linha}</td>{previewColumns.map((column) => <td key={column}>{displayValue(row[column])}</td>)}</tr>)}</tbody></table>
                   </div>
-                  <footer><span>Prévia das primeiras {Math.min(6, parsed.rows.length)} linhas. Fórmulas são bloqueadas.</span><button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void analyze()}>{busy === 'validating' ? 'Validando…' : 'Executar pré-análise'}</button></footer>
+                  <footer><span>Prévia das primeiras {Math.min(6, parsed.rows.length)} linhas. Fórmulas são bloqueadas.</span>{canValidateImport ? <button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void analyze()}>{busy === 'validating' ? 'Validando…' : 'Executar pré-análise'}</button> : null}</footer>
                 </section>
               ) : null}
 
@@ -1064,7 +1089,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
               </section> : null}
               {analysis ? (
                 <section className={`admin-import-analysis admin-import-analysis--${analysis.status.toLowerCase()}`}>
-                  <header><div>{analysis.linhas_invalidas ? <AlertIcon /> : <CheckIcon />}<span><strong>{batchStatusLabel(analysis.status)}</strong><small>Lote {analysis.id} · nenhum dado oculto na validação</small></span></div>{analysis.status === 'VALIDADO' ? <button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void confirm()}>{busy === 'confirming' ? 'Importando…' : 'Confirmar importação'}</button> : null}</header>
+                  <header><div>{analysis.linhas_invalidas ? <AlertIcon /> : <CheckIcon />}<span><strong>{batchStatusLabel(analysis.status)}</strong><small>Lote {analysis.id} · nenhum dado oculto na validação</small></span></div>{canConfirmImport && analysis.status === 'VALIDADO' ? <button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void confirm()}>{busy === 'confirming' ? 'Importando…' : 'Confirmar importação'}</button> : null}</header>
                   <div className="admin-import-analysis__metrics"><article><span>Total</span><strong>{analysis.total_linhas}</strong></article><article><span>Válidas</span><strong>{analysis.linhas_validas}</strong></article><article className={analysis.linhas_invalidas ? 'is-danger' : ''}><span>Com erro</span><strong>{analysis.linhas_invalidas}</strong></article><article><span>Ignoradas</span><strong>{analysis.cabecalhos_ignorados.length}</strong></article></div>
                   {analysis.cabecalhos_ignorados.length ? <p className="admin-import-ignored">Colunas não reconhecidas e ignoradas: {analysis.cabecalhos_ignorados.join(', ')}</p> : null}
                   <div className="admin-import-records">{analysis.registros.map((record) => <article key={record.id} className={record.erros.length ? 'has-error' : ''}><span>Linha {record.linha_numero}</span><strong>{record.entidade_id || 'ID não gerado'}</strong><b>{record.operacao}</b>{record.erros.length ? <ul>{record.erros.map((item) => <li key={`${item.codigo}:${item.campo ?? ''}:${item.mensagem}`}>{item.campo ? <><b>Campo {item.campo}:</b> {item.mensagem}</> : item.mensagem}</li>)}</ul> : <small>Referências e tipos conferidos.</small>}</article>)}</div>
@@ -1096,12 +1121,12 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
             const status = batchStatusOverrides[batch.id] ?? batch.status
             const isProcessing = status === 'PROCESSANDO' || status === 'CORRIGINDO' || status === 'ATUALIZANDO'
             const canReimport = status === 'COM_ERROS' || status === 'FALHOU'
-            const canDismiss = status === 'CONCLUIDO'
+            const canDismiss = canDismissImport && status === 'CONCLUIDO'
             const isExpanded = expandedBatchIds.has(batch.id)
             const invalidRecords = batch.registros.filter((record) => record.erros.length > 0 || record.status === 'INVALIDO')
-            const canExpand = !isProcessing
+            const canExpand = canReadBatch && !isProcessing
             const rowAction = canReimport ? 'correct' : status === 'CONCLUIDO' ? 'update' : null
-            const canRunRowAction = rowAction && catalog?.modelos.some((model) => model.tipo === batch.tipo)
+            const canRunRowAction = canValidateImport && canConfirmImport && rowAction && catalog?.modelos.some((model) => model.tipo === batch.tipo)
             return <article key={batch.id} className={`${isDemo ? 'is-demo ' : ''}${isExpanded ? 'is-expanded' : ''}`}>
               <button
                 className="admin-import-batch-trigger"
@@ -1137,7 +1162,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                 <p>Corrija a planilha e envie novamente um arquivo do mesmo tipo de cadastro. O nome do arquivo pode ser diferente.</p>
                 {invalidRecords.map((record) => <div key={record.id}><strong>Linha {record.linha_numero}</strong><ul>{record.erros.length ? record.erros.map((item) => <li key={`${item.codigo}:${item.campo ?? ''}:${item.mensagem}`}>{item.campo ? <><b>Campo {item.campo}:</b> {item.mensagem}</> : item.mensagem}</li>) : <li>Registro inválido. Confira os campos obrigatórios e as referências.</li>}</ul></div>)}
               </section> : null}
-              {isExpanded && status !== 'COM_ERROS' ? <div className="admin-import-batch-expanded">
+              {canReadBatch && isExpanded && status !== 'COM_ERROS' ? <div className="admin-import-batch-expanded">
                 <div className="admin-import-batch-result-rows" aria-label="Resultados do processamento">
                   <div className="admin-import-help-cursor" title={batchMetricTooltip(batch, 'read')}><strong>Lidas</strong><b>{batch.total_linhas}</b></div>
                   <div className="admin-import-help-cursor" title={batchMetricTooltip(batch, 'created')}><strong>Criadas</strong><b>{batch.resultado.criados ?? '—'}</b></div>
@@ -1145,14 +1170,14 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                 </div>
                 {status === 'REVERTIDO' ? <p className="admin-import-batch-details__empty">Lote revertido{batch.rollback_em ? ` em ${formatDate(batch.rollback_em)}` : ''}.</p> : null}
               </div> : null}
-              {isExpanded && !isDemo ? <div className="admin-import-batch-actions" aria-label="Ações do lote">
+              {canReadBatch && isExpanded && !isDemo ? <div className="admin-import-batch-actions" aria-label="Ações do lote">
                 {!isDemo ? <button className="admin-import-batch-action admin-import-help-cursor" type="button" disabled={Boolean(busy)} title="Escolha um formato para baixar os dados deste lote." onClick={() => { setExportError(''); setExportBatchTarget(batch) }}>Exportar dados</button> : null}
                 {canDismiss ? <button className="admin-import-batch-action admin-import-help-cursor" type="button" disabled={isDemo || Boolean(busy)} title="Remove só o registro do histórico. Os dados importados ficam no sistema." onClick={() => !isDemo && void dismissBatch(batch)}>{busy === `dismiss:${batch.id}` ? 'Removendo…' : 'Remover do histórico'}</button> : null}
               </div> : null}
             </article>
           }) : <div className="admin-empty-state">Nenhum lote registrado.</div>}
         </div>
-        {exportBatchTarget ? createPortal(<div className="admin-catalog-dialog admin-import-export-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setExportBatchTarget(null) }}>
+        {exportBatchTarget && canReadBatch ? createPortal(<div className="admin-catalog-dialog admin-import-export-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setExportBatchTarget(null) }}>
           <section className="admin-import-export-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-import-export-title" aria-describedby="admin-import-export-description">
             <header><div><span className="eyebrow">EXPORTAÇÃO DO LOTE</span><h2 id="admin-import-export-title">Escolha o formato do arquivo</h2><p id="admin-import-export-description">Os dados serão baixados para o seu computador.</p></div><button type="button" disabled={Boolean(busy)} onClick={() => setExportBatchTarget(null)}>Fechar</button></header>
             <div className="admin-import-export-options">

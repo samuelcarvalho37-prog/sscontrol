@@ -1,0 +1,51 @@
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace {
+  --qr-panel: var(--pcm-shared-panel, var(--panel, #fff));
+  --qr-ink: var(--pcm-shared-ink, var(--ink, #183b56));
+  --qr-border: var(--line, #c8d8e4);
+  color: var(--qr-ink);
+  max-width: none;
+  padding-bottom: 20px;
+}
+.admin-app-window .manager-qr-workspace.is-embedded {
+  padding: 12px;
+  margin: 0;
+  min-width: 0;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace :is(.manager-qr-scanner, .manager-qr-result, .manager-qr-facts article, .manager-qr-readings article, .manager-qr-empty, .manager-qr-action, .manager-qr-dialog, .manager-qr-parameter-list > article) {
+  background: var(--qr-panel);
+  color: var(--qr-ink);
+  border-color: var(--qr-border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace :is(button, input, select, textarea, .manager-qr-search label) {
+  background: transparent;
+  color: inherit;
+  border-color: var(--qr-border);
+  border-radius: 4px;
+  box-shadow: none;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace button:hover {
+  background: color-mix(in srgb, var(--qr-ink) 8%, transparent);
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace .manager-qr-camera--idle {
+  background: color-mix(in srgb, var(--qr-ink) 4%, transparent);
+  color: var(--qr-ink);
+  min-height: 160px;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace :is(p, small, .manager-qr-camera--idle span) {
+  color: inherit;
+}
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-heading h1 { font-size: 1.15rem; }
+.manager-qr-heading[hidden] { display: none; }
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace :is(h1, h2, h3, strong, input) { color: var(--qr-ink); }
+:is([data-pcm-workspace], .admin-command-center-shell) .manager-qr-workspace input::placeholder { color: var(--qr-ink); opacity: .7; }
+.manager-qr-workspace.is-embedded { container-type: inline-size; container-name: qr-workspace; }
+@container qr-workspace (max-width: 480px) {
+  .manager-qr-search { grid-template-columns: minmax(0, 1fr); }
+  .manager-qr-facts { grid-template-columns: minmax(0, 1fr); }
+}

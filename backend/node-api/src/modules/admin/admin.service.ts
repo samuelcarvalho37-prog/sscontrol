@@ -1,3 +1,5 @@
+import { PERMISSION_CATALOG, permissionDefinition } from '../auth/permission-catalog.js';
+import { readPermissionPolicy, policyAllows } from '../auth/permission-policy.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError } from '../../core/errors/app-error.js';
 import type { Environment } from '../../config/environment.js';
@@ -830,10 +832,15 @@ export class AdminService {
     return this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id, readOnly: true },
       async (client) => {
-        const rows = await this.repository.permissionMatrix(client);
+        const allRows = await this.repository.permissionMatrix(client);
+        const replaced = new Set(PERMISSION_CATALOG.filter(item => item.id !== item.legado).map(item => item.legado));
+        const rows = allRows.filter(row => !replaced.has(String(row.code)));
+        const policy = await readPermissionPolicy(client);
         const profiles = await this.repository.identityRoles(client);
         return {
-          chave: 'permissions.matrix.capabilities.v1',
+          chave: 'permissions.matrix.capabilities.v2',
+          editavel: policy.personalizavel,
+          bloqueio_motivo: policy.personalizavel ? null : 'Seu plano utiliza permissões padrão. A personalização depende do plano contratado.',
           perfis: profiles.map((role) => {
             const profile = String(role.code);
             const capabilities = rows.filter((row) => row.role_code === profile);
@@ -842,15 +849,20 @@ export class AdminService {
               id: String(role.id),
               nome: String(role.name),
               roleType: String(role.role_type),
-              editavel: role.role_type !== 'ADMIN' && role.protected !== true,
+              editavel: policy.personalizavel,
               acesso_total: false,
               capacidades: capabilities.map((row) => ({
                 id: String(row.code),
                 nome: String(row.name),
                 descricao: String(row.description),
                 permitido: row.allowed === true,
-                padrao: row.protected === true,
+                padrao: role.role_type === 'ADMIN' && ['access.get.admin.permissions','access.patch.admin.permissions.profile'].includes(String(row.code)),
                 acoes: capabilityActions(String(row.code)),
+                ...objectValue(row.ui_metadata),
+                ...permissionDefinition(String(row.code)),
+                disponivel_no_plano: policyAllows(policy, String(row.code)),
+                bloqueio_motivo: policyAllows(policy, String(row.code)) ? null : 'Esta função não está incluída nos recursos habilitados no plano.',
+
               })),
             };
           }),
@@ -889,6 +901,7 @@ export class AdminService {
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
         await this.repository.ensureDefaultProfiles(client, user.tenantId);
+        if (!(await readPermissionPolicy(client)).personalizavel) fail('PLAN_PERMISSIONS_LOCKED', 'Seu plano não permite criar perfis personalizados.', 403);
         const existing = await this.repository.identityRoles(client);
         if (existing.some((role) => String(role.code).toLocaleUpperCase('pt-BR') === code)) {
           fail('ADMIN_PROFILE_ALREADY_EXISTS', `Já existe um perfil com o código ${code}.`, 409);
@@ -921,6 +934,14 @@ export class AdminService {
     await this.database.withTransaction(
       { tenantId: user.tenantId, userId: user.id },
       async (client) => {
+        const policy = await readPermissionPolicy(client);
+        if (!policy.personalizavel) fail('PLAN_PERMISSIONS_LOCKED', 'Seu plano não permite personalizar permissões.', 403);
+        const known = await this.repository.permissionMatrix(client);
+        const replaced = new Set(PERMISSION_CATALOG.filter(item => item.id !== item.legado).map(item => item.legado));
+        for (const [code, enabled] of Object.entries(permissions)) {
+          if (!known.some(row => row.code === code) || replaced.has(code)) fail('PERMISSION_UNKNOWN', 'Selecione uma função específica do catálogo de permissões.', 422);
+          if (enabled && !policyAllows(policy, code)) fail('PLAN_PERMISSION_UNAVAILABLE', 'Uma das funções selecionadas não está incluída no plano.', 403);
+        }
         await this.repository.savePermissions(client, profile, permissions, user.id);
         await this.repository.audit(
           client,
