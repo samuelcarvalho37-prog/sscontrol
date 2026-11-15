@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { awaitsPostInterventionCompletion } from '../components/postInterventionPolicy'
 import { operationalLabel } from '../../../frontend/src/components/operationalLabels'
 import { ActionReviewDialog } from '../components/ActionReviewDialog'
 import { ChecklistModelReviewDialog } from '../components/ChecklistModelReviewDialog'
@@ -131,6 +132,9 @@ function isInReportPeriod(value: string, period: string): boolean {
 }
 
 function demandNextStep(demand: GestorTechnicalDemand) {
+  if (awaitsPostInterventionCompletion(demand)) {
+    return { label: 'Acompanhar OS', detail: 'Aguardando conclusão técnica. A assinatura será disponibilizada depois.' }
+  }
   const pending = Math.max(
     0,
     Number(demand.assinaturas_necessarias ?? 0) -

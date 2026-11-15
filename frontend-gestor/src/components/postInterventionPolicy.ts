@@ -35,3 +35,9 @@ export function postInterventionPolicyLabel(
   }
   return labels[policy ?? ''] ?? 'Configuração pendente'
 }
+
+export function awaitsPostInterventionCompletion(demand: { tipo?: string; status?: string }): boolean {
+  const normalize = (value?: string) => (value ?? '').trim().toUpperCase()
+  return normalize(demand.tipo) === 'POST_INTERVENTION_RELEASE'
+    && !['AGUARDANDO_ASSINATURA', 'AWAITING_SIGNATURE'].includes(normalize(demand.status))
+}

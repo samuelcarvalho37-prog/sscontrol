@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { awaitsPostInterventionCompletion } from './postInterventionPolicy'
 import {
   decideGestorTechnicalDemand,
   getGestorChecklistModelDetail,
@@ -81,9 +82,7 @@ export function TechnicalDemandDialog({
   const [detail, setDetail] = useState<GestorChecklistModelDetail | null>(null)
   const [showAllItems, setShowAllItems] = useState(false)
   const [returning, setReturning] = useState(false)
-  const [opinion, setOpinion] = useState(
-    'Documento revisado. Escopo, etapas, riscos e critérios de aceite estão adequados.',
-  )
+  const [opinion, setOpinion] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState('')
@@ -117,9 +116,7 @@ export function TechnicalDemandDialog({
   const completed = Math.max(0, Number(demand.assinaturas_realizadas ?? 0))
   const pending = Math.max(0, required - completed)
   const visibleItems = showAllItems ? detail?.itens : detail?.itens.slice(0, 4)
-  const awaitingPostInterventionExecution =
-    upper(demand.tipo) === 'POST_INTERVENTION_RELEASE' &&
-    upper(demand.status) === 'ABERTA'
+  const awaitingPostInterventionExecution = awaitsPostInterventionCompletion(demand)
   const isPostInterventionRelease =
     upper(demand.tipo) === 'POST_INTERVENTION_RELEASE'
   const areaCode = upper(context.identidade.area_codigo)
@@ -201,6 +198,7 @@ export function TechnicalDemandDialog({
   }
 
   async function requestCorrection() {
+    if (awaitingPostInterventionExecution || !context.pode_validar) return
     if (opinion.trim().length < 5) {
       setError('Explique o ajuste que o Administrador precisa fazer.')
       return
@@ -384,7 +382,7 @@ export function TechnicalDemandDialog({
             </section>
           ) : null}
 
-          <label className="validation-gate-opinion">
+          {!awaitingPostInterventionExecution ? <label className="validation-gate-opinion">
             <span>{returning ? 'Correção necessária *' : 'Parecer técnico *'}</span>
             <textarea
               rows={3}
@@ -396,9 +394,9 @@ export function TechnicalDemandDialog({
                   : 'Registre a conclusão da sua revisão.'
               }
             />
-          </label>
+          </label> : null}
 
-          {requiresAreaAttestation && !returning ? (
+          {requiresAreaAttestation && !returning && !awaitingPostInterventionExecution ? (
             <button
               className={`validation-gate-attestation ${attestationConfirmed ? 'is-confirmed' : ''}`}
               type="button"
@@ -425,24 +423,28 @@ export function TechnicalDemandDialog({
             type="button"
             disabled={submitting}
             onClick={() => {
+              if (awaitingPostInterventionExecution) { onClose(); return }
               setReturning((value) => !value)
               setOpinion('')
               setError('')
             }}
           >
             <ValidationIcon />
-            {returning ? 'Voltar à aprovação' : 'Solicitar correção'}
+            {awaitingPostInterventionExecution ? 'Fechar' : returning ? 'Voltar à aprovação' : 'Solicitar correção'}
           </button>
           <button
             className="primary-button"
             type="button"
             disabled={
               submitting ||
-              loadingDetail
+              loadingDetail || awaitingPostInterventionExecution || !context.pode_validar ||
+              opinion.trim().length < 5 || (!returning && requiresAreaAttestation && !attestationConfirmed)
             }
             onClick={() => void (returning ? requestCorrection() : approve())}
           >
-            {submitting
+            {awaitingPostInterventionExecution
+              ? 'Aguardando conclusão técnica'
+              : submitting
               ? 'Registrando…'
               : returning
                 ? 'Devolver ao Administrador'

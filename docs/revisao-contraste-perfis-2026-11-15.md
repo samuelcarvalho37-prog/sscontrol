@@ -42,3 +42,9 @@ O direcionamento foi corrigido: a categoria de autorização `MANAGER` é compar
 Verificado com login real de homologação: Qualidade e Segurança exibiram `Validar` com duas pendências e seis relatórios técnicos. A Qualidade abriu a lista compartilhada com 14 OS. A Segurança abriu e fechou o detalhe da liberação pós-intervenção sem assumir, corrigir ou assinar. Dois testes executáveis cobrem os validadores com tipo MANAGER e a preservação de PCM, TI e operação; a compilação passou.
 
 A mensagem da ferramenta genérica de revisão sobre ausência de consulta de checklists continua respeitando as permissões existentes. A área `Validar` usa as demandas técnicas já autorizadas; esta correção não concede acesso ao catálogo de checklists.
+
+### Liberação final antes da conclusão técnica
+
+A interface ainda oferecia assinatura e declaração de riscos numa demanda pós-intervenção aberta, embora o handler e o backend recusassem a operação. Corrigido para acompanhamento somente: o card apresenta `Acompanhar OS`; parecer e declaração não são exibidos; a ação final fica desabilitada com `Aguardando conclusão técnica`. Somente o estado `AGUARDANDO_ASSINATURA`/`AWAITING_SIGNATURE` habilita a preparação da assinatura, que continua exigindo permissão, parecer escrito pelo usuário e a declaração da área. Removido o parecer de aprovação preenchido automaticamente.
+
+Verificado nos perfis de Qualidade e Segurança com a demanda existente da OS-00000005: botão final desabilitado e ausência dos campos de assinatura antecipada. Nenhuma assinatura, correção ou execução foi registrada. Os testes preservam as regras anteriores de seleção das áreas e acrescentam estados abertos, desconhecidos e prontos para assinatura.
