@@ -2,6 +2,7 @@ import { PermissionTools, hasPermissionTools } from '../components/PermissionToo
 import { permitsAction } from '../services/auth/permissionActions'
 import { accessBlockMessage, watchCompanyAccess } from '../services/auth/accessBlock'
 import { SharedWorkPanel } from '../components/SharedWorkPanel'
+import { PcmMobileDashboard } from '../components/PcmMobileDashboard'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppHeader, type ConnectionState } from '../components/AppHeader'
 import { BottomNavigation, type AppSection } from '../components/BottomNavigation'
@@ -261,6 +262,7 @@ export function App() {
   const canPerformExecutions = operatorSession?.user.capacidades?.includes('maintenance.executions.perform') ?? false
   const canReadSharedWork = operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false
   const canReportOccurrence = operatorSession?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
+  const isPcmProfile = operatorSession?.user.perfil.trim().toUpperCase() === 'PCM'
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
     readActiveExecutionContext(),
   )
@@ -1036,7 +1038,8 @@ export function App() {
             )
           ) : (
            <>
-              {section === 'home' && canReadSharedWork && !canPerformExecutions && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} fixedTab="orders" embedded profile={operatorSession.user.perfil} />}
+              {section === 'home' && isPcmProfile && canReadSharedWork && !canPerformExecutions && <PcmMobileDashboard apiUrl={getApiUrl()} token={operatorSession.token} onOpenOrders={() => setSection('shared')} />}
+              {section === 'home' && !isPcmProfile && canReadSharedWork && !canPerformExecutions && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} fixedTab="orders" embedded profile={operatorSession.user.perfil} />}
               {section === 'home' && canReportOccurrence && !canReadExecutions && !canReadSharedWork && <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />}
               {section === 'home' && (!canReadSharedWork || canPerformExecutions) && (
                 <OperatorHome
