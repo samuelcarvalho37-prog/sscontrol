@@ -806,6 +806,16 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
   const asset = context.ativo
   const componentContext = context.componente
   const health = context.saude?.pct ?? asset?.saude_pct
+  const maintenance = context.manutencao
+  const openOrders = maintenance?.os_abertas ?? context.saude?.acoes_abertas ?? availableActions.length
+  const correctiveRecurrence = maintenance?.corretivas_90_dias ?? 0
+  const maintenanceState = context.parada_ativa
+    ? { label: 'Equipamento parado', detail: 'Há uma parada operacional em aberto.', tone: 'critical' }
+    : (maintenance?.os_atrasadas ?? 0) > 0
+      ? { label: 'Manutenção em atraso', detail: `${maintenance?.os_atrasadas} OS precisa de atenção.`, tone: 'warning' }
+      : openOrders > 0
+        ? { label: 'Em acompanhamento', detail: `${openOrders} OS aberta${openOrders === 1 ? '' : 's'} para este item.`, tone: 'attention' }
+        : { label: 'Manutenção em dia', detail: 'Nenhuma OS aberta para este item.', tone: 'good' }
   const occurrenceReady = Boolean(
     occurrenceTarget &&
     (occurrenceTarget !== 'COMPONENTE' || occurrenceComponentId) &&
@@ -932,6 +942,43 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
           <div><span>Leitura</span><strong>{context.horimetro?.automatico ? 'Automática' : 'Manual'}</strong></div>
         </div>
       </article>
+
+      <section className="qr-maintenance-summary" aria-label="Prontuário de manutenção do equipamento">
+        <div className="qr-maintenance-summary__heading">
+          <div>
+            <span>Prontuário do equipamento</span>
+            <h2>Como está a manutenção</h2>
+          </div>
+          <span className={`qr-maintenance-summary__status qr-maintenance-summary__status--${maintenanceState.tone}`}>
+            {maintenanceState.label}
+          </span>
+        </div>
+        <p className="qr-maintenance-summary__description">{maintenanceState.detail}</p>
+        <div className="qr-maintenance-summary__grid">
+          <div>
+            <span>OS abertas</span>
+            <strong>{openOrders}</strong>
+          </div>
+          <div>
+            <span>Em execução</span>
+            <strong>{maintenance?.os_em_execucao ?? 0}</strong>
+          </div>
+          <div>
+            <span>Próxima preventiva</span>
+            <strong>{maintenance?.proxima_preventiva_em ? formatDate(maintenance.proxima_preventiva_em) : 'Não programada'}</strong>
+          </div>
+          <div>
+            <span>Último serviço</span>
+            <strong>{maintenance?.ultimo_servico_em ? formatDate(maintenance.ultimo_servico_em) : 'Sem conclusão registrada'}</strong>
+          </div>
+        </div>
+        {correctiveRecurrence >= 2 && (
+          <div className="qr-maintenance-summary__recurrence">
+            <strong>Alerta de recorrência</strong>
+            <span>{correctiveRecurrence} manutenções corretivas nos últimos 90 dias.</span>
+          </div>
+        )}
+      </section>
 
       {context.parada_ativa && <ActiveStopBanner stop={context.parada_ativa} />}
 

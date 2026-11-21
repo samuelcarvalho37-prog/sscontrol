@@ -734,6 +734,15 @@ export interface QrHistoryPaginationData {
   limit?: number;
 }
 
+export interface QrMaintenanceSummaryData {
+  os_abertas?: number;
+  os_em_execucao?: number;
+  os_atrasadas?: number;
+  proxima_preventiva_em?: string;
+  ultimo_servico_em?: string;
+  corretivas_90_dias?: number;
+}
+
 export interface QrHistoryPageData extends QrHistoryPaginationData {
   items: QrHistoryData[];
   ativo_id?: string;
@@ -770,6 +779,7 @@ export interface OperatorQrContextData {
   parametros_atuais?: QrParameterData[];
   parada_ativa?: OperatorStopData | null;
   ocorrencias_abertas?: OperatorOccurrenceData[];
+  manutencao?: QrMaintenanceSummaryData | null;
   saude?: {
     pct?: number;
     status?: string;

@@ -480,6 +480,14 @@ export class CatalogService {
           componentId,
           user.id,
         ) : [];
+        const maintenanceSummary = permitsRequest(
+          user,
+          'GET',
+          '/v1/maintenance/work-orders',
+          'maintenance.work-orders.read',
+        )
+          ? await this.repository.getQrMaintenanceSummary(client, assetId, componentId)
+          : null;
         const historyRows = permitsRequest(user,'GET','/v1/cmms/assets/:assetId/history','cmms.assets.read') ? await this.repository.getAssetHistoryPage(
           client,
           assetId,
@@ -525,6 +533,7 @@ export class CatalogService {
           parametros_atuais: activeParameters,
           parada_ativa: stop,
           ocorrencias_abertas: occurrences,
+          manutencao: maintenanceSummary,
           saude: {
             percentual: nullableNumber(asset, 'saude_percentual'),
             status: stop ? 'PARADO' : text(asset, 'status_operacional'),

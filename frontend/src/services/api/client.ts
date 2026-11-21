@@ -893,6 +893,7 @@ function operatorQrContext(data: JsonRecord): JsonRecord {
   const asset = qrAsset(data.ativo);
   const actions = asArray(data.acoes_pendentes).map(qrAction);
   const health = asRecord(data.saude);
+  const maintenance = asRecord(data.manutencao);
   return {
     found: data.encontrado === true,
     tipo_contexto: stringValue(data.tipo_contexto),
@@ -925,6 +926,16 @@ function operatorQrContext(data: JsonRecord): JsonRecord {
     parametros_atuais: asArray(data.parametros_atuais).map(qrParameter),
     parada_ativa: qrStop(data.parada_ativa),
     ocorrencias_abertas: asArray(data.ocorrencias_abertas).map(qrOccurrence),
+    manutencao: Object.keys(maintenance).length
+      ? {
+          os_abertas: numberValue(maintenance.os_abertas),
+          os_em_execucao: numberValue(maintenance.os_em_execucao),
+          os_atrasadas: numberValue(maintenance.os_atrasadas),
+          proxima_preventiva_em: stringValue(maintenance.proxima_preventiva_em) || undefined,
+          ultimo_servico_em: stringValue(maintenance.ultimo_servico_em) || undefined,
+          corretivas_90_dias: numberValue(maintenance.corretivas_90_dias),
+        }
+      : null,
     saude: {
       pct: numberValue(health.percentual),
       status: stringValue(health.status),

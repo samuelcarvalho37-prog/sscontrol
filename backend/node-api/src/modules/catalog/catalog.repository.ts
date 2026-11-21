@@ -1388,6 +1388,55 @@ export class CatalogRepository {
     return result.rows;
   }
 
+  async getQrMaintenanceSummary(
+    client: PoolClient,
+    assetId: string,
+    componentId: string | null,
+  ): Promise<CatalogRow> {
+    const result = await client.query<CatalogRow>(
+      `
+        SELECT
+          count(*) FILTER (
+            WHERE work_order.status NOT IN ('DRAFT', 'COMPLETED', 'CANCELLED')
+          )::integer AS os_abertas,
+          count(*) FILTER (
+            WHERE work_order.status IN ('IN_PROGRESS', 'EXECUTING')
+          )::integer AS os_em_execucao,
+          count(*) FILTER (
+            WHERE work_order.status NOT IN ('DRAFT', 'COMPLETED', 'CANCELLED')
+              AND work_order.scheduled_for IS NOT NULL
+              AND work_order.scheduled_for < clock_timestamp()
+          )::integer AS os_atrasadas,
+          min(work_order.scheduled_for) FILTER (
+            WHERE work_order.work_type = 'PREVENTIVE'
+              AND work_order.status NOT IN ('COMPLETED', 'CANCELLED')
+              AND work_order.scheduled_for IS NOT NULL
+          ) AS proxima_preventiva_em,
+          max(work_order.completed_at) FILTER (
+            WHERE work_order.status = 'COMPLETED'
+          ) AS ultimo_servico_em,
+          count(*) FILTER (
+            WHERE work_order.work_type = 'CORRECTIVE'
+              AND work_order.status <> 'CANCELLED'
+              AND work_order.created_at >= clock_timestamp() - interval '90 days'
+          )::integer AS corretivas_90_dias
+        FROM maintenance.work_orders work_order
+        WHERE work_order.asset_id = $1
+          AND ($2::uuid IS NULL OR work_order.component_id = $2)
+      `,
+      [assetId, componentId],
+    );
+    return result.rows[0] ?? {
+      id: 'qr-maintenance-summary',
+      os_abertas: 0,
+      os_em_execucao: 0,
+      os_atrasadas: 0,
+      proxima_preventiva_em: null,
+      ultimo_servico_em: null,
+      corretivas_90_dias: 0,
+    };
+  }
+
   async getQrOpenStop(client: PoolClient, assetId: string): Promise<CatalogRow | null> {
     const result = await client.query<CatalogRow>(
       `
