@@ -10,6 +10,14 @@ function environmentOperatorToken(): string {
   return (import.meta.env.VITE_OPERATOR_TOKEN as string | undefined)?.trim() ?? ''
 }
 
+function mobileGatewayApiUrl(): string {
+  if (typeof window === 'undefined') return ''
+  const { protocol, port, origin } = window.location
+  // O gateway HTTPS temporário do iPhone encaminha somente /api para a API
+  // local. Não reutiliza uma URL salva em outro dispositivo (ex.: 127.0.0.1).
+  return protocol === 'https:' && port === '5443' ? `${origin}/api` : ''
+}
+
 function readLocalStorage(key: string): string {
   try {
     return window.localStorage.getItem(key)?.trim() ?? ''
@@ -49,6 +57,8 @@ function clearLegacyPersistentToken(): void {
 }
 
 export function getApiUrl(): string {
+  const mobileGatewayUrl = mobileGatewayApiUrl()
+  if (mobileGatewayUrl) return mobileGatewayUrl
   const fromEnv = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
   if (fromEnv) return fromEnv
   return readLocalStorage(API_URL_KEY)
