@@ -15,7 +15,7 @@ const items = [
   { id: 'home' as const, label: 'Início', Icon: HomeIcon },
   { id: 'tools' as const, label: 'Ferramentas', Icon: SettingsIcon },
   { id: 'qr' as const, label: 'QR Code', Icon: QrIcon },
-  { id: 'settings' as const, label: 'Configurações', Icon: SettingsIcon },
+  { id: 'settings' as const, label: 'Ajustes', Icon: SettingsIcon },
 ]
 
 export function BottomNavigation({ active, onChange, canShared = false, canTools = false, canScan = true }: BottomNavigationProps) {
