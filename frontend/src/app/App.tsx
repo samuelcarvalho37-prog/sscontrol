@@ -258,6 +258,8 @@ export function App() {
   const canScan = permitsAction(operatorSession?.user.capacidades,'GET','/v1/cmms/qr-context/:code','cmms.assets.read')
   const canTools = hasPermissionTools(operatorSession?.user.capacidades)
   const canReadExecutions = operatorSession?.user.capacidades === undefined || operatorSession.user.capacidades.includes('maintenance.executions.read')
+  const canPerformExecutions = operatorSession?.user.capacidades?.includes('maintenance.executions.perform') ?? false
+  const canReadSharedWork = operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false
   const canReportOccurrence = operatorSession?.user.capacidades?.includes('maintenance.occurrences.report') ?? false
   const initialExecutionContextRef = useRef<StoredExecutionContext | null>(
     readActiveExecutionContext(),
@@ -350,7 +352,7 @@ export function App() {
   }
 
   const refresh = useCallback(async (options: RefreshOptions = {}) => {
-    if (!canReadExecutions) {
+    if (!canReadExecutions || !canPerformExecutions) {
       setActions([])
       actionsRef.current = []
       setLoading(false)
@@ -434,7 +436,7 @@ export function App() {
     } finally {
       refreshInFlightRef.current = null
     }
-  }, [canReadExecutions])
+  }, [canReadExecutions, canPerformExecutions])
 
   useEffect(() => {
     if (!operatorSession) return
@@ -1034,8 +1036,9 @@ export function App() {
             )
           ) : (
            <>
-              {section === 'home' && canReportOccurrence && !canReadExecutions && (operatorSession.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />)}
-              {section === 'home' && (canReadExecutions || !canReportOccurrence) && (
+              {section === 'home' && canReadSharedWork && !canPerformExecutions && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} fixedTab="orders" embedded profile={operatorSession.user.perfil} />}
+              {section === 'home' && canReportOccurrence && !canReadExecutions && !canReadSharedWork && <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />}
+              {section === 'home' && (!canReadSharedWork || canPerformExecutions) && (
                 <OperatorHome
                   actions={actions}
                   loading={loading}
@@ -1047,7 +1050,7 @@ export function App() {
                   onOpenQr={() => {if(canScan)setSection('qr')}}
                 />
               )}
-              {section === 'shared' && operatorSession.user.capacidades?.includes('maintenance.shared.read') && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} />}
+              {section === 'shared' && canReadSharedWork && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} profile={operatorSession.user.perfil} />}
               {section === 'qr' && canScan && <QrPage onNotify={notify} onOpenAction={openActionById} />}
               {section === 'tools' && canTools && <PermissionTools apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades ?? []} onSessionExpired={expireOperatorSession} />}
               {section === 'settings' && (
@@ -1069,7 +1072,7 @@ export function App() {
           )}
         </main>
 
-        {view === 'navigation' && <BottomNavigation canTools={canTools} canScan={canScan} canShared={operatorSession?.user.capacidades?.includes('maintenance.shared.read') ?? false} active={section} onChange={changeSection} />}
+        {view === 'navigation' && <BottomNavigation canTools={canTools} canScan={canScan} canShared={canReadSharedWork} active={section} onChange={changeSection} />}
 
         {detailRefreshing && actionDetail && (
           <div className="background-refresh" role="status">Atualizando dados…</div>
