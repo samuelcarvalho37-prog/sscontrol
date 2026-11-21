@@ -268,7 +268,7 @@ export function App() {
   )
 
   const [section, setSection] = useState<AppSection>('home')
-  useEffect(() => {if ((section === 'tools' && !canTools) || (section === 'qr' && !canScan)) setSection('home')},[section,canTools,canScan])
+  useEffect(() => {if ((section === 'tools' && (!canTools || isPcmProfile)) || (section === 'qr' && !canScan)) setSection('home')},[section,canTools,canScan,isPcmProfile])
   const [view, setView] = useState<AppView>(
     () => initialExecutionContextRef.current?.view ?? 'navigation',
   )
@@ -1055,7 +1055,7 @@ export function App() {
               )}
               {section === 'shared' && canReadSharedWork && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} profile={operatorSession.user.perfil} />}
               {section === 'qr' && canScan && <QrPage onNotify={notify} onOpenAction={openActionById} />}
-              {section === 'tools' && canTools && <PermissionTools apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades ?? []} onSessionExpired={expireOperatorSession} />}
+              {section === 'tools' && canTools && !isPcmProfile && <PermissionTools apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades ?? []} onSessionExpired={expireOperatorSession} />}
               {section === 'settings' && (
                 <SettingsPage
                     apiOnline={connectionState === 'online'}
@@ -1075,7 +1075,7 @@ export function App() {
           )}
         </main>
 
-        {view === 'navigation' && <BottomNavigation canTools={canTools} canScan={canScan} canShared={canReadSharedWork} active={section} onChange={changeSection} />}
+        {view === 'navigation' && <BottomNavigation canTools={canTools && !isPcmProfile} canScan={canScan} canShared={canReadSharedWork} active={section} onChange={changeSection} />}
 
         {detailRefreshing && actionDetail && (
           <div className="background-refresh" role="status">Atualizando dados…</div>
