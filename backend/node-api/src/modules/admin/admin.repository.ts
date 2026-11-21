@@ -38,8 +38,8 @@ export class AdminRepository {
       { code: 'OPERADOR', name: 'Operador', type: 'OPERATOR', capabilities: [...sharedRead, 'maintenance.executions.perform'] },
       { code: 'PCM', name: 'Planejador PCM', type: 'MANAGER', capabilities: [...sharedRead, 'cmms.structure.manage', 'cmms.assets.manage', 'cmms.parameters.manage', 'cmms.materials.manage', 'cmms.readings.create', 'maintenance.checklists.manage', 'maintenance.checklists.review', 'maintenance.checklists.publish', 'maintenance.plans.manage', 'maintenance.plans.publish', 'cmms.imports.manage', 'admin.technical-structure.manage', 'maintenance.work-orders.manage', 'maintenance.work-orders.review', 'maintenance.work-orders.release', 'maintenance.actions.assign', 'maintenance.stops.manage', 'maintenance.alerts.manage'] },
       { code: 'TECNICO', name: 'Técnico de manutenção', type: 'OPERATOR', capabilities: ['maintenance.executions.read', 'maintenance.executions.perform', 'workflow.notifications.read'] },
-      { code: 'QUALIDADE', name: 'Técnico de qualidade', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
-      { code: 'SEGURANCA', name: 'Técnico de segurança', type: 'CUSTOM', capabilities: ['maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
+      { code: 'QUALIDADE', name: 'Técnico de qualidade', type: 'CUSTOM', capabilities: ['cmms.structure.read', 'cmms.assets.read', 'maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
+      { code: 'SEGURANCA', name: 'Técnico de segurança', type: 'CUSTOM', capabilities: ['cmms.structure.read', 'cmms.assets.read', 'maintenance.checklists.read', 'maintenance.checklists.review', 'maintenance.work-orders.read', 'maintenance.work-orders.review', 'workflow.notifications.read'] },
       { code: 'PRODUCAO', name: 'Produção', type: 'OPERATOR', capabilities: ['cmms.structure.read', 'cmms.assets.read', 'maintenance.occurrences.read', 'maintenance.occurrences.report', 'maintenance.stops.read', 'workflow.notifications.read'] },
     ] as const;
 
@@ -50,7 +50,12 @@ export class AdminRepository {
          ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id`,
         [tenantId, definition.code, definition.name, `${definition.name} · perfil predefinido editável.`, definition.type],
       );
-      const roleId = inserted.rows[0]?.id;
+      const roleId = inserted.rows[0]?.id ?? (await client.query<{ id: string }>(
+        `SELECT id FROM iam.roles
+         WHERE tenant_id=$1 AND code=$2 AND deleted_at IS NULL
+         LIMIT 1`,
+        [tenantId, definition.code],
+      )).rows[0]?.id;
       if (!roleId) continue;
       await client.query(
         `INSERT INTO iam.role_capabilities (tenant_id,role_id,capability_id,effect)
