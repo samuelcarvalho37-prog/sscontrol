@@ -19,9 +19,10 @@ const items = [
 ]
 
 export function BottomNavigation({ active, onChange, canShared = false, canTools = false, canScan = true }: BottomNavigationProps) {
+  const visibleItems = items.filter(item => (item.id !== 'shared' || canShared) && (item.id !== 'tools' || canTools) && (item.id !== 'qr' || canScan))
   return (
-    <nav className="bottom-navigation" aria-label="Navegação principal">
-      {items.filter(item => (item.id !== 'shared' || canShared) && (item.id !== 'tools' || canTools) && (item.id !== 'qr' || canScan)).map(({ id, label, Icon }) => (
+    <nav className={`bottom-navigation bottom-navigation--${visibleItems.length}`} aria-label="Navegação principal">
+      {visibleItems.map(({ id, label, Icon }) => (
         <button
           key={id}
           type="button"
