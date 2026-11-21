@@ -59,10 +59,10 @@ async function executeAppsScriptCall<T>(
 ): Promise<ApiEnvelope<T>> {
   const controller = new AbortController();
   let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
+  const timeoutId = timeoutMs > 0 ? window.setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, timeoutMs);
+  }, timeoutMs) : undefined;
   const abortFromCaller = () => controller.abort();
   signal?.addEventListener("abort", abortFromCaller, { once: true });
 
@@ -1502,7 +1502,7 @@ export function nodeActionRequest(
       return {
         method: "GET",
         path: queryPath("/v1/analytics/technical-summary", {
-          inicio: period.inicio, fim: period.fim, limite_ranking: 10,
+          ativo_id: payload.ativo_id, inicio: period.inicio, fim: period.fim, limite_ranking: 10,
         }),
         token,
         transform: (data) => ({ ...record(data.pcm), relatorios: record(data.relatorios) }),
@@ -2533,10 +2533,10 @@ async function executeNodeCall<T>(
 ): Promise<ApiEnvelope<T>> {
   const controller = new AbortController();
   let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
+  const timeoutId = timeoutMs > 0 ? window.setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, timeoutMs);
+  }, timeoutMs) : undefined;
   const abortFromCaller = () => controller.abort();
   signal?.addEventListener("abort", abortFromCaller, { once: true });
 

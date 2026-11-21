@@ -1,3 +1,4 @@
+import { PcmExecutiveOverview } from './PcmExecutiveOverview'
 import {PcmManagementPanel,type ManagementReport} from './PcmManagementPanel'
 import { clonePcmPrintBoard } from './pcmPrintAppearance'
 import { PcmHeaderContent } from './PcmHeaderContent'
@@ -31,7 +32,7 @@ import {
 } from './postInterventionPolicy'
 import './PcmDashboard.css'
 
-interface PcmData {
+export interface PcmData {
   contextos?: {
     disponibilidade: { id: string; tag: string; nome: string; setor: string; status: string; parada_segundos: number; disponibilidade_pct: number | null }[]
     falhas: { id: string; ativo_id: string; ativo_tag: string; ativo_nome: string; setor_nome: string; motivo: string; iniciada_em: string; concluida_em: string | null; status: string; reincidente: boolean }[]
@@ -810,6 +811,8 @@ interface ExecutablePlan {
 export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpenHistory, onOpenPlanning }: { onSessionExpired: () => void; partShortageFocusId?: string; onOpenHistory?: () => void; onOpenPlanning?: () => void }) {
   const [timeMetric, setTimeMetric] = useState<'MTTR' | 'MTBF'>('MTTR')
   const [days, setDays] = useState('30')
+  const [overview, setOverview] = useState(true)
+  const [overviewAssetId, setOverviewAssetId] = useState('')
   const [demoMode] = useState(false)
   const [refresh, setRefresh] = useState(0)
   const [data, setData] = useState<PcmData | null>(null)
@@ -1026,6 +1029,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       'cmms.pcm_dashboard',
       {
         token: getGestorToken(),
+        ativo_id: overviewAssetId || undefined,
         inicio_em: new Date(end.getTime() - Number(days) * 86400000).toISOString(),
         fim_em: end.toISOString(),
       },
@@ -1045,7 +1049,7 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       })
 
     return () => controller.abort()
-  }, [days, refresh, onSessionExpired])
+  }, [days, overviewAssetId, refresh, onSessionExpired])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2080,6 +2084,8 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
   }
 
 
+  const showOverview = overview && !selectedOrder && !selectedOrderLoading && !createOrderOpen && !partShortageFocusId
+
   return (
     <section className={`pcm-dashboard pcm-dashboard--desktop${insight ? ' pcm-dashboard--focus' : ''}`} aria-label="Dashboard do PCM" aria-busy={loading}>
       <PcmHeaderContent slot="pcm-alerts-slot" fallback={false}><button type="button" className="pcm-operational-alert-trigger" aria-label={`${operationalAlertCount} avisos operacionais. Abrir central operacional`} onClick={() => window.dispatchEvent(new Event('vorqix:pcm-open-notifications'))}>Avisos <strong>{operationalAlertCount}</strong></button></PcmHeaderContent>
@@ -2105,9 +2111,15 @@ export function PcmDashboard({ onSessionExpired, partShortageFocusId = '', onOpe
       )}
 
       {displayData && current && reliability && maintenanceStatus && (
-        insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} onPlan={onOpenPlanning} /> : <>
+        insight ? <InsightWorkspace insight={insight} onClose={() => setInsight(null)} onSelect={openFocusItem} onPlan={onOpenPlanning} /> : showOverview ? <>
+          <PcmExecutiveOverview data={displayData} days={days} assetId={overviewAssetId} assets={assetCatalog} loading={loading}
+            onDays={setDays} onAsset={setOverviewAssetId} onRefresh={reload} onCustomize={() => { setOverviewAssetId(''); setOverview(false) }}
+            onOrders={showOperationalQueue} onOrder={id => { void openWorkOrderById(id) }} />
+          {!demoMode && report?.gestao ? <details className="pcm-management-access"><summary>Detalhes financeiros, metas e custo-hora</summary><PcmManagementPanel report={report.gestao} onOpenOrder={id => { void openWorkOrderById(id) }} /></details> : null}
+        </> : <>
+          <button type="button" className="pcm-executive-back" onClick={() => { closeOperationalOrder(); setOverview(true) }}><ArrowLeft size={16} />Visão geral da manutenção</button>
       {!demoMode && report?.gestao ? <details className="pcm-management-access"><summary>Gestão de custos, metas e recorrência — abrir detalhes e custo-hora</summary><PcmManagementPanel report={report.gestao} onOpenOrder={id=>{void openWorkOrderById(id)}} /></details> : null}
-      <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onOpenHistory={onOpenHistory} onPrintCanvas={printPcmCanvas} toolbarContent={<label className="pcm-canvas__period" title="Filtrar indicadores por período"><span>Período</span><select value={days} onChange={event => setDays(event.target.value)} aria-label="Período dos indicadores"><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">12 meses</option></select></label>} helpContent={<div className="pcm-canvas__help-content">
+      <PcmDashboardCanvas categories={pcmCanvasCategories} widgets={pcmCanvasWidgets} segmentFilters={pcmCanvasSegmentFilters} onOpenHistory={onOpenHistory} onPrintCanvas={printPcmCanvas} toolbarContent={<label className="pcm-canvas__period" title="Filtrar indicadores por período"><span>Período</span><select value={days} onChange={event => setDays(event.target.value)} aria-label="Período dos indicadores"><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="180">6 meses</option><option value="365">12 meses</option></select></label>} helpContent={<div className="pcm-canvas__help-content">
             <p>Adicione indicadores pelo botão “+”, organize-os arrastando os cartões e use o botão direito em cada cartão para personalizar a aparência e os filtros próprios. Salve o layout para reutilizar sua organização.</p>
             <p>
               Os totais atuais incluem todos os registros abertos dos ativos ativos. O período selecionado

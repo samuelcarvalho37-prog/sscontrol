@@ -62,7 +62,9 @@ interface AdminWorkspaceProps {
   session: GestorSession
   activeModule: AdminModule
   loggingOut: boolean
+  theme: 'light' | 'dark'
   onModuleChange: (module: AdminModule) => void
+  onToggleTheme: () => void
   onSessionExpired: () => void
   onLogout: () => void
 }
@@ -744,7 +746,9 @@ export function AdminWorkspace({
   session,
   activeModule,
   loggingOut,
+  theme,
   onModuleChange,
+  onToggleTheme,
   onSessionExpired,
   onLogout,
 }: AdminWorkspaceProps) {
@@ -2290,7 +2294,10 @@ export function AdminWorkspace({
         <ShieldIcon />
         <h1>Centro de Comando VORQIX</h1>
         <p>Amplie a janela para pelo menos 901 px para acessar o Centro de Comando.</p>
-        <button type="button" disabled={loggingOut} onClick={onLogout}>{loggingOut ? 'Saindo…' : 'Sair'}</button>
+        <div className="admin-command-mobile-block__actions">
+          <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}>{theme === 'dark' ? '☀ Tema claro' : '◐ Tema escuro'}</button>
+          <button type="button" disabled={loggingOut} onClick={onLogout}>{loggingOut ? 'Saindo…' : 'Sair'}</button>
+        </div>
       </section>
 
       <header className="admin-desktop-topbar">
@@ -2322,6 +2329,9 @@ export function AdminWorkspace({
 
         <div className="admin-desktop-top-actions">
           <button data-window-manager-trigger type="button" title="Gerenciador de janelas" aria-label="Gerenciador de janelas" onClick={() => setWindowManagerOpen((current) => !current)}><WindowsIcon /></button>
+          <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'} title={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}>
+            <span className="theme-toggle__icon" aria-hidden="true">{theme === 'dark' ? '☀' : '◐'}</span><span className="theme-toggle__label">Tema</span>
+          </button>
           <button
             className="admin-notification-button"
             type="button"

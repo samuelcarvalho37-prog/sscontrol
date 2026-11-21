@@ -113,11 +113,8 @@ export const importValidateBodySchema = Type.Object(
       maxItems: 100,
     }),
     linhas: Type.Array(
-      Type.Object(
-        { __linha: Type.Integer({ minimum: 2, maximum: 1_000_000 }) },
-        { additionalProperties: importCell },
-      ),
-      { minItems: 1, maxItems: 250 },
+      Type.Object({ __linha: Type.Integer({ minimum: 2 }) }, { additionalProperties: importCell }),
+      { minItems: 1 },
     ),
   },
   { additionalProperties: false },
@@ -133,10 +130,7 @@ export const importRollbackBodySchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const backupParamsSchema = Type.Object(
-  { backupId: uuid },
-  { additionalProperties: false },
-);
+export const backupParamsSchema = Type.Object({ backupId: uuid }, { additionalProperties: false });
 
 export const backupListQuerySchema = Type.Object(
   { limite: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })) },

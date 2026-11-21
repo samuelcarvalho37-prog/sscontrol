@@ -1,4 +1,5 @@
-const ADMIN_IMPORT_MAX_ROWS = 250;
+// null: no fixed row-count ceiling.
+const ADMIN_IMPORT_MAX_ROWS = null;
 const ADMIN_IMPORT_MAX_CELL_CHARS = 500;
 
 const ADMIN_IMPORT_MODELS = {
@@ -359,9 +360,6 @@ function adminImportacaoValidar_(p, auth){
   }
   if(!Array.isArray(p.linhas) || !p.linhas.length){
     err_("IMPORT_ROWS_REQUIRED", "A planilha não possui linhas para importar.", 400);
-  }
-  if(p.linhas.length > ADMIN_IMPORT_MAX_ROWS){
-    err_("IMPORT_ROWS_LIMIT", "O lote aceita no máximo "+ADMIN_IMPORT_MAX_ROWS+" linhas.", 413);
   }
 
   var headerMap = adminImportFieldMap_(model);

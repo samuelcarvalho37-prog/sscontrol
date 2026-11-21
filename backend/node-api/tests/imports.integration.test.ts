@@ -92,7 +92,7 @@ function validationPayload(tag: string, name: string) {
 
 test(
   'importação governada: valida, confirma, bloqueia concorrência e reverte sem perda',
-  { skip: !integrationEnabled, timeout: 45_000 },
+  { skip: !integrationEnabled, timeout: 180_000 },
   async (context) => {
     assert.ok(databaseUrl);
     const pool = new Pool({ connectionString: databaseUrl, max: 3 });
@@ -117,7 +117,9 @@ test(
       .map((model) => model.tipo)
       .sort();
     assert.deepEqual(modelTypes, [
+      'areas_tecnicas',
       'ativos',
+      'cargos_tecnicos',
       'componentes',
       'fontes_valores',
       'linhas',
@@ -126,6 +128,69 @@ test(
       'setores',
       'valores_componentes',
     ]);
+
+    assert.equal(catalog.json().data.max_linhas, null);
+    async function importRows(type: string, rows: Record<string, unknown>[]) {
+      const validation = await app.inject({
+        method: 'POST',
+        url: '/v1/admin/imports/validate',
+        headers: bearer(token),
+        payload: {
+          tipo: type,
+          arquivo_nome: `${type}-large.json`,
+          aba_nome: type,
+          cabecalhos: Object.keys(rows[0]!),
+          linhas: rows.map((row, index) => ({ ...row, __linha: index + 2 })),
+        },
+      });
+      assert.equal(validation.statusCode, 200, validation.body);
+      const staged = validation.json().data;
+      assert.equal(
+        staged.status,
+        'VALIDADO',
+        JSON.stringify(
+          staged.registros.filter((row: { erros: unknown[] }) => row.erros.length).slice(0, 2),
+        ),
+      );
+      assert.equal(staged.total_linhas, rows.length);
+      const confirmation = await app.inject({
+        method: 'POST',
+        url: `/v1/admin/imports/${staged.id}/confirm`,
+        headers: bearer(token),
+        payload: { validacao_hash: staged.validacao_hash },
+      });
+      assert.equal(confirmation.statusCode, 200, confirmation.body);
+      assert.equal(confirmation.json().data.resultado.criados, rows.length);
+      return staged;
+    }
+    await importRows('plantas', [{ tag: 'BULK-PLANT', nome: 'Bulk plant' }]);
+    await importRows('setores', [
+      { planta_id: 'BULK-PLANT', tag: 'BULK-SECTOR', nome: 'Bulk sector' },
+    ]);
+    await importRows('linhas', [{ setor_id: 'BULK-SECTOR', tag: 'BULK-LINE', nome: 'Bulk line' }]);
+    await importRows('ativos', [{ linha_id: 'BULK-LINE', tag: 'BULK-ASSET', nome: 'Bulk asset' }]);
+    const large = await importRows(
+      'componentes',
+      Array.from({ length: 1201 }, (_, index) => ({
+        ativo_id: 'BULK-ASSET',
+        tag: `BULK-CMP-${index}`,
+        nome: `Component ${index}`,
+      })),
+    );
+    const largeRollback = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/imports/${large.id}/rollback`,
+      headers: bearer(token),
+      payload: { motivo: 'Reverter teste isolado de 1201 componentes.' },
+    });
+    assert.equal(largeRollback.statusCode, 200, largeRollback.body);
+    assert.equal(largeRollback.json().data.status, 'REVERTIDO');
+    const remainingComponents = await transaction(pool, async (client) =>
+      client.query('SELECT count(*)::int AS count FROM cmms.components WHERE tenant_id=$1', [
+        tenantId,
+      ]),
+    );
+    assert.equal(remainingComponents.rows[0]!.count, 0);
 
     const invalid = await app.inject({
       method: 'POST',

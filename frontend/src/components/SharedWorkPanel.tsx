@@ -8,6 +8,8 @@ import {
   type SharedApi,
   type SharedRow as Row,
 } from "./sharedWorkModel";
+import { QualitySafetyOverview, type QualitySafetyArea } from './QualitySafetyOverview';
+import { ProductionOverview } from './ProductionOverview';
 import "./SharedWorkPanel.css";
 
 type Tab = "requests" | "orders";
@@ -17,12 +19,18 @@ export function SharedWorkPanel({
   capabilities = [],
   fixedTab,
   embedded = false,
+  profile,
+  onOpenQr,
+  onOpenValidations,
 }: {
   apiUrl: string;
   token: string;
   capabilities?: readonly string[];
   fixedTab?: Tab;
   embedded?: boolean;
+  profile?: string;
+  onOpenQr?: () => void;
+  onOpenValidations?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>(fixedTab ?? "orders"),
     [items, setItems] = useState<Row[]>([]),
@@ -53,7 +61,15 @@ export function SharedWorkPanel({
   }, []);
   const canRequest = capabilities.includes("maintenance.shared.request"),
     canQuality = capabilities.includes("maintenance.shared.observe.quality"),
-    canSafety = capabilities.includes("maintenance.shared.observe.safety");
+    canSafety = capabilities.includes("maintenance.shared.observe.safety"),
+    canManageWorkOrders = capabilities.includes("maintenance.work-orders.manage");
+  const qualitySafetyArea: QualitySafetyArea | null = profile === 'QUALIDADE'
+    ? 'quality'
+    : profile === 'SEGURANCA'
+      ? 'safety'
+      : null;
+  const isProduction = profile === 'PRODUCAO';
+  const usesProfileOverview = Boolean((qualitySafetyArea || isProduction) && tab === 'orders');
   const api: SharedApi = useCallback(
     async <T,>(
       path: string,
@@ -185,6 +201,66 @@ export function SharedWorkPanel({
       setSaving(false);
     }
   }
+  async function approveAndCreateWorkOrder() {
+    if (!detail || detail.tab !== "requests") return;
+    const request = detail.row;
+    const requestedType = String(request.tipo ?? "CORRECTIVE").toUpperCase();
+    const workType = ["CORRECTIVE", "PREVENTIVE", "LUBRICATION", "IMPROVEMENT"].includes(requestedType)
+      ? requestedType
+      : "CORRECTIVE";
+    const requestedPriority = String(request.prioridade ?? "MEDIUM").toUpperCase();
+    const priority = ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(requestedPriority)
+      ? requestedPriority
+      : "MEDIUM";
+    setSaving(true);
+    setDetailError("");
+    try {
+      const response = await fetch(`${base}/v1/maintenance/work-orders`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ativo_id: request.ativo_id,
+          tipo_origem: "OCCURRENCE",
+          entidade_origem_id: request.id,
+          tipo_trabalho: workType,
+          modo_execucao: "INTERNAL",
+          categoria_melhoria: null,
+          titulo: request.titulo,
+          descricao: request.descricao,
+          prioridade: priority,
+          responsavel_id: null,
+          programada_para: null,
+          analise_tecnica: {
+            parecer_pcm: "Solicitação aprovada pelo PCM para planejamento e execução.",
+            justificativa_validacao: "Mantidas as validações finais indicadas pelo solicitante.",
+            validacao_qualidade: request.qualidade === true,
+            validacao_seguranca: request.seguranca === true,
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw Error(result.error?.message ?? "Não foi possível criar a OS vinculada.");
+      }
+      const code = result.data?.codigo ?? result.data?.operational_code ?? "";
+      setNotice(
+        `Solicitação aprovada e convertida em OS${code ? ` ${code}` : ""}. O vínculo com o pedido foi preservado.`,
+      );
+      close();
+      setRevision((value) => value + 1);
+    } catch (cause) {
+      setDetailError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível criar a OS vinculada.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
   const row = detail?.row,
     report = row?.relato as
       | { triagem?: Record<string, unknown>; foto?: string }
@@ -197,7 +273,7 @@ export function SharedWorkPanel({
       className={`shared-work${embedded ? " shared-work--embedded" : ""}`}
       aria-label="Solicitações e acompanhamento de manutenção"
     >
-      <header>
+      {!usesProfileOverview ? <header>
         <div>
           <h1 ref={heading} tabIndex={-1}>
             {embedded ? "Solicitações" : "Solicitações e manutenção"}
@@ -209,7 +285,7 @@ export function SharedWorkPanel({
             Nova solicitação
           </button>
         ) : null}
-      </header>
+      </header> : null}
       {notice ? (
         <p role="status" className="shared-work__notice">
           {notice}
@@ -242,7 +318,27 @@ export function SharedWorkPanel({
         />
       ) : (
         <>
-          {!fixedTab ? <nav aria-label="Visões do acompanhamento">
+          {qualitySafetyArea && tab === 'orders' ? <QualitySafetyOverview
+            area={qualitySafetyArea}
+            items={items}
+            loading={loading}
+            canRequest={canRequest}
+            onRequest={() => begin()}
+            onRefresh={() => void load()}
+            onOpen={(item) => void inspect(item, 'orders')}
+            onOpenQr={onOpenQr}
+            onOpenValidations={onOpenValidations}
+          /> : null}
+          {isProduction && tab === 'orders' ? <ProductionOverview
+            items={items}
+            loading={loading}
+            canRequest={canRequest}
+            onRequest={() => begin()}
+            onRefresh={() => void load()}
+            onOpen={(item) => void inspect(item, 'orders')}
+            onOpenQr={onOpenQr}
+          /> : null}
+          {!usesProfileOverview && !fixedTab ? <nav aria-label="Visões do acompanhamento">
             {(
               [
                 ["orders", "Ordens de serviço"],
@@ -263,7 +359,7 @@ export function SharedWorkPanel({
               </button>
             ))}
           </nav> : null}
-          <form
+          {!usesProfileOverview ? <form
             className="shared-work__search"
             onSubmit={(event) => {
               event.preventDefault();
@@ -301,17 +397,17 @@ export function SharedWorkPanel({
             >
               Atualizar
             </button>
-          </form>
+          </form> : null}
           {error ? (
             <p role="alert" className="shared-work__error">
               {error}
             </p>
           ) : null}
-          {loading ? <p role="status">Consultando…</p> : null}
-          {!loading && !items.length ? (
+          {!usesProfileOverview && loading ? <p role="status">Consultando…</p> : null}
+          {!usesProfileOverview && !loading && !items.length ? (
             <p>Nenhum registro neste filtro ou no seu escopo autorizado.</p>
           ) : null}
-          <div className="shared-work__list">
+          {!usesProfileOverview ? <div className="shared-work__list">
             {items.map((item) => (
               <button
                 key={item.id}
@@ -338,8 +434,8 @@ export function SharedWorkPanel({
                 <span aria-hidden="true">›</span>
               </button>
             ))}
-          </div>
-          <footer>
+          </div> : null}
+          {!usesProfileOverview ? <footer>
             <button
               type="button"
               disabled={loading || page <= 1}
@@ -357,7 +453,7 @@ export function SharedWorkPanel({
             >
               Próxima
             </button>
-          </footer>
+          </footer> : null}
         </>
       )}
       <dialog
@@ -478,6 +574,20 @@ export function SharedWorkPanel({
                       .join(" + ") || "Não indicada"}
                   </p>
                   <p>Pedido: {row.id}</p>
+                  {canManageWorkOrders &&
+                  !row.os_id &&
+                  !row.os_codigo &&
+                  row.devolvida !== true &&
+                  row.status !== "CANCELLED" ? (
+                    <button
+                      className="shared-work__approve"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void approveAndCreateWorkOrder()}
+                    >
+                      {saving ? "Criando OS vinculada…" : "Aprovar e criar OS"}
+                    </button>
+                  ) : null}
                   {row.devolvida === true &&
                   row.minha === true &&
                   canRequest &&
@@ -540,6 +650,10 @@ export function SharedWorkPanel({
                           {date(execution.inicio)} até{" "}
                           {date(execution.conclusao)}
                           <br />
+                          {Array.isArray(execution.tecnicos_auxiliares) && execution.tecnicos_auxiliares.length > 0 ? <>
+                            Colaboradores: {execution.tecnicos_auxiliares.map((person: Record<string, unknown>) => text(person.nome)).join(', ')}
+                            <br />
+                          </> : null}
                           {text(execution.resultado)}
                         </p>
                       ),

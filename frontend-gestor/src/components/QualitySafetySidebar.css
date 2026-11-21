@@ -1,0 +1,20 @@
+.quality-safety-sidebar { display:none; }
+@media (min-width: 901px) {
+  .profile-shell--qualidade, .profile-shell--seguranca { --quality-side-width:228px; }
+  .profile-shell--qualidade > .quality-safety-sidebar, .profile-shell--seguranca > .quality-safety-sidebar { position:fixed; z-index:20; top:76px; bottom:0; left:0; display:flex; flex-direction:column; width:var(--quality-side-width); padding:24px 14px 18px; border-right:1px solid #dce7ed; background:#fff; box-shadow:5px 0 22px rgb(20 53 73 / 4%); }
+  .profile-shell--qualidade > .app-content, .profile-shell--seguranca > .app-content { margin-left:var(--quality-side-width); min-height:calc(100dvh - 76px); padding-left:24px; padding-right:24px; }
+  .profile-shell--qualidade > .app-navigation, .profile-shell--seguranca > .app-navigation { display:none; }
+  .quality-safety-sidebar__label { margin:0 10px 14px; color:#678095; font-size:10px; font-weight:850; letter-spacing:1.15px; }
+  .quality-safety-sidebar nav { display:grid; gap:5px; }
+  .quality-safety-sidebar button { display:flex; align-items:center; gap:10px; width:100%; min-height:42px; padding:9px 10px; border:1px solid transparent; border-radius:10px; color:#36586f; background:transparent; text-align:left; font:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+  .quality-safety-sidebar button:hover { color:#135e7c; background:#eef8fb; }
+  .quality-safety-sidebar button[aria-current="page"] { color:#0b5e81; background:#e0f2f5; border-color:#c8e6e8; }
+  .quality-safety-sidebar b { display:grid; width:22px; place-items:center; color:inherit; font-size:18px; font-weight:600; }
+  .quality-safety-sidebar__footer { margin-top:auto; padding-top:15px; border-top:1px solid #e5edf2; }
+}
+html[data-vorqix-theme='dark'] .profile-shell--qualidade > .quality-safety-sidebar, html[data-vorqix-theme='dark'] .profile-shell--seguranca > .quality-safety-sidebar { border-color:#195066; background:linear-gradient(180deg,#061e2b,#051823); box-shadow:5px 0 22px rgb(0 0 0 / 18%); }
+html[data-vorqix-theme='dark'] .quality-safety-sidebar__label { color:#8cb9c6; }
+html[data-vorqix-theme='dark'] .quality-safety-sidebar button { color:#c1d9df; }
+html[data-vorqix-theme='dark'] .quality-safety-sidebar button:hover { color:#f2fffc; background:#0d3b4c; }
+html[data-vorqix-theme='dark'] .quality-safety-sidebar button[aria-current="page"] { color:#f2fffc; background:linear-gradient(90deg,#075a55,#0b624f); border-color:#17b999; box-shadow:0 0 16px rgb(23 224 173 / 11%); }
+html[data-vorqix-theme='dark'] .quality-safety-sidebar__footer { border-color:#1a4a5b; }

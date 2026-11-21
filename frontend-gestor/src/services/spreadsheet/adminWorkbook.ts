@@ -36,7 +36,8 @@ function jsonPrimitive(value: unknown, field: string, rowNumber: number): string
   throw new Error(`O campo “${field}” da linha ${rowNumber} deve conter um valor simples, sem objetos ou listas aninhados.`)
 }
 
-function parsedJsonRows(fileName: string, sheetName: string, source: unknown): ParsedAdminWorkbook {
+function parsedJsonRows(fileName: string, sheetName: string, source: unknown, allowEmpty = false): ParsedAdminWorkbook {
+  if (allowEmpty && Array.isArray(source) && source.length === 0) return { fileName, sheetNames: [sheetName], selectedSheet: sheetName, headers: [], rows: [] }
   if (!Array.isArray(source) || source.length === 0) {
     throw new Error(`A seção “${sheetName}” deve ser uma lista JSON de registros.`)
   }
@@ -62,7 +63,7 @@ function safeJsonSheetName(fileName: string): string {
   return name || 'Dados'
 }
 
-async function parseAdminJson(file: File, selectedSheet?: string): Promise<ParsedAdminWorkbook> {
+async function parseAdminJson(file: File, selectedSheet?: string, allowEmpty = false): Promise<ParsedAdminWorkbook> {
   let data: unknown
   try {
     data = JSON.parse(await file.text()) as unknown
@@ -70,14 +71,14 @@ async function parseAdminJson(file: File, selectedSheet?: string): Promise<Parse
     throw new Error('O arquivo JSON não está válido. Revise vírgulas, aspas e chaves.')
   }
 
-  if (Array.isArray(data)) return parsedJsonRows(file.name, safeJsonSheetName(file.name), data)
+  if (Array.isArray(data)) return parsedJsonRows(file.name, safeJsonSheetName(file.name), data, allowEmpty)
 
   if (!isRecord(data)) throw new Error('O JSON deve ser uma lista de registros ou um objeto com abas de dados.')
 
   const wrappedRows = ['records', 'registros', 'data', 'dados', 'rows']
     .map((key) => data[key])
     .find(Array.isArray)
-  if (wrappedRows) return parsedJsonRows(file.name, selectedSheet ?? 'Dados', wrappedRows)
+  if (wrappedRows) return parsedJsonRows(file.name, selectedSheet ?? 'Dados', wrappedRows, allowEmpty)
 
   const tabContainer = isRecord(data.cadastros)
     ? data.cadastros
@@ -97,7 +98,7 @@ async function parseAdminJson(file: File, selectedSheet?: string): Promise<Parse
     : sheetNames[0]
   if (!selectedName) throw new Error(`A seção “${selectedSheet}” não foi encontrada no JSON.`)
 
-  const parsed = parsedJsonRows(file.name, selectedName, tabContainer[selectedName])
+  const parsed = parsedJsonRows(file.name, selectedName, tabContainer[selectedName], allowEmpty)
   return { ...parsed, sheetNames }
 }
 
@@ -169,7 +170,7 @@ function parseCsvRows(source: string, delimiter: string): string[][] {
   return rows
 }
 
-async function parseAdminCsv(file: File, selectedSheet?: string): Promise<ParsedAdminWorkbook> {
+async function parseAdminCsv(file: File, selectedSheet?: string, allowEmpty = false): Promise<ParsedAdminWorkbook> {
   const source = (await file.text()).replace(/^\uFEFF/u, '')
   const matrix = parseCsvRows(source, csvDelimiter(source))
   if (!matrix.length) throw new Error('O CSV está vazio.')
@@ -194,7 +195,7 @@ async function parseAdminCsv(file: File, selectedSheet?: string): Promise<Parsed
     if (Object.values(row).some((value) => value !== '' && value !== null)) result.push(row)
     return result
   }, [])
-  if (!rows.length) throw new Error(`A seção “${selectedName}” não possui registros para importar.`)
+  if (!rows.length && !allowEmpty) throw new Error(`A seção “${selectedName}” não possui registros para importar.`)
   return { fileName: file.name, sheetNames, selectedSheet: selectedName, headers: dataHeaders, rows }
 }
 
@@ -202,20 +203,13 @@ function normalizedCsvHeader(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]/g, '')
 }
 
-function assertNoFormulas(sheet: WorkSheet, xlsx: XlsxModule): void {
+function assertNoFormulas(sheet: WorkSheet): void {
   const reference = sheet['!ref']
   if (!reference) return
-  const range = xlsx.utils.decode_range(reference)
-  if (range.e.r - range.s.r > 5_000) {
-    throw new Error('A planilha possui linhas demais para uma importação administrativa.')
-  }
-  for (let row = range.s.r; row <= range.e.r; row += 1) {
-    for (let column = range.s.c; column <= range.e.c; column += 1) {
-      const address = xlsx.utils.encode_cell({ r: row, c: column })
-      const cell = sheet[address]
-      if (cell?.f) {
-        throw new Error(`A célula ${address} contém fórmula. Use somente valores no modelo de importação.`)
-      }
+  // Scan populated cells only. A formatted worksheet range is not a row limit.
+  for (const [address, cell] of Object.entries(sheet)) {
+    if (!address.startsWith('!') && cell && typeof cell === 'object' && 'f' in cell && cell.f) {
+      throw new Error(`A célula ${address} contém fórmula. Use somente valores no modelo de importação.`)
     }
   }
 }
@@ -225,10 +219,11 @@ function parseSheet(
   workbook: WorkBook,
   sheetName: string,
   xlsx: XlsxModule,
+  allowEmpty = false,
 ): ParsedAdminWorkbook {
   const sheet = workbook.Sheets[sheetName]
   if (!sheet) throw new Error('A aba selecionada não foi encontrada.')
-  assertNoFormulas(sheet, xlsx)
+  assertNoFormulas(sheet)
 
   const matrix = xlsx.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
     header: 1,
@@ -237,7 +232,10 @@ function parseSheet(
     blankrows: false,
   })
   const headerIndex = matrix.findIndex((row) => row.some((value) => text(value) !== ''))
-  if (headerIndex < 0) throw new Error('A aba selecionada está vazia.')
+  if (headerIndex < 0) {
+    if (allowEmpty) return { fileName, sheetNames: workbook.SheetNames.slice(), selectedSheet: sheetName, headers: [], rows: [] }
+    throw new Error('A aba selecionada está vazia.')
+  }
 
   const rawHeaders = matrix[headerIndex].map(text)
   const columns = rawHeaders
@@ -254,7 +252,7 @@ function parseSheet(
     if (populated) result.push(row)
     return result
   }, [])
-  if (!rows.length) throw new Error('A aba não possui linhas preenchidas para importar.')
+  if (!rows.length && !allowEmpty) throw new Error('A aba não possui linhas preenchidas para importar.')
 
   return {
     fileName,
@@ -268,10 +266,11 @@ function parseSheet(
 export async function parseAdminWorkbook(
   file: File,
   selectedSheet?: string,
+  options: { allowEmpty?: boolean } = {},
 ): Promise<ParsedAdminWorkbook> {
   assertSpreadsheetFile(file)
-  if (fileExtension(file.name) === '.json') return parseAdminJson(file, selectedSheet)
-  if (fileExtension(file.name) === '.csv') return parseAdminCsv(file, selectedSheet)
+  if (fileExtension(file.name) === '.json') return parseAdminJson(file, selectedSheet, options.allowEmpty)
+  if (fileExtension(file.name) === '.csv') return parseAdminCsv(file, selectedSheet, options.allowEmpty)
   const xlsx = await import('xlsx')
   const workbook = xlsx.read(await file.arrayBuffer(), {
     cellDates: true,
@@ -282,7 +281,7 @@ export async function parseAdminWorkbook(
   const sheetName = selectedSheet && workbook.SheetNames.includes(selectedSheet)
     ? selectedSheet
     : workbook.SheetNames[0]
-  return parseSheet(file.name, workbook, sheetName, xlsx)
+  return parseSheet(file.name, workbook, sheetName, xlsx, options.allowEmpty)
 }
 
 function safeWorksheetName(name: string): string {

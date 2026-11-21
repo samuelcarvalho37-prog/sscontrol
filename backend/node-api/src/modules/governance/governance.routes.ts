@@ -70,7 +70,7 @@ export function createGovernanceRoutes(
     });
     app.post('/v1/pcm/imports/validate', {
       preHandler: (request) => app.authorize(request, 'cmms.imports.manage'),
-      bodyLimit: 3_000_000,
+      bodyLimit: 64 * 1024 * 1024,
       schema: { ...secured, body: importValidateBodySchema },
       handler: imports.pcmValidate,
     });
@@ -96,7 +96,7 @@ export function createGovernanceRoutes(
     });
     app.post('/v1/admin/imports/validate', {
       preHandler: (request) => app.authorize(request, 'admin.governance.manage'),
-      bodyLimit: 3_000_000,
+      bodyLimit: 64 * 1024 * 1024,
       schema: { ...secured, body: importValidateBodySchema },
       handler: imports.validate,
     });

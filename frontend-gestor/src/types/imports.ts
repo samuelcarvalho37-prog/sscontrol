@@ -12,12 +12,12 @@ export interface AdminImportModel {
   grupo: string
   nome: string
   descricao: string
-  max_linhas: number
+  max_linhas: number | null
   campos: AdminImportModelField[]
 }
 
 export interface AdminImportCatalog {
-  max_linhas: number
+  max_linhas: number | null
   modelos: AdminImportModel[]
 }
 

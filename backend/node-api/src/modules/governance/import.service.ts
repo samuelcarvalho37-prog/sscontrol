@@ -383,9 +383,6 @@ export class ImportService {
     if (!model) throw error('IMPORT_MODEL_INVALID', 'Modelo de importação inválido.', 400);
     if (input.rows.length === 0)
       throw error('IMPORT_ROWS_REQUIRED', 'Nenhuma linha preenchida.', 400);
-    if (input.rows.length > IMPORT_MAX_ROWS) {
-      throw error('IMPORT_ROWS_LIMIT', `O lote aceita no máximo ${IMPORT_MAX_ROWS} linhas.`, 413);
-    }
     const lookup = fieldLookup(model);
     const canonicalHeaders = new Map<string, string>();
     const ignoredHeaders: string[] = [];

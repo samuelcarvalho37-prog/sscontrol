@@ -146,6 +146,8 @@ function modelForHeaders(
 }
 
 const IMPORT_ORDER = [
+  'areas_tecnicas',
+  'cargos_tecnicos',
   'plantas',
   'setores',
   'linhas',
@@ -225,9 +227,16 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
   const [duplicateBatch, setDuplicateBatch] = useState<AdminImportBatch | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  useEffect(() => {
+    if (!busy) { setElapsedSeconds(0); return }
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => window.clearInterval(timer)
+  }, [busy])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [progress, setProgress] = useState<{ current: number; total: number; label: string } | null>(null)
+  const [progress, setProgress] = useState<{ current: number; total: number; label: string; completedRows: number; totalRows: number } | null>(null)
   const [showDemoLots, setShowDemoLots] = useState(false)
   const [expandedBatchIds, setExpandedBatchIds] = useState<Set<string>>(() => new Set())
   const [hubZoneOrder, setHubZoneOrder] = useState<Array<'import' | 'export'>>(['import', 'export'])
@@ -589,14 +598,14 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
     setNotice('')
     setDuplicateBatch(null)
     try {
-      let nextParsed = await parseAdminWorkbook(file, sheetName)
+      let nextParsed = await parseAdminWorkbook(file, sheetName, { allowEmpty: importingMaster })
       const eligibleModels = category
         ? catalog?.modelos.filter((model) => model.grupo === category) ?? []
         : catalog?.modelos ?? []
       let detectedModel = modelForHeaders(eligibleModels, nextParsed.headers)
       if (retryOverride && detectedModel?.tipo !== retryOverride.type && nextParsed.sheetNames.length > 1) {
         for (const candidateSheetName of nextParsed.sheetNames) {
-          const candidate = await parseAdminWorkbook(file, candidateSheetName)
+          const candidate = await parseAdminWorkbook(file, candidateSheetName, { allowEmpty: true })
           const candidateModel = modelForHeaders(eligibleModels, candidate.headers)
           if (candidateModel?.tipo === retryOverride.type) {
             nextParsed = candidate
@@ -608,9 +617,6 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
       const model = detectedModel ?? catalog?.modelos.find((item) => item.tipo === selectedType)
       if (retryOverride && model?.tipo !== retryOverride.type) {
         throw new Error('O arquivo selecionado não corresponde ao tipo de cadastro deste lote.')
-      }
-      if (model && nextParsed.rows.length > model.max_linhas) {
-        throw new Error(`O modelo aceita no máximo ${model.max_linhas} linhas por lote.`)
       }
       if (detectedModel) {
         setSelectedType(detectedModel.tipo)
@@ -765,12 +771,9 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
     const candidates: Array<{ parsed: ParsedAdminWorkbook; model: AdminImportModel }> = []
     try {
       for (const sheetName of parsed.sheetNames) {
-        const sheet = await parseAdminWorkbook(selectedFile, sheetName)
+        const sheet = await parseAdminWorkbook(selectedFile, sheetName, { allowEmpty: true })
+        if (!sheet.rows.length) continue
         const model = modelForHeaders(catalog.modelos, sheet.headers)
-        if (model && sheet.rows.length > model.max_linhas) {
-          setError(`A aba “${sheet.selectedSheet}” excede o limite de ${model.max_linhas} linhas do modelo “${model.nome}”.`)
-          return
-        }
         if (model) candidates.push({ parsed: sheet, model })
       }
     } catch (cause) {
@@ -800,8 +803,10 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
       backupCreated = true
       setNotice(`Backup de segurança criado: ${backup.backup.nome}. Validando as abas…`)
       let completed = 0
+      let completedRows = 0
+      const totalRows = candidates.reduce((sum, item) => sum + item.parsed.rows.length, 0)
       for (const candidate of candidates) {
-        setProgress({ current: completed + 1, total: candidates.length, label: candidate.model.nome })
+        setProgress({ current: completed + 1, total: candidates.length, label: candidate.model.nome, completedRows, totalRows })
         setSelectedType(candidate.model.tipo)
         setActiveGroup(candidate.model.grupo)
         setParsed(candidate.parsed)
@@ -824,6 +829,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
         setBatches((current) => [confirmed, ...current.filter((item) => item.id !== confirmed.id)])
         confirmedBatches.push(confirmed)
         completed += 1
+        completedRows += candidate.parsed.rows.length
       }
       await loadWorkspace()
       const ignored = parsed.sheetNames.filter(
@@ -1064,7 +1070,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                 >
                   <span className="admin-import-dropzone__icon">↑</span>
                   <strong>{busy === 'reading' ? 'Lendo arquivo…' : 'Selecionar arquivo de dados'}</strong>
-                  <small title={`Formatos aceitos: XLSX, XLS, CSV ou JSON. Limite do arquivo: 8 MB.${importingMaster ? ' O limite de linhas é validado separadamente para cada cadastro.' : ` Máximo de ${selectedModel.max_linhas} linhas por modelo.`}`}>XLSX, XLS, CSV ou JSON · {importingMaster ? 'limite por cadastro' : `até ${selectedModel.max_linhas} linhas`}</small>
+                  <small title="Formatos aceitos: XLSX, XLS, CSV ou JSON. Limite do arquivo: 8 MB. Sem limite fixo de linhas por lote.">XLSX, XLS, CSV ou JSON · sem limite de linhas</small>
                 </button>
               ) : canValidateImport && !exporting && parsed ? (
                 <section className="admin-import-file-card">
@@ -1079,6 +1085,7 @@ export function AdminImportCenter({ onSessionExpired, mode = 'hub', category, on
                 </section>
               ) : null}
 
+              {busy ? <p role="status">Tempo decorrido: {Math.floor(elapsedSeconds / 60)} min {elapsedSeconds % 60} s · {progress && progress.completedRows > 0 ? `Restante estimado: ~${Math.max(1, Math.ceil(elapsedSeconds / progress.completedRows * (progress.totalRows - progress.completedRows) / 60))} min` : 'A estimativa fica disponível após a primeira aba concluída.'} Mantenha esta página aberta até concluir.</p> : null}
               {progress ? <div className="admin-import-progress" role="status"><span>Importando {progress.current} de {progress.total}: {progress.label}</span><i /></div> : busy === 'validating' ? <div className="admin-import-progress" role="status"><span>Validando dados e referências…</span><i /></div> : busy === 'confirming' ? <div className="admin-import-progress" role="status"><span>{retryContext?.intent === 'update' ? 'Atualizando planilha e aplicando os registros…' : 'Gravando o lote validado…'}</span><i /></div> : null}
 
               {duplicateBatch ? <section className="admin-import-analysis admin-import-analysis--concluido" aria-live="polite">

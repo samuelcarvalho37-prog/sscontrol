@@ -238,7 +238,8 @@ html body .app-shell--manager:has(.shared-work) > .app-content {
 }
 .shared-work > header > button,
 .shared-work button[aria-pressed="true"],
-.shared-work__form button:last-child {
+.shared-work__form button:last-child,
+.shared-work__approve {
   background: #0868b7;
   color: white;
   border-color: #0868b7;

@@ -38,7 +38,7 @@ async function writeImportData<T>(
     action,
     { token: adminToken(), user_agent: navigator.userAgent, ...payload },
     undefined,
-    { timeoutMs: API_TIMEOUT_MS.CRITICAL_WRITE },
+    { timeoutMs: 0 },
   )
   if (!response.data) throw new ApiRequestError('A API não confirmou a importação.', 'IMPORT_EMPTY_RESPONSE')
   return response.data

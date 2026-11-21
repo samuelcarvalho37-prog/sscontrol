@@ -1,4 +1,5 @@
 import fastifyPlugin from 'fastify-plugin';
+import { executionAuxiliariesSql } from './execution-auxiliaries.sql.js';
 import { Type } from '@fastify/type-provider-typebox';
 import { AppError } from '../../core/errors/app-error.js';
 import { MonitoringService } from '../monitoring/monitoring.service.js';
@@ -438,7 +439,8 @@ export const sharedWorkflowPlugin = fastifyPlugin(
                 [request.params.id],
               );
               const history = await client.query(
-                `SELECT e.started_at AS inicio,e.completed_at AS conclusao,e.status,e.result AS resultado,u.name AS executor
+                `SELECT e.started_at AS inicio,e.completed_at AS conclusao,e.status,e.result AS resultado,u.name AS executor,
+                ${executionAuxiliariesSql('e')} AS tecnicos_auxiliares
         FROM maintenance.executions e JOIN iam.users u ON u.id=e.operator_id AND u.tenant_id=e.tenant_id
         WHERE e.work_order_id=$1 ORDER BY e.created_at`,
                 [request.params.id],

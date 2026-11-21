@@ -157,11 +157,30 @@ p {
   font-size: 1.16rem;
 }
 
-.app-header div > span {
+.app-header > div:first-child > span {
   display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.app-header > div:first-child {
+  min-width: 0;
+}
+
+.app-header > div:first-child strong,
+.app-header > div:first-child > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .online-badge {
@@ -900,6 +919,20 @@ p {
   .app-stage {
     display: block;
     padding: 0;
+  }
+
+  .app-header {
+    min-height: 68px;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .app-header strong {
+    font-size: 1rem;
+  }
+
+  .app-header__actions {
+    gap: 6px;
   }
 
   .app-frame {

@@ -16,6 +16,9 @@ import {
   type GestorSection,
 } from '../components/AppNavigation'
 import { BellIcon } from '../components/Icons'
+import { QualitySafetySidebar } from '../components/QualitySafetySidebar'
+import { TechnicianSidebar } from '../components/TechnicianSidebar'
+import { ProductionSidebar } from '../components/ProductionSidebar'
 import { NotificationCenter } from '../components/NotificationCenter'
 import { notificationNavigation, validationDemandFromSearch } from '../components/notificationPolicy'
 import { WorkspaceStartupGate } from '../components/WorkspaceStartupGate'
@@ -48,6 +51,7 @@ import type {
   GestorTechnicalContext,
   GestorWorkView,
 } from '../types/gestor'
+import { applyVorqixTheme, nextVorqixTheme, readVorqixTheme, type VorqixTheme } from '../../../frontend/src/services/ui/themePreference'
 
 const SharedWorkPanel=lazy(()=>import('../../../frontend/src/components/SharedWorkPanel').then(m=>({default:m.SharedWorkPanel})))
 const OccurrenceWizard=lazy(()=>import('../../../frontend/src/components/OccurrenceWizard').then(m=>({default:m.OccurrenceWizard})))
@@ -115,6 +119,8 @@ function profileTabTitle(profile?: string) {
 
 function TenantApp() {
   const [session, setSession] = useState<GestorSession | null>(readGestorSession)
+  const [theme, setTheme] = useState<VorqixTheme>(readVorqixTheme)
+  useEffect(() => { applyVorqixTheme(theme) }, [theme])
   const [maintenanceEntry, setMaintenanceEntry] = useState(
     () => new URLSearchParams(window.location.search).get('maintenance') === '1',
   )
@@ -164,6 +170,8 @@ function TenantApp() {
   const isSystem = session?.user.perfil.trim().toUpperCase() === 'SISTEMA'
   const isTechnician = session?.user.perfil.trim().toUpperCase() === 'TECNICO'
   const normalizedProfile = session?.user.perfil.trim().toUpperCase() ?? ''
+  const isQualitySafetyProfile = ['QUALIDADE', 'SEGURANCA'].includes(normalizedProfile)
+  const isProductionProfile = normalizedProfile === 'PRODUCAO'
   const canUseSharedHome = usesSharedHome(session?.user.capacidades,normalizedProfile)
   const isPcmWorkspace = experience === 'pcm'
   const [networkOnline, setNetworkOnline] = useState(() => navigator.onLine)
@@ -335,6 +343,13 @@ function TenantApp() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }
 
+  function openQualitySafetyValidations() {
+    setSection('home')
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      document.querySelector('.manager-decision-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }))
+  }
+
   function handleOpenDecision(
     view: GestorWorkView = 'demands',
     focus: GestorDecisionFocus | null = null,
@@ -499,7 +514,9 @@ function TenantApp() {
         session={session}
         activeModule={adminModule}
         loggingOut={loggingOut}
+        theme={theme}
         onModuleChange={setAdminModule}
+        onToggleTheme={() => setTheme(current => nextVorqixTheme(current))}
         onSessionExpired={expireSession}
         onLogout={() => void handleLogout()}
       />
@@ -555,6 +572,17 @@ function TenantApp() {
               <span>{notificationCount > 99 ? '99+' : notificationCount}</span>
             ) : null}
           </button> : null}
+          <button className="theme-toggle" type="button" onClick={() => {
+            const nextTheme = nextVorqixTheme(theme)
+            setTheme(nextTheme)
+            if (isPcmWorkspace) {
+              const nextPcmTheme = nextTheme === 'dark' ? 'dark' : 'light'
+              setPcmTheme(nextPcmTheme)
+              window.localStorage.setItem('vorqix.pcm.dashboard-theme.v1', nextPcmTheme)
+            }
+          }} aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'} title={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}>
+            <span className="theme-toggle__icon" aria-hidden="true">{theme === 'dark' ? '☀' : '◐'}</span><span className="theme-toggle__label">Tema</span>
+          </button>
           <button
             className="logout-button"
             type="button"
@@ -570,8 +598,29 @@ function TenantApp() {
         </> : null}
         </header>
 
+        {isQualitySafetyProfile ? <QualitySafetySidebar
+          area={normalizedProfile as 'QUALIDADE' | 'SEGURANCA'}
+          active={section}
+          canRequest={session.user.capacidades?.includes('maintenance.shared.request') ?? false}
+          canScan={canScan}
+          onNavigate={handleNavigate}
+          onOpenValidations={openQualitySafetyValidations}
+        /> : null}
+        {isTechnician ? <TechnicianSidebar
+          active={section}
+          canRequest={session.user.capacidades?.includes('maintenance.shared.request') ?? false}
+          canScan={canScan}
+          onNavigate={handleNavigate}
+        /> : null}
+        {isProductionProfile ? <ProductionSidebar
+          active={section}
+          canRequest={session.user.capacidades?.includes('maintenance.shared.request') ?? false}
+          canScan={canScan}
+          onNavigate={handleNavigate}
+        /> : null}
+
         <div className="app-content" ref={contentRef}>
-          {section === 'home' && !isPcmWorkspace && !isTechnician && profileExperience ? (
+          {section === 'home' && !isPcmWorkspace && !isTechnician && profileExperience && !['QUALIDADE', 'SEGURANCA'].includes(normalizedProfile) ? (
             <section className="profile-experience-hero" aria-label={`Resumo de ${profileTabTitle(normalizedProfile)}`}>
               <div>
                 <span>{profileExperience.eyebrow}</span>
@@ -606,9 +655,10 @@ function TenantApp() {
               </div>
             </section>
           ) : null}
-          {section === 'home' && (canUseSharedHome || (canReportOccurrence && !canReadWork)) && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
+          {section === 'home' && isQualitySafetyProfile && session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} profile={normalizedProfile} onOpenQr={canScan ? () => handleNavigate('scan') : undefined} onOpenValidations={canAccessDecisionWorkspace ? openQualitySafetyValidations : undefined} /> : null}
+          {section === 'home' && !isQualitySafetyProfile && (canUseSharedHome || (canReportOccurrence && !canReadWork)) && (session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} profile={normalizedProfile} onOpenQr={canScan ? () => handleNavigate('scan') : undefined} onOpenValidations={canAccessDecisionWorkspace ? () => handleNavigate('validations') : undefined} /> : <OccurrenceWizard apiUrl={getApiUrl()} token={session.token} />)}
           {section === 'home' && isTechnician ? <TechnicianDashboard onSessionExpired={expireSession} notificationFocus={technicianActionFocus} onNotificationFocusHandled={() => setTechnicianActionFocus(null)} /> : null}
-          {section === 'home' && !isPcmWorkspace && canAccessDecisionWorkspace && !isTechnician && !canUseSharedHome ? (
+          {section === 'home' && !isPcmWorkspace && canAccessDecisionWorkspace && !isTechnician && (!canUseSharedHome || isQualitySafetyProfile) ? (
             <GestorDecisionWorkspace
               capabilities={session.user.capacidades}
               initialView={decisionView}
@@ -648,7 +698,7 @@ function TenantApp() {
             }
             </>
           ) : null}
-          {section === 'shared' && session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} /> : null}
+          {section === 'shared' && session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} profile={normalizedProfile} onOpenQr={canScan ? () => handleNavigate('scan') : undefined} onOpenValidations={canAccessDecisionWorkspace ? () => handleNavigate('validations') : undefined} /> : null}
           {section === 'tracking' && canTracking ? <PcmTrackingWorkspace requestsContent={session.user.capacidades?.includes('maintenance.shared.read') ? <SharedWorkPanel apiUrl={getApiUrl()} token={session.token} capabilities={session.user.capacidades} fixedTab="requests" embedded /> : undefined} key={trackingChecklistId || 'tracking'} initialChecklistId={trackingChecklistId} canManage={Boolean(session.user.capacidades?.includes('maintenance.work-orders.manage'))} onSessionExpired={expireSession} /> : null}
           {section === 'maintenance' && canManageMaintenance ? (
             <PcmMaintenanceWorkspace onSessionExpired={expireSession} onCreateOrder={id => { setTrackingChecklistId(id); handleNavigate('tracking') }} />

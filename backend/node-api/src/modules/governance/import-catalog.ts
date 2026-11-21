@@ -36,7 +36,8 @@ function field(
   return { key, label, aliases, required, example };
 }
 
-export const IMPORT_MAX_ROWS = 250;
+// null means that imports have no fixed row-count ceiling.
+export const IMPORT_MAX_ROWS = null;
 export const IMPORT_MAX_CELL_CHARACTERS = 500;
 
 export const importModels: readonly ImportModel[] = Object.freeze([

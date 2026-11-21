@@ -14,6 +14,13 @@ export function PcmImportDialog({ types, onClose, onImported, onSessionExpired }
   const [parsed, setParsed] = useState<ParsedAdminWorkbook | null>(null)
   const [batch, setBatch] = useState<AdminImportBatch | null>(null)
   const [busy, setBusy] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  useEffect(() => {
+    if (!busy) { setElapsedSeconds(0); return }
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => window.clearInterval(timer)
+  }, [busy])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [completed, setCompleted] = useState(false)
@@ -64,10 +71,11 @@ export function PcmImportDialog({ types, onClose, onImported, onSessionExpired }
   }
   return <div className="pcm-import-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose() }}><section ref={dialogRef} className="pcm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="pcm-import-title">
     <header><h2 id="pcm-import-title">Importar planilha</h2><button autoFocus type="button" disabled={busy} onClick={onClose}>Fechar</button></header>
+    {busy ? <p role="status">Processando há {elapsedSeconds} s. Mantenha esta página aberta até concluir.</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {loading ? <p role="status">Carregando modelos…</p> : !models.length ? !error ? <p>Nenhum cadastro disponível para importação com as permissões desta conta.</p> : null : completed ? <p role="status">Importação concluída: {batch?.resultado.criados || 0} criado(s), {batch?.resultado.atualizados || 0} atualizado(s).</p> : <>
       <label>Cadastro<select disabled={busy} value={type} onChange={event => { setType(event.target.value); setBatch(null) }}>{models.map(item => <option value={item.tipo} key={item.tipo}>{item.nome}</option>)}</select></label>
-      {model ? <><p>{model.descricao}</p><p><strong>Colunas obrigatórias:</strong> {model.campos.filter(field => field.obrigatorio).map(field => field.chave).join(', ')}. Até {model.max_linhas} linhas por lote.</p><button type="button" disabled={busy} onClick={() => void downloadAdminImportTemplate(model).catch(fail)}>Baixar modelo de preenchimento</button></> : null}
+      {model ? <><p>{model.descricao}</p><p><strong>Colunas obrigatórias:</strong> {model.campos.filter(field => field.obrigatorio).map(field => field.chave).join(', ')}. Sem limite fixo de linhas por lote.</p><button type="button" disabled={busy} onClick={() => void downloadAdminImportTemplate(model).catch(fail)}>Baixar modelo de preenchimento</button></> : null}
       <label>Arquivo<input disabled={busy} type="file" accept=".xlsx,.xls,.csv" onChange={event => { const next = event.target.files?.[0]; if (next) void readFile(next) }} /></label>
       {parsed && parsed.sheetNames.length > 1 ? <label>Aba<select disabled={busy} value={parsed.selectedSheet} onChange={event => { if (file) void readFile(file, event.target.value) }}>{parsed.sheetNames.map(sheet => <option key={sheet}>{sheet}</option>)}</select></label> : null}
       {parsed ? <p>{parsed.rows.length} linha(s) encontrada(s) em {parsed.selectedSheet}.</p> : null}

@@ -10,10 +10,7 @@ import {
 } from "../services/api/interventions";
 import {
   releaseMaintenanceWorkOrder,
-  listActiveTechnicians,
-  assignMaintenanceAction,
   requestWorkOrderUpdate,
-  type ActiveTechnician,
 } from "../services/api/maintenanceAssignments";
 import { listAdminEntity } from "../services/api/catalog";
 import { listAdminChecklistModels } from "../services/api/checklists";
@@ -97,13 +94,11 @@ export function PcmTrackingWorkspace({
   const [origin, setOrigin] = useState<GestorOccurrence | null>(null);
   const [plans, setPlans] = useState<AdminEntityRecord[]>([]);
   const [checklists, setChecklists] = useState<AdminChecklistPlan[]>([]);
-  const [technicians, setTechnicians] = useState<ActiveTechnician[]>([]);
   const [planId, setPlanId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("MEDIA");
   const [scheduled, setScheduled] = useState("");
-  const [responsible, setResponsible] = useState("");
   const [busy, setBusy] = useState(false);
   const [followup, setFollowup] = useState("");
   const generation = useRef(0);
@@ -185,21 +180,18 @@ export function PcmTrackingWorkspace({
     setSelected(order);
     setDetail(null);
     setError("");
-    setResponsible(order.responsavel_id || "");
     setFollowup("");
     setLoading(true);
     try {
-      const [record, execution, people] = await Promise.all([
+      const [record, execution] = await Promise.all([
         getAdminIntervention(order.id),
         order.acao_id
           ? getGestorActionDetail(order.acao_id)
           : Promise.resolve(null),
-        canManage ? listActiveTechnicians() : Promise.resolve([]),
       ]);
       if (request === generation.current) {
         setSelected({ ...order, ...record });
         setDetail(execution);
-        setTechnicians(people);
       }
     } catch (cause) {
       if (request === generation.current) fail(cause);
@@ -224,13 +216,11 @@ export function PcmTrackingWorkspace({
     setTitle(occurrence?.titulo || "");
     setDescription(occurrence?.descricao || "");
     setPlanId("");
-    setResponsible("");
     setScheduled("");
     setPriority("MEDIA");
     try {
-      const [catalog, people, models] = await Promise.all([
+      const [catalog, models] = await Promise.all([
         listAdminEntity("planos"),
-        listActiveTechnicians(),
         listAdminChecklistModels(),
       ]);
       setPlans(
@@ -243,7 +233,6 @@ export function PcmTrackingWorkspace({
               String(plan.ativo_id) === occurrence.ativo_id),
         ),
       );
-      setTechnicians(people);
       setChecklists(
         models.filter(
           (model) =>
@@ -292,8 +281,6 @@ export function PcmTrackingWorkspace({
       throw new Error(
         "A OS foi salva, mas ainda não está liberada. Confira a revisão ou a pendência informada antes de reenviar.",
       );
-    if (responsible && current.acao_id)
-      await assignMaintenanceAction(current.acao_id, responsible);
     return current;
   }
   async function create(event: React.FormEvent) {
@@ -343,7 +330,7 @@ export function PcmTrackingWorkspace({
       await dispatch(saved);
       setCreating(false);
       setNotice(
-        `OS ${saved.codigo} enviada para execução${responsible ? " ao responsável selecionado" : " à equipe de manutenção"}.`,
+        `OS ${saved.codigo} liberada para a equipe de manutenção. O técnico que assumir a OS será registrado como executor.`,
       );
       await load();
     } catch (cause) {
@@ -513,21 +500,7 @@ export function PcmTrackingWorkspace({
                 disabled={busy}
               />
             </label>
-            <label>
-              Responsável
-              <select
-                value={responsible}
-                onChange={(event) => setResponsible(event.target.value)}
-                disabled={busy}
-              >
-                <option value="">Disponibilizar para a equipe</option>
-                {technicians.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <p className="wide">A OS será disponibilizada à equipe de manutenção. O técnico elegível assume a execução pelo próprio perfil e informa os técnicos auxiliares na conclusão.</p>
             <footer className="wide">
               <button
                 type="button"
@@ -614,42 +587,7 @@ export function PcmTrackingWorkspace({
             !["CONCLUIDA", "COMPLETED", "CANCELADA", "CANCELLED"].includes(
               selected.status,
             ) ? (
-              <form
-                className="pcm-tracking-followup"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setBusy(true);
-                  setError("");
-                  void assignMaintenanceAction(selected.acao_id!, responsible)
-                    .then(async () => {
-                      setSelected(await getAdminIntervention(selected.id));
-                      setNotice("Responsável atualizado.");
-                      await load();
-                    })
-                    .catch(fail)
-                    .finally(() => setBusy(false));
-                }}
-              >
-                <label>
-                  Responsável pela execução
-                  <select
-                    required
-                    disabled={busy}
-                    value={responsible}
-                    onChange={(event) => setResponsible(event.target.value)}
-                  >
-                    <option value="">Selecione um técnico</option>
-                    {technicians.map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" disabled={busy || !responsible}>
-                  Atribuir responsável
-                </button>
-              </form>
+              <p>O técnico elegível assume esta OS no próprio perfil. O executor e os auxiliares ficam registrados no histórico da intervenção.</p>
             ) : null}
             {canManage &&
             !["CONCLUIDA", "COMPLETED", "CANCELADA", "CANCELLED"].includes(

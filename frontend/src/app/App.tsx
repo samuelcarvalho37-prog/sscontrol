@@ -56,6 +56,7 @@ import type {
   StartActionData,
 } from '../types/api'
 import type { OperatorAction } from '../types/operator'
+import { applyVorqixTheme, nextVorqixTheme, readVorqixTheme, type VorqixTheme } from '../services/ui/themePreference'
 
 type AppView = 'navigation' | 'action-detail' | 'checklist'
 
@@ -234,6 +235,8 @@ function mergeEvidenceIntoDetail(
 
 export function App() {
   const [operatorSession, setOperatorSession] = useState(readOperatorSession)
+  const [theme, setTheme] = useState<VorqixTheme>(readVorqixTheme)
+  useEffect(() => { applyVorqixTheme(theme) }, [theme])
   useEffect(() => {
     if (!operatorSession || getApiTransport() === 'apps-script') return
     return watchCompanyAccess(
@@ -941,6 +944,8 @@ export function App() {
           operatorName={operatorSession.user.nome || 'Operador'}
           shift={`Matrícula ${operatorSession.user.matricula}`}
           connectionState={connectionState}
+          theme={theme}
+          onToggleTheme={() => setTheme(current => nextVorqixTheme(current))}
         />
 
         <main className="app-content">

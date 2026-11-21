@@ -1,5 +1,6 @@
 import type { PoolClient, QueryResultRow } from 'pg';
 import { createHash, randomUUID } from 'node:crypto';
+import { executionAuxiliariesSql } from './execution-auxiliaries.sql.js';
 
 import type { StoredObject } from '../../infrastructure/storage/object-storage.js';
 
@@ -2259,14 +2260,7 @@ export class OperationsRepository {
                   AND history.event_type='EXECUTION_TECHNICAL_REPORT'
                 ORDER BY history.occurred_at DESC LIMIT 1) AS relatorio_tecnico,
                execution.execution_stop_mode AS modo_parada,
-               COALESCE((SELECT jsonb_agg(jsonb_build_object(
-                 'id', support_user.id, 'nome', support_user.name
-               ) ORDER BY support.support_slot)
-               FROM maintenance.execution_support_technicians support
-               JOIN iam.users support_user
-                 ON support_user.tenant_id=support.tenant_id AND support_user.id=support.user_id
-               WHERE support.tenant_id=execution.tenant_id AND support.execution_id=execution.id),
-               '[]'::jsonb) AS tecnicos_auxiliares,
+               ${executionAuxiliariesSql('execution')} AS tecnicos_auxiliares,
                COALESCE((SELECT jsonb_agg(jsonb_build_object(
                  'id', participant.id, 'user_id', participant.user_id,
                  'nome', participant_user.name, 'matricula', participant_user.employee_number,

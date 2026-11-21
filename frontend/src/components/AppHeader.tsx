@@ -4,6 +4,8 @@ export interface AppHeaderProps {
   operatorName: string
   shift: string
   connectionState: ConnectionState
+  theme: 'light' | 'dark'
+  onToggleTheme: () => void
 }
 
 const connectionLabels: Record<ConnectionState, string> = {
@@ -17,6 +19,8 @@ export function AppHeader({
   operatorName,
   shift,
   connectionState,
+  theme,
+  onToggleTheme,
 }: AppHeaderProps) {
   return (
     <header className="app-header">
@@ -25,9 +29,14 @@ export function AppHeader({
         <strong>Olá, {operatorName}</strong>
         <span>Operador · {shift}</span>
       </div>
-      <div className={`online-badge online-badge--${connectionState}`}>
-        <span aria-hidden="true" />
-        {connectionLabels[connectionState]}
+      <div className="app-header__actions">
+        <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'} title={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}>
+          <span className="theme-toggle__icon" aria-hidden="true">{theme === 'dark' ? '☀' : '◐'}</span><span className="theme-toggle__label">Tema</span>
+        </button>
+        <div className={`online-badge online-badge--${connectionState}`}>
+          <span aria-hidden="true" />
+          {connectionLabels[connectionState]}
+        </div>
       </div>
     </header>
   )
