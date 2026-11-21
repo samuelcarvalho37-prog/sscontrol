@@ -1906,7 +1906,7 @@ p {
 .asset-hero__status-line { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 .asset-hero__status-line > button { color: var(--blue); background: transparent; font-size: 0.74rem; font-weight: 900; }
 .asset-data-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 16px; }
-.asset-data-grid > div { padding: 11px; border: 1px solid var(--line); border-radius: 15px; background: #fff; }
+.asset-data-grid > div { padding: 11px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface-soft); }
 .asset-data-grid span,
 .asset-data-grid strong { display: block; }
 .asset-data-grid span { color: var(--muted); font-size: 0.67rem; font-weight: 850; }

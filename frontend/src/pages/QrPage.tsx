@@ -937,7 +937,7 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
           <div><span>Status</span><strong>{context.parada_ativa ? 'PARADO' : (asset?.status || 'Não informado')}</strong></div>
           <div><span>Saúde</span><strong>{health !== undefined && health !== '' ? `${health}%` : 'Não informada'}</strong></div>
           <div><span>Criticidade</span><strong>{asset?.criticidade || 'Não informada'}</strong></div>
-          <div><span>Horímetro total</span><strong>{asset?.horimetro_atual !== undefined && asset?.horimetro_atual !== '' ? `${asset.horimetro_atual} h` : 'Não informado'}</strong></div>
+          <div><span>Horímetro total</span><strong>{asset?.horimetro_atual !== undefined && asset?.horimetro_atual !== null && asset?.horimetro_atual !== '' ? `${asset.horimetro_atual} h` : 'Não informado'}</strong></div>
           <div><span>Desde último serviço</span><strong>{context.horimetro?.contador_servico_horas === null || context.horimetro?.contador_servico_horas === undefined ? 'Não iniciado' : `${context.horimetro.contador_servico_horas} h`}</strong></div>
           <div><span>Leitura</span><strong>{context.horimetro?.automatico ? 'Automática' : 'Manual'}</strong></div>
         </div>
