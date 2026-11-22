@@ -2,6 +2,7 @@ export type ConnectionState = 'checking' | 'online' | 'offline' | 'unconfigured'
 
 export interface AppHeaderProps {
   operatorName: string
+  roleLabel: string
   shift: string
   connectionState: ConnectionState
   theme: 'light' | 'dark'
@@ -17,6 +18,7 @@ const connectionLabels: Record<ConnectionState, string> = {
 
 export function AppHeader({
   operatorName,
+  roleLabel,
   shift,
   connectionState,
   theme,
@@ -27,7 +29,7 @@ export function AppHeader({
       <div>
         <img className="vorqix-logo vorqix-logo--compact" src="/vorqix-logo.png" alt="VORQIX — Unidade Industrial" />
         <strong>Olá, {operatorName}</strong>
-        <span>Operador · {shift}</span>
+        <span>{roleLabel} · {shift}</span>
       </div>
       <div className="app-header__actions">
         <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'} title={theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro'}>

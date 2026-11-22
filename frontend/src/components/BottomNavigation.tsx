@@ -11,7 +11,7 @@ export interface BottomNavigationProps {
 }
 
 const items = [
-  { id: 'shared' as const, label: 'Solicitar OS', Icon: HomeIcon },
+  { id: 'shared' as const, label: 'OS', Icon: HomeIcon },
   { id: 'home' as const, label: 'Início', Icon: HomeIcon },
   { id: 'tools' as const, label: 'Ferramentas', Icon: SettingsIcon },
   { id: 'qr' as const, label: 'QR Code', Icon: QrIcon },

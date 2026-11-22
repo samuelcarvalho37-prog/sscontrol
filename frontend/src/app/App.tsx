@@ -945,6 +945,7 @@ export function App() {
       <section className="app-frame">
         <AppHeader
           operatorName={operatorSession.user.nome || 'Operador'}
+          roleLabel={operatorSession.user.perfil || 'Perfil operacional'}
           shift={`Matrícula ${operatorSession.user.matricula}`}
           connectionState={connectionState}
           theme={theme}
