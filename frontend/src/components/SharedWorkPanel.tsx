@@ -9,6 +9,7 @@ import {
   type SharedRow as Row,
 } from "./sharedWorkModel";
 import { QualitySafetyOverview, type QualitySafetyArea } from './QualitySafetyOverview';
+import { describeOperationalFailure } from '../services/ui/operationalDiagnostic';
 import { ProductionOverview } from './ProductionOverview';
 import "./SharedWorkPanel.css";
 
@@ -111,10 +112,10 @@ export function SharedWorkPanel({
           setError("");
         }
       } catch (cause) {
-        if (!signal?.aborted)
-          setError(
-            cause instanceof Error ? cause.message : "Falha na consulta.",
-          );
+        if (!signal?.aborted) {
+          const diagnostic = describeOperationalFailure(cause);
+          setError(`${diagnostic.title}. ${diagnostic.message}`);
+        }
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
@@ -161,12 +162,10 @@ export function SharedWorkPanel({
       if (!abort.signal.aborted)
         setDetail({ row: { ...row, ...result }, tab: source });
     } catch (cause) {
-      if (!abort.signal.aborted)
-        setDetailError(
-          cause instanceof Error
-            ? cause.message
-            : "Não foi possível abrir os detalhes.",
-        );
+      if (!abort.signal.aborted) {
+        const diagnostic = describeOperationalFailure(cause);
+        setDetailError(`${diagnostic.title}. ${diagnostic.message}`);
+      }
     } finally {
       if (!abort.signal.aborted) setDetailLoading(false);
     }

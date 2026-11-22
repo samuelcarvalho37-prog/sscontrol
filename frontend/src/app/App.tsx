@@ -25,6 +25,7 @@ import {
 import { QrPage } from '../pages/QrPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { ApiRequestError, callApi } from '../services/api/client'
+import { describeOperationalFailure } from '../services/ui/operationalDiagnostic'
 import { hasApiConfiguration } from '../services/api/config'
 import {
   finalizeOperatorAction,
@@ -405,14 +406,12 @@ export function App() {
         setConnectionState('online')
         setError('')
       } else {
-        const message = actionsResult.reason instanceof Error
-          ? actionsResult.reason.message
-          : 'Falha ao carregar a fila do operador.'
+        const diagnostic = describeOperationalFailure(actionsResult.reason)
         if (!options.silent) {
           setError(
             hasVisibleActions
               ? 'Atualização online indisponível. Exibindo a fila salva neste aparelho.'
-              : message,
+              : `${diagnostic.title}. ${diagnostic.message}`,
           )
         }
         if (!hasVisibleActions) {
