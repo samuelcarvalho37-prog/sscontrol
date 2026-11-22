@@ -309,7 +309,9 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
       applyContext(result)
       setLastQuery(normalized)
       if (!result.found) setError(result.mensagem_operador || 'Equipamento não encontrado.')
-      else onNotify(result.mensagem_operador || 'Equipamento identificado')
+      // A identificação já fica visível no cabeçalho do prontuário. Evita um
+      // aviso flutuante redundante cobrindo dados importantes em telas móveis.
+      else if (result.mensagem_operador) onNotify(result.mensagem_operador)
     } catch (cause) {
       if (!isCurrentRequest()) return
       if (!cached) {
@@ -806,6 +808,13 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
   const asset = context.ativo
   const componentContext = context.componente
   const health = context.saude?.pct ?? asset?.saude_pct
+  const hasMeasuredParameter = parameters.some((parameter) =>
+    parameter.valor !== undefined && parameter.valor !== null && String(parameter.valor).trim() !== '',
+  )
+  const hasHourMeterValue = asset?.horimetro_atual !== undefined && asset?.horimetro_atual !== null && String(asset.horimetro_atual).trim() !== ''
+  const healthLabel = !hasMeasuredParameter && !hasHourMeterValue
+    ? 'Sem dados suficientes'
+    : health !== undefined && health !== '' ? `${health}%` : 'Não informada'
   const maintenance = context.manutencao
   const openOrders = maintenance?.os_abertas ?? context.saude?.acoes_abertas ?? availableActions.length
   const correctiveRecurrence = maintenance?.corretivas_90_dias ?? 0
@@ -935,11 +944,11 @@ export function QrPage({ onNotify, onOpenAction }: QrPageProps) {
         </p>
         <div className="asset-data-grid">
           <div><span>Status</span><strong>{context.parada_ativa ? 'PARADO' : (asset?.status || 'Não informado')}</strong></div>
-          <div><span>Saúde</span><strong>{health !== undefined && health !== '' ? `${health}%` : 'Não informada'}</strong></div>
+          <div><span>Saúde</span><strong>{healthLabel}</strong></div>
           <div><span>Criticidade</span><strong>{asset?.criticidade || 'Não informada'}</strong></div>
           <div><span>Horímetro total</span><strong>{asset?.horimetro_atual !== undefined && asset?.horimetro_atual !== null && asset?.horimetro_atual !== '' ? `${asset.horimetro_atual} h` : 'Não informado'}</strong></div>
           <div><span>Desde último serviço</span><strong>{context.horimetro?.contador_servico_horas === null || context.horimetro?.contador_servico_horas === undefined ? 'Não iniciado' : `${context.horimetro.contador_servico_horas} h`}</strong></div>
-          <div><span>Leitura</span><strong>{context.horimetro?.automatico ? 'Automática' : 'Manual'}</strong></div>
+          <div><span>Origem do horímetro</span><strong>{context.horimetro?.automatico ? 'Automática' : 'Manual'}</strong></div>
         </div>
       </article>
 

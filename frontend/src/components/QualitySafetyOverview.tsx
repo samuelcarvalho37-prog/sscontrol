@@ -13,6 +13,7 @@ type Props = {
   onOpen: (row: Row) => void
   onOpenValidations?: () => void
   onOpenQr?: () => void
+  onBrowseOrders?: (status?: 'ALL' | 'OPEN' | 'CLOSED') => void
 }
 
 const CLOSED = new Set(['COMPLETED', 'RESOLVED', 'CLOSED'])
@@ -37,6 +38,7 @@ export function QualitySafetyOverview({
   onOpen,
   onOpenValidations,
   onOpenQr,
+  onBrowseOrders,
 }: Props) {
   const isQuality = area === 'quality'
   const noun = isQuality ? 'Qualidade' : 'Segurança'
@@ -47,7 +49,8 @@ export function QualitySafetyOverview({
   const review = items.filter(item => REVIEW.has(stateOf(item))).length
   const active = items.filter(item => ACTIVE.has(stateOf(item))).length
   const completed = items.filter(item => CLOSED.has(stateOf(item))).length
-  const alerts = items.filter(item => ['CRITICAL', 'HIGH'].includes(String(item.prioridade))).length
+  // Alertas operacionais não incluem itens já finalizados.
+  const alerts = items.filter(item => !CLOSED.has(stateOf(item)) && ['CRITICAL', 'HIGH'].includes(String(item.prioridade))).length
   const queue = items.filter(item => !CLOSED.has(stateOf(item))).slice(0, 3)
 
   return (
@@ -68,10 +71,10 @@ export function QualitySafetyOverview({
       </div>
 
       <div className="quality-safety-overview__metrics" aria-label="Indicadores do escopo consultado">
-        <article><span>VALIDAÇÕES PENDENTES</span><strong>{review}</strong><small>no escopo atual</small></article>
-        <article><span>EM ACOMPANHAMENTO</span><strong>{active}</strong><small>ordens ativas</small></article>
-        <article><span>CONCLUÍDAS</span><strong>{completed}</strong><small>na consulta atual</small></article>
-        <article><span>PRIORIDADE ALTA</span><strong>{alerts}</strong><small>itens para atenção</small></article>
+        <button type="button" className="quality-safety-overview__metric" onClick={onOpenValidations ?? (() => onBrowseOrders?.('OPEN'))} aria-label="Abrir validações pendentes"><span>VALIDAÇÕES PENDENTES</span><strong>{review}</strong><small>no escopo atual</small></button>
+        <button type="button" className="quality-safety-overview__metric" onClick={() => onBrowseOrders?.('OPEN')} aria-label="Abrir ordens em acompanhamento"><span>EM ACOMPANHAMENTO</span><strong>{active}</strong><small>ordens ativas</small></button>
+        <button type="button" className="quality-safety-overview__metric" onClick={() => onBrowseOrders?.('CLOSED')} aria-label="Abrir ordens concluídas"><span>CONCLUÍDAS</span><strong>{completed}</strong><small>na consulta atual</small></button>
+        <button type="button" className="quality-safety-overview__metric" onClick={() => onBrowseOrders?.('OPEN')} aria-label="Abrir ordens de prioridade alta"><span>PRIORIDADE ALTA</span><strong>{alerts}</strong><small>itens para atenção</small></button>
       </div>
 
       <div className="quality-safety-overview__content">

@@ -9,6 +9,7 @@ type Props = {
   onRefresh: () => void
   onOpen: (row: Row) => void
   onOpenQr?: () => void
+  onBrowseOrders: (status?: 'ALL' | 'OPEN' | 'CLOSED') => void
 }
 
 const CLOSED = new Set(['COMPLETED', 'RESOLVED', 'CLOSED', 'CANCELLED'])
@@ -24,7 +25,7 @@ function priorityClass(row: Row) {
   return priority === 'CRITICAL' ? 'critical' : priority === 'HIGH' ? 'high' : priority === 'MEDIUM' ? 'medium' : 'normal'
 }
 
-export function ProductionOverview({ items, loading, canRequest, onRequest, onRefresh, onOpen, onOpenQr }: Props) {
+export function ProductionOverview({ items, loading, canRequest, onRequest, onRefresh, onOpen, onOpenQr, onBrowseOrders }: Props) {
   const openItems = items.filter(item => !CLOSED.has(stateOf(item)))
   const active = openItems.filter(item => ACTIVE.has(stateOf(item)))
   const pendingReturn = openItems.filter(item => PENDING_RETURN.has(stateOf(item)))
@@ -44,10 +45,10 @@ export function ProductionOverview({ items, loading, canRequest, onRequest, onRe
     </header>
 
     <div className="production-overview__metrics" aria-label="Resumo operacional">
-      <article><span>LINHAS EM ACOMPANHAMENTO</span><strong>{lines}</strong><small>com OS visível no período</small></article>
-      <article className="production-overview__metric--warning"><span>OS EM EXECUÇÃO</span><strong>{active.length}</strong><small>intervenções em curso</small></article>
-      <article><span>SOLICITAÇÕES / OS ABERTAS</span><strong>{openItems.length}</strong><small>no seu escopo</small></article>
-      <article className="production-overview__metric--attention"><span>AGUARDANDO RETORNO</span><strong>{pendingReturn.length}</strong><small>em validação técnica</small></article>
+      <button type="button" className="production-overview__metric" onClick={() => onBrowseOrders()} aria-label="Abrir OS das linhas em acompanhamento"><span>LINHAS EM ACOMPANHAMENTO</span><strong>{lines}</strong><small>com OS visível no período</small></button>
+      <button type="button" className="production-overview__metric production-overview__metric--warning" onClick={() => onBrowseOrders()} aria-label="Abrir OS em execução"><span>OS EM EXECUÇÃO</span><strong>{active.length}</strong><small>intervenções em curso</small></button>
+      <button type="button" className="production-overview__metric" onClick={() => onBrowseOrders()} aria-label="Abrir solicitações e OS abertas"><span>SOLICITAÇÕES / OS ABERTAS</span><strong>{openItems.length}</strong><small>no seu escopo</small></button>
+      <button type="button" className="production-overview__metric production-overview__metric--attention" onClick={() => onBrowseOrders()} aria-label="Abrir OS aguardando retorno"><span>AGUARDANDO RETORNO</span><strong>{pendingReturn.length}</strong><small>em validação técnica</small></button>
     </div>
 
     <div className="production-overview__grid">

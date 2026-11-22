@@ -19,18 +19,25 @@ export function SharedWorkPanel({
   token,
   capabilities = [],
   fixedTab,
+  initialStatus = "ALL",
   embedded = false,
+  showProfileOverview = true,
   profile,
   onOpenQr,
+  onOpenOrders,
   onOpenValidations,
 }: {
   apiUrl: string;
   token: string;
   capabilities?: readonly string[];
   fixedTab?: Tab;
+  initialStatus?: "ALL" | "OPEN" | "CLOSED";
   embedded?: boolean;
+  /** Mantém o resumo no início; a aba "OS" sempre abre a lista completa. */
+  showProfileOverview?: boolean;
   profile?: string;
   onOpenQr?: () => void;
+  onOpenOrders?: (status?: "ALL" | "OPEN" | "CLOSED") => void;
   onOpenValidations?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>(fixedTab ?? "orders"),
@@ -39,7 +46,7 @@ export function SharedWorkPanel({
     [total, setTotal] = useState(0);
   const [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
-    [status, setStatus] = useState("ALL"),
+    [status, setStatus] = useState(initialStatus),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -70,7 +77,7 @@ export function SharedWorkPanel({
       ? 'safety'
       : null;
   const isProduction = profile === 'PRODUCAO';
-  const usesProfileOverview = Boolean((qualitySafetyArea || isProduction) && tab === 'orders');
+  const usesProfileOverview = Boolean(showProfileOverview && (qualitySafetyArea || isProduction) && tab === 'orders');
   const api: SharedApi = useCallback(
     async <T,>(
       path: string,
@@ -317,7 +324,7 @@ export function SharedWorkPanel({
         />
       ) : (
         <>
-          {qualitySafetyArea && tab === 'orders' ? <QualitySafetyOverview
+          {usesProfileOverview && qualitySafetyArea ? <QualitySafetyOverview
             area={qualitySafetyArea}
             items={items}
             loading={loading}
@@ -327,8 +334,9 @@ export function SharedWorkPanel({
             onOpen={(item) => void inspect(item, 'orders')}
             onOpenQr={onOpenQr}
             onOpenValidations={onOpenValidations}
+            onBrowseOrders={onOpenOrders}
           /> : null}
-          {isProduction && tab === 'orders' ? <ProductionOverview
+          {usesProfileOverview && isProduction ? <ProductionOverview
             items={items}
             loading={loading}
             canRequest={canRequest}
@@ -336,6 +344,7 @@ export function SharedWorkPanel({
             onRefresh={() => void load()}
             onOpen={(item) => void inspect(item, 'orders')}
             onOpenQr={onOpenQr}
+            onBrowseOrders={onOpenOrders ?? (() => undefined)}
           /> : null}
           {!usesProfileOverview && !fixedTab ? <nav aria-label="Visões do acompanhamento">
             {(
@@ -352,6 +361,8 @@ export function SharedWorkPanel({
                   setTab(value);
                   setPage(1);
                   setItems([]);
+                  // Evita exibir por alguns instantes o total da aba anterior.
+                  setTotal(0);
                 }}
               >
                 {label}
@@ -379,7 +390,7 @@ export function SharedWorkPanel({
               <select
                 value={status}
                 onChange={(event) => {
-                  setStatus(event.target.value);
+                  setStatus(event.target.value as "ALL" | "OPEN" | "CLOSED");
                   setPage(1);
                 }}
               >

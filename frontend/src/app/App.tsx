@@ -269,6 +269,7 @@ export function App() {
   )
 
   const [section, setSection] = useState<AppSection>('home')
+  const [sharedStatus, setSharedStatus] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL')
   useEffect(() => {if ((section === 'tools' && (!canTools || isPcmProfile)) || (section === 'qr' && !canScan)) setSection('home')},[section,canTools,canScan,isPcmProfile])
   const [view, setView] = useState<AppView>(
     () => initialExecutionContextRef.current?.view ?? 'navigation',
@@ -894,6 +895,7 @@ export function App() {
 
   function changeSection(next: AppSection) {
     setView('navigation')
+    if (next === 'shared') setSharedStatus('ALL')
     setSection(next)
     if (next === 'home') void refresh()
   }
@@ -1039,7 +1041,7 @@ export function App() {
           ) : (
            <>
               {section === 'home' && isPcmProfile && canReadSharedWork && !canPerformExecutions && <PcmMobileDashboard apiUrl={getApiUrl()} token={operatorSession.token} onOpenOrders={() => setSection('shared')} />}
-              {section === 'home' && !isPcmProfile && canReadSharedWork && !canPerformExecutions && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} fixedTab="orders" embedded profile={operatorSession.user.perfil} />}
+              {section === 'home' && !isPcmProfile && canReadSharedWork && !canPerformExecutions && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} fixedTab="orders" embedded profile={operatorSession.user.perfil} onOpenQr={() => {if(canScan)setSection('qr')}} onOpenOrders={(status = 'ALL') => { setSharedStatus(status); setSection('shared') }} />}
               {section === 'home' && canReportOccurrence && !canReadExecutions && !canReadSharedWork && <OccurrenceWizard apiUrl={getApiUrl()} token={operatorSession.token} />}
               {section === 'home' && (!canReadSharedWork || canPerformExecutions) && (
                 <OperatorHome
@@ -1053,7 +1055,7 @@ export function App() {
                   onOpenQr={() => {if(canScan)setSection('qr')}}
                 />
               )}
-              {section === 'shared' && canReadSharedWork && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} profile={operatorSession.user.perfil} />}
+              {section === 'shared' && canReadSharedWork && <SharedWorkPanel apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades} profile={operatorSession.user.perfil} showProfileOverview={false} initialStatus={sharedStatus} />}
               {section === 'qr' && canScan && <QrPage onNotify={notify} onOpenAction={openActionById} />}
               {section === 'tools' && canTools && !isPcmProfile && <PermissionTools apiUrl={getApiUrl()} token={operatorSession.token} capabilities={operatorSession.user.capacidades ?? []} onSessionExpired={expireOperatorSession} />}
               {section === 'settings' && (
