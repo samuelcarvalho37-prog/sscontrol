@@ -190,6 +190,12 @@ function TenantApp() {
   })
   useEffect(() => {
     if (!isPcmWorkspace) return
+    const synchronizedTheme = theme === 'dark' ? 'dark' : 'light'
+    setPcmTheme(synchronizedTheme)
+    try { window.localStorage.setItem('vorqix.pcm.dashboard-theme.v1', synchronizedTheme) } catch { /* preferência permanece apenas nesta sessão */ }
+  }, [isPcmWorkspace, theme])
+  useEffect(() => {
+    if (!isPcmWorkspace) return
     const update = (event: Event) => {
       const value = (event as CustomEvent).detail
       if (value === 'light' || value === 'dark' || value === 'ice') setPcmTheme(value)
